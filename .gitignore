@@ -1,0 +1,4 @@
+bin/*
+objs/*
+*.ff
+*.local.code-workspace
