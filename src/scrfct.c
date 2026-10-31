@@ -57,7 +57,19 @@ void scrfct_callkeyboard() {
 
     const char* title = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
     int clientNum = Scr_GetInt(1, SCRIPTINSTANCE_SERVER);
-    bool opened = title && host_menu_request_keyboard(title, clientNum);
+    if (!title) {
+        printf(T5ERROR "'callkeyboard' title is not a string.");
+        Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+        return;
+    }
+    if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS) {
+        printf(T5ERROR "'callkeyboard' client %i is out of range (0-%i).", clientNum,
+               HOST_MENU_MAX_CLIENTS - 1);
+        Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    bool opened = host_menu_request_keyboard(title, clientNum);
     if (!opened)
         printf(T5WARNING
                "'callkeyboard' for client %i ignored, a keyboard is still open.",
