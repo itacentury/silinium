@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds Silinium without make / SDK samples by calling the PS3 toolchain directly.
-# Usage: ./build.sh [debug|release|clean]
+# Usage: ./build.sh [debug|release|clean|format]
 #
 # Environment:
 #   SCE_PS3_ROOT      PS3 SDK root (required)
@@ -24,8 +24,14 @@ if [ "$CONFIG" = "clean" ]; then
     exit 0
 fi
 
+if [ "$CONFIG" = "format" ]; then
+    clang-format -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
+    echo "# formatted $SRC_DIR/"
+    exit 0
+fi
+
 if [ "$CONFIG" != "debug" ] && [ "$CONFIG" != "release" ]; then
-    echo "usage: $0 [debug|release|clean]" >&2
+    echo "usage: $0 [debug|release|clean|format]" >&2
     exit 1
 fi
 

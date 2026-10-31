@@ -17,6 +17,11 @@ If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which 
 `SCE_PS3_ROOT` must point to the SDK. Outputs are `bin/<config>/Silinium.prx` and `.sprx`.
 On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools through Wine: `PS3_HOST_DIR=$SCE_PS3_ROOT/host-win32 PS3_TOOL_WRAPPER=wine ./build.sh release`.
 
+### Formatting
+The sources are formatted with clang-format (`.clang-format`, checked by CI with version 20). Run `./build.sh format` or `make format` before committing. To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+
+CI (`.github/workflows/build.yml`) checks the formatting and builds debug and release; the `.sprx` files are attached to each run as artifacts.
+
 ## Usage
 Create a folder in `/dev_hdd0/tmp/Silinium/mp` or `/dev_hdd0/tmp/Silinium/zm`. Beside your created folder create a .mod file that has the same name as your mod to enable it.
 
@@ -122,3 +127,6 @@ Recently, by cleaning my desktop i came across that folder, I said to myself it 
 Maybe this code will be useful to someone, who knows?
 
 
+
+# License
+Silinium is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). Credits are in [CREDITS.md](CREDITS.md).
