@@ -170,26 +170,20 @@ void host_menu_game_message(const char* format, ...) {
     gameMessagePending = true;
 }
 
-// CL_ConsolePrint drops prints that don't come from the main thread. Menu_PaintAll is
-// expected to run on it, so the check is only patched out if it doesn't.
-static void allow_console_print() {
-    static bool checked;
-    if (checked) return;
-    checked = true;
-    if (Sys_IsMainThread()) return;
-
-    static const InstructionPatch patch = {T5_ConsolePrint_MainThreadCheck, 0x419E0098,
-                                           PPC_NOP};
-    printf(T5WARNING
-           "Menu_PaintAll is not on the main thread, patching CL_ConsolePrint.");
-    apply_instruction_patch(&patch, true);
-}
-
+// CL_ConsolePrint drops prints that don't come from the main thread, which guards buffers
+// that aren't thread-safe. Menu_PaintAll is expected to run on it; if it doesn't, the
+// message is dropped instead of patching the check out for every caller.
 static void show_game_message() {
+    static bool warned;
     if (!gameMessagePending) return;
     __lwsync();
-    allow_console_print();
-    CG_GameMessage(0, gameMessage);
+    if (Sys_IsMainThread())
+        CG_GameMessage(0, gameMessage);
+    else if (!warned) {
+        warned = true;
+        printf(T5WARNING
+               "Menu_PaintAll is not on the main thread, dropped kill feed message.");
+    }
     __lwsync();
     gameMessagePending = false;
 }

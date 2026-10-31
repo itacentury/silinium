@@ -56,8 +56,6 @@
 // Both are tail calls of CL_ConsolePrint (0x1AF228) with channel 2 / 3
 #define T5_CG_GameMessage 0x113550 // (localClientNum, msg)
 #define T5_Sys_IsMainThread 0x3D2CF8 // compares the current thread id with the saved one
-// CL_ConsolePrint drops the print if Sys_IsMainThread fails, original: beq cr7 (0x419E0098)
-#define T5_ConsolePrint_MainThreadCheck 0x1AF270
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
