@@ -229,7 +229,8 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
 
 static void open_requested_keyboard() {
     static const char16 preset[] = {0};
-    if (keyboardState != KEYBOARD_REQUESTED) return;
+    // The menu hides the pad from the game, so the keyboard waits until it's closed.
+    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open) return;
     __lwsync();
     keyboardState = KEYBOARD_OPEN;
     UI_OpenKeyboard(0, keyboardTitle, preset, sizeof(keyboardText) - 1,
