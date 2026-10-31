@@ -1,6 +1,7 @@
 #ifndef OFFSETS_H
 #define OFFSETS_H
 
+// clang-format off: tables of offsets with trailing comments
 // Natives functions
 #define T5_Dvar_FindVar 0x4C55A0
 #define T5_Dvar_FindVar_ZM 0x452AA0
@@ -146,5 +147,7 @@
 // Structs / Pointers
 #define T5_TOC 0x00B576E8
 #define T5_TOC_ZM 0x00A544B0
+
+// clang-format on
 
 #endif
