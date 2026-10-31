@@ -339,10 +339,6 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
 
     int kick = hostMenu.kickClient;
     if (kick != -1) {
-        if (CG_CLIENTINFO_BASE)
-            host_menu_game_message("%s %s",
-                                   (kick & HOST_MENU_KICK_BAN) ? "Banned" : "Kicked",
-                                   CG_CLIENT_NAME(kick & ~HOST_MENU_KICK_BAN));
         sprintf(buffer,
                 (kick & HOST_MENU_KICK_BAN) ? "banClient %i\n" : "clientkick %i\n",
                 kick & ~HOST_MENU_KICK_BAN);
