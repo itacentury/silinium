@@ -14,6 +14,9 @@ GSCLoader loader;
 t5nd(dvar_s*, Dvar_FindVar, (const char* name));
 t5nd(int, Scr_GetNumParam, (int scriptInstance));
 t5nd(char*, Scr_GetString, (unsigned int index, scriptInstance_t scriptInstance));
+t5nd(int, Scr_GetInt, (unsigned int index, scriptInstance_t scriptInstance));
+t5nd(void, Scr_AddInt, (int value, scriptInstance_t scriptInstance));
+t5nd(void, Scr_AddString, (const char* value, scriptInstance_t scriptInstance));
 t5nd(void*, Hunk_AllocateTempMemoryHigh, (int size));
 
 t5nhd(char*, Scr_LoadRawFile_FastFile,

@@ -24,6 +24,8 @@
 #define PARTY_MEMBER_NAME(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
 
+#define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
+
 #define HOST_MENU_MAX_CLIENTS 18
 
 typedef unsigned short char16;  // the game's keyboard uses UTF-16 strings
@@ -52,6 +54,9 @@ t5nd(void, Party_RemoveMember,
 t5nd(void, Party_BanName, (const char* name));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
+t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));
+t5nd(bool, Sys_IsMainThread, ());
+t5nd(void, Scr_Notify, (void* ent, unsigned int stringValue, unsigned int paramcount));
 
 t5nhd(int, PadGetData, (uint32_t port, CellPadData* data));
 t5nhd(int, VM_Notify,
@@ -64,6 +69,8 @@ t5nhd(int, DDL_SetFromString, (void* state, const char* value, void* buffer));
 t5nhd(void, ClanName_Sanitize, ());
 
 int host_menu_init();
+// The host menu hooks are installed.
+bool host_menu_ready();
 // The active party the local player hosts, 0 if there is none.
 int host_menu_lobby_party();
 // Called once per server script load, after the scripts are compiled.
@@ -71,5 +78,11 @@ void host_menu_on_server_scripts_loaded();
 // Write into the local stats.
 void host_menu_write_recovery();
 void host_menu_write_prestige(int prestige);
+// Shows a message in the kill feed of the local player, in game only. Called from the
+// server thread; while one is waiting to be shown, further ones are dropped.
+void host_menu_game_message(const char* format, ...);
+// Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
+// the client's player as "keyboard_input" notify. False while another request is waiting.
+bool host_menu_request_keyboard(const char* title, int clientNum);
 
 #endif /* HOST_MENU_H */

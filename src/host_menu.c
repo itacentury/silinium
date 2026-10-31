@@ -1,6 +1,7 @@
 #include "host_menu.h"
 
 #include <ppu_intrinsics.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ppu_thread.h>
@@ -153,6 +154,105 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
     return DDL_SetFromString_Trampoline(state, value, buffer);
 }
 
+// Kill feed message, written on the server thread and shown on the UI thread.
+static char gameMessage[128];
+static volatile bool gameMessagePending;
+
+void host_menu_game_message(const char* format, ...) {
+    if (gameMessagePending) return;
+    va_list args;
+    va_start(args, format);
+    vsnprintf(gameMessage, sizeof(gameMessage), format, args);
+    va_end(args);
+    // The text has to be visible before the flag that marks it ready.
+    __lwsync();
+    gameMessagePending = true;
+}
+
+// CL_ConsolePrint drops prints that don't come from the main thread. Menu_PaintAll is
+// expected to run on it, so the check is only patched out if it doesn't.
+static void allow_console_print() {
+    static bool checked;
+    if (checked) return;
+    checked = true;
+    if (Sys_IsMainThread()) return;
+
+    static const InstructionPatch patch = {T5_ConsolePrint_MainThreadCheck, 0x419E0098,
+                                           PPC_NOP};
+    printf(T5WARNING
+           "Menu_PaintAll is not on the main thread, patching CL_ConsolePrint.");
+    apply_instruction_patch(&patch, true);
+}
+
+static void show_game_message() {
+    if (!gameMessagePending) return;
+    __lwsync();
+    allow_console_print();
+    CG_GameMessage(0, gameMessage);
+    __lwsync();
+    gameMessagePending = false;
+}
+
+// callkeyboard: requested on the server thread, opened on the UI thread, and the text is
+// sent back on the server thread. Each step only runs in the state the previous one left.
+enum { KEYBOARD_IDLE, KEYBOARD_REQUESTED, KEYBOARD_OPEN, KEYBOARD_ENTERED };
+static volatile int keyboardState;
+static char16 keyboardTitle[64];
+static int keyboardClient;
+static char keyboardText[65];
+// String id of "keyboard_input", looked up on every server script load like
+// spawnedPlayerString.
+static unsigned int keyboardInputString;
+
+bool host_menu_request_keyboard(const char* title, int clientNum) {
+    if (keyboardState != KEYBOARD_IDLE || clientNum < 0 ||
+        clientNum >= HOST_MENU_MAX_CLIENTS)
+        return false;
+
+    int i;
+    for (i = 0; i < (int)(sizeof(keyboardTitle) / sizeof(*keyboardTitle)) - 1 && title[i];
+         i++)
+        keyboardTitle[i] = (unsigned char)title[i];
+    keyboardTitle[i] = 0;
+    keyboardClient = clientNum;
+    // Title and client have to be visible before the state that marks them ready.
+    __lwsync();
+    keyboardState = KEYBOARD_REQUESTED;
+    return true;
+}
+
+static void keyboard_input_callback(int localClientNum, const char16* text, int length) {
+    if (keyboardState != KEYBOARD_OPEN) return;
+
+    int i;
+    for (i = 0; i < length && i < (int)sizeof(keyboardText) - 1 && text[i]; i++)
+        keyboardText[i] = text[i] > 0x7F ? '?' : (char)text[i];
+    keyboardText[i] = 0;
+    __lwsync();
+    keyboardState = KEYBOARD_ENTERED;
+}
+
+static void open_requested_keyboard() {
+    static const char16 preset[] = {0};
+    if (keyboardState != KEYBOARD_REQUESTED) return;
+    __lwsync();
+    keyboardState = KEYBOARD_OPEN;
+    UI_OpenKeyboard(0, keyboardTitle, preset, sizeof(keyboardText) - 1,
+                    keyboard_input_callback);
+}
+
+// Runs in the server frame of the client that asked for the keyboard, so the entity is
+// still that player's.
+static void send_keyboard_input(void* ent) {
+    if (keyboardState != KEYBOARD_ENTERED || ent != G_ENTITY(keyboardClient) ||
+        !keyboardInputString)
+        return;
+    __lwsync();
+    Scr_AddString(keyboardText, SCRIPTINSTANCE_SERVER);
+    Scr_Notify(ent, keyboardInputString, 1);
+    keyboardState = KEYBOARD_IDLE;
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     Menu_PaintAll_Trampoline(a1, uiContext);
     if (!uiContext) return;
@@ -182,6 +282,9 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             hostMenu.changeNamePending = false;
             host_menu_ui_open_name_keyboard();
         }
+    } else {
+        show_game_message();
+        open_requested_keyboard();
     }
     host_menu_ui_draw();
 }
@@ -195,6 +298,7 @@ void host_menu_on_server_scripts_loaded() {
     // Only resolved by host_menu_init, which doesn't run in ZM.
     if (!SL_GetString) return;
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
+    keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }
 
 int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
@@ -219,18 +323,26 @@ void ClientCommand_Hook(int clientNum) {
     SV_Cmd_ArgvBuffer(0, cmd, sizeof(cmd));
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
-    if (strcmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 && !is_host(clientNum))
+    if (strcmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
+        if (CG_CLIENTINFO_BASE)
+            host_menu_game_message("^1%s tried to end the game",
+                                   CG_CLIENT_NAME(clientNum));
         return;
+    }
 
     ClientCommand_Trampoline(clientNum);
 }
 
-// Server frame: runs the queued kick and scorelimit requests.
+// Server frame: runs the queued kick, scorelimit and keyboard requests.
 void ClientEndFrame_Hook(void* ent, void* a2) {
     char buffer[64];
 
     int kick = hostMenu.kickClient;
     if (kick != -1) {
+        if (CG_CLIENTINFO_BASE)
+            host_menu_game_message("%s %s",
+                                   (kick & HOST_MENU_KICK_BAN) ? "Banned" : "Kicked",
+                                   CG_CLIENT_NAME(kick & ~HOST_MENU_KICK_BAN));
         sprintf(buffer,
                 (kick & HOST_MENU_KICK_BAN) ? "banClient %i\n" : "clientkick %i\n",
                 kick & ~HOST_MENU_KICK_BAN);
@@ -242,6 +354,7 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         sprintf(buffer, "set scr_tdm_scorelimit %i\n", host_menu_get_scorelimit());
         Cbuf_AddText(0, buffer);
     }
+    send_keyboard_input(ent);
     ClientEndFrame_Trampoline(ent, a2);
 }
 
@@ -255,6 +368,8 @@ static void host_menu_thread(uint64_t arg) {
         if (!inGame) {
             hostMenu.kickClient = -1;
             hostMenu.scorelimitPending = false;
+            keyboardState = KEYBOARD_IDLE;
+            gameMessagePending = false;
         }
         // Lobby menus and kicks can't happen in game, so don't let them carry over to the
         // next lobby.
@@ -292,6 +407,9 @@ static void init_host_menu_offsets() {
     t5nmi(Party_BanName);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
+    t5nmi(CG_GameMessage);
+    t5nmi(Sys_IsMainThread);
+    t5nmi(Scr_Notify);
 }
 
 static int init_host_menu_hooks() {
@@ -348,6 +466,10 @@ static void unfilter_names() {
         apply_instruction_patch(&patches[i], true);
 }
 
+static bool ready;
+
+bool host_menu_ready() { return ready; }
+
 int host_menu_init() {
     // The hooks read the menu state, so it has to be ready first.
     host_menu_ui_init();
@@ -362,5 +484,6 @@ int host_menu_init() {
                                      "[Silinium] host menu")) != CELL_OK)
         return res;
 
+    ready = true;
     return 0;
 }

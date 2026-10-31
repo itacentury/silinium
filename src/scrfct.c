@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "host_menu.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -42,4 +43,24 @@ void scrfct_setmemory() {
         } else
             printf(T5ERROR "Cannot resolve setmemory parameters call from gsc.");
     }
+}
+
+// callkeyboard(title, clientNum): opens the keyboard on the host console and returns 1,
+// or 0 if another keyboard request is still running. The text is sent to the player as
+// notify: self waittill("keyboard_input", text);
+void scrfct_callkeyboard() {
+    if (Scr_GetNumParam(SCRIPTINSTANCE_SERVER) != 2) {
+        printf(T5ERROR "'callkeyboard' needs 2 parameters (title, clientNum).");
+        Scr_AddInt(0, SCRIPTINSTANCE_SERVER);
+        return;
+    }
+
+    const char* title = Scr_GetString(0, SCRIPTINSTANCE_SERVER);
+    int clientNum = Scr_GetInt(1, SCRIPTINSTANCE_SERVER);
+    bool opened = title && host_menu_request_keyboard(title, clientNum);
+    if (!opened)
+        printf(T5WARNING
+               "'callkeyboard' for client %i ignored, a keyboard is still open.",
+               clientNum);
+    Scr_AddInt(opened, SCRIPTINSTANCE_SERVER);
 }

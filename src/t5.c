@@ -16,6 +16,9 @@ void init_offsets() {
     t5ni(Dvar_FindVar);
     t5ni(Scr_GetNumParam);
     t5ni(Scr_GetString);
+    t5ni(Scr_GetInt);
+    t5ni(Scr_AddInt);
+    t5ni(Scr_AddString);
     t5ni(Hunk_AllocateTempMemoryHigh);
 }
 

@@ -114,6 +114,11 @@ popd32 Scr_GetFunction_Hook(const char** pName, int* type) {
             printf(T5INFO "Function 'setmemory' found.");
             return (popd32)&scrfct_setmemory;
         }
+        // Needs the host menu hooks, which only exist in MP.
+        if (strcmp(*pName, "callkeyboard") == 0 && host_menu_ready()) {
+            printf(T5INFO "Function 'callkeyboard' found.");
+            return (popd32)&scrfct_callkeyboard;
+        }
         return 0;
     }
     return opd;

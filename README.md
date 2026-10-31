@@ -54,7 +54,7 @@ Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects 
 | Change Name / Reset Name | Changes the local name with the keyboard in the lobby / restores it. |
 | Player Menu | Lists the clients (in game) or party members (lobby). ✕ on a player opens a menu with **Kick** and **Ban** (in game, or in the lobby party). |
 
-Only the host can end the game with `mr … endround`, the command is dropped for other clients.
+Only the host can end the game with `mr … endround`, the command is dropped for other clients and the host sees "<name> tried to end the game" in the kill feed. Kicks and bans from the player menu are confirmed there too.
 
 The loader always lifts the restrictions on class names and the clan tag: their keyboards skip the character, profanity and "3arc"/"COD" checks, and the clan tag keeps color codes (`^1`…). The only character dropped from the clan tag is `%`, because other consoles may print the tag as a format string.
 
@@ -117,6 +117,21 @@ I used the second one to don't need to worry about dumping checksums per map/gam
 
 I made a quick exemple to show how to call C functions from game script.
 You just have to make your function, and return his opd pointer from `Scr_GetFunction`, like i did for `setMemory` with hex strings. If you want to make your own function working with an entity like `self` ahead the function you need to hook `Scr_GetMethod` and use the second argument of this function (type) to return the according opd.
+
+Built-in functions:
+
+| Function | Modes | Effect |
+|---|---|---|
+| `setmemory(address, data)` | MP, ZM | Writes the hex string `data` to the hex `address`. |
+| `callkeyboard(title, clientNum)` | MP | Opens the game keyboard on the host console and returns 1, or 0 while another request is still running. The entered text is sent to the player with that client number: `self waittill("keyboard_input", text);`. Characters outside ASCII become `?`, at most 64 characters. |
+
+```
+if (callkeyboard("Say something", self getEntityNumber()))
+{
+    self waittill("keyboard_input", text);
+    self iPrintln(text);
+}
+```
 
 ## Why I made this now?
 
