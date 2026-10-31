@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/ppu_thread.h>
+#include <sys/sys_time.h>
 #include <sys/timer.h>
 
 #include "cshook.h"
@@ -316,6 +317,11 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
 }
 
+// A blocked endround is reported at most once per client in this window, so a client
+// repeating the command can't flood the host's kill feed.
+#define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
+static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
+
 // Blocks "mr <n> <menu> endround" from everyone except the host.
 void ClientCommand_Hook(int clientNum) {
     char cmd[37] = {0};
@@ -324,9 +330,15 @@ void ClientCommand_Hook(int clientNum) {
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
     if (strcmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
-        if (CG_CLIENTINFO_BASE)
-            host_menu_game_message("^1%s tried to end the game",
-                                   CG_CLIENT_NAME(clientNum));
+        if (CG_CLIENTINFO_BASE && clientNum >= 0 && clientNum < HOST_MENU_MAX_CLIENTS) {
+            system_time_t now = sys_time_get_system_time();
+            system_time_t* last = &endroundMessageTime[clientNum];
+            if (!*last || now - *last >= ENDROUND_MESSAGE_COOLDOWN_US) {
+                *last = now;
+                host_menu_game_message("^1%s tried to end the game",
+                                       CG_CLIENT_NAME(clientNum));
+            }
+        }
         return;
     }
 
