@@ -677,9 +677,12 @@ static const char* player_name(int party, bool inGame, int i) {
     return *name ? name : "No Client Connected";
 }
 
+// Size of the buffer ClanTag_Format writes to, like the lobby list's.
+#define CLAN_TAG_MAX 0x80
+
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
-// player's own color codes are dropped too.
+// player's own color codes are dropped too. out must hold CLAN_TAG_MAX bytes.
 static void player_clan_tag(int party, bool inGame, int i, char* out) {
     out[0] = 0;
     if (inGame) {
@@ -712,7 +715,7 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     const char* clan = PARTY_MEMBER_CLAN(party, i);
     if (!*clan) return;
     // Sized like out. The clan field's size is unknown, so a long clan is cut, not the ].
-    char plain[0x80];
+    char plain[CLAN_TAG_MAX];
     snprintf(plain, sizeof(plain), "[%.*s]", (int)sizeof(plain) - 3, clan);
     strcpy(out, plain);
     ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), clan, "", plain, out);
@@ -784,7 +787,7 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 static float player_list_width(int party, bool inGame) {
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        char tag[0x80];
+        char tag[CLAN_TAG_MAX];
         player_clan_tag(party, inGame, i, tag);
         float w = (R_TextWidth(tag, 0x7FFFFFFF, font) +
                    R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font)) *
@@ -856,7 +859,7 @@ void host_menu_ui_draw() {
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
             float y = i * 16.5f + 258;
-            char tag[0x80];
+            char tag[CLAN_TAG_MAX];
             player_clan_tag(party, inGame, i, tag);
             float x = left + 10;
             if (*tag) {
