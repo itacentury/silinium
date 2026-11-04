@@ -130,9 +130,16 @@ static bool af_icon_ok(const char* p) {
 
 // Returns text if it has no bad icon, else a copy in buffer without them.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size) {
+    // Skip valid icons whole, their width, height and pointer bytes can contain "^\x01".
     const char* p = text;
-    for (; *p; p++)
-        if (af_is_icon(p) && !af_icon_ok(p)) break;
+    while (*p) {
+        if (!af_is_icon(p)) {
+            p++;
+            continue;
+        }
+        if (!af_icon_ok(p)) break;
+        p += AF_ICON_SIZE;
+    }
     if (!*p) return text;
 
     if (af_first_report(text)) af_report("a text icon with an invalid material");
