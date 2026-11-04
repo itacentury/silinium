@@ -839,9 +839,12 @@ void host_menu_ui_draw() {
             float y = i * 16.5f + 258;
             char tag[0x80];
             player_clan_tag(party, inGame, i, tag);
-            draw_text(tag, 510, y, 0.5f, color);
-            draw_text(player_name(party, inGame, i),
-                      510 + R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f, y, 0.5f, color);
+            float x = 510;
+            if (*tag) {
+                draw_text(tag, x, y, 0.5f, color);
+                x += R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f;
+            }
+            draw_text(player_name(party, inGame, i), x, y, 0.5f, color);
         }
         if (m == HOST_MENU_PLAYER) {
             draw_player_modal(party, inGame, 200 + height);
