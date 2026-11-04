@@ -578,9 +578,6 @@ void host_menu_ui_init() {
 // Input (runs in the menu thread)
 // ---------------------------------------------------------------------------
 
-// The player list's box width, set by the draw code and reset when the list changes.
-static int playerListWidth;
-
 // Triangle switches between the lobby's two parties, only in the list itself (the modal
 // acts on a member of the shown one).
 static bool can_switch_lists(int m, bool inGame) {
@@ -634,10 +631,7 @@ void host_menu_ui_handle_input() {
             sys_timer_usleep(150000);
         }
     } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
-        if (can_switch_lists(m, inGame)) {
-            hostMenu.lobbyShowGameParty ^= 1;
-            playerListWidth = 0;  // fit the box to the new list
-        }
+        if (can_switch_lists(m, inGame)) hostMenu.lobbyShowGameParty ^= 1;
         sys_timer_usleep(200000);
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
         if (option->type == HOST_MENU_TYPE_INT) {
@@ -695,8 +689,11 @@ static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
 // so the cache is dropped when either changes.
 static bool playerIconsInGame;
 static char playerIconsMap[64];
-// playerListWidth (declared with the input code) is the list box's widest width this
-// visit to the list, 0 outside it.
+// The player list box's widest width since the list was entered or its party changed,
+// 0 outside the list. Only the draw code touches these.
+static int playerListWidth;
+// The party the list showed last frame (0 in game), so the width is refit on a change.
+static int playerListParty;
 
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
@@ -985,6 +982,10 @@ void host_menu_ui_draw() {
     // sideways when a long-named player leaves.
     float width = 300;
     if (players && !notHost) {
+        if (party != playerListParty) {
+            playerListParty = party;
+            playerListWidth = 0;  // fit the box to the new list
+        }
         int w = build_player_rows(party, inGame);
         if (w > playerListWidth) playerListWidth = w;
         width = playerListWidth;
