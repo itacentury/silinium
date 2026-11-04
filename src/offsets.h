@@ -53,6 +53,10 @@
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty)
+// (feature, clan, name, plain, out): for the "tagcolor" feature writes "[^%i%s^7]%s" to out, for "tagrot" the same with a
+// color that changes over time, otherwise leaves out as it is. The caller fills out with the plain text first, the lobby
+// list (0x222A90) passes name "" and plain "[clan]", out is 0x80 bytes.
+#define T5_ClanTag_Format 0x21B560
 
 // Both are tail calls of CL_ConsolePrint (0x1AF228) with channel 2 / 3
 #define T5_CG_GameMessage 0x113550 // (localClientNum, msg)
@@ -116,7 +120,8 @@
 #define T5_PrestigeUnlock_EmblemIconLockedUi 0x6F8E0 // icon lock shown in the UI (0x6F808), original: bgt cr6 (0x4199FFC4)
 
 #define T5_PartyData 0x2023500
-#define T5_CgClientInfoBase 0xC3DFB8 // pointer, + i * 0x5D0 + 0x5DB04 = client name
+#define T5_CgClientInfoBase 0xC3DFB8 // pointer, + i * 0x5D0 + 0x5DB04 = client name, + 0x5DB50 = clan tag (team message
+                                     // popup at 0x1727CC)
 #define T5_CgClientNumOffset 0x0 // cg_t.clientNum, the local player's server client slot. 0x116D30 compares it in each of the
                                  // 4 local cg_t (stride 0x6B100), 0x155F7C indexes the 0x5D0 client info array with it
 #define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified)
@@ -127,6 +132,8 @@
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
 #define T5_PartyMemberSize 0x220
 #define T5_PartyMemberNameOffset 0x18
+#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130
+#define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int

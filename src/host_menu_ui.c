@@ -677,6 +677,37 @@ static const char* player_name(int party, bool inGame, int i) {
     return *name ? name : "No Client Connected";
 }
 
+// "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
+// feature of the party member), in game without any color, color codes are dropped.
+static void player_clan_tag(int party, bool inGame, int i, char* out) {
+    out[0] = 0;
+    if (inGame) {
+        // An empty slot may still hold the tag of whoever left.
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return;
+        char clan[16];
+        int length = 0;
+        for (const char* c = CG_CLIENT_CLAN(i); *c && length < (int)sizeof(clan) - 1;
+             c++) {
+            if (*c == '^' && c[1]) {
+                c++;
+                continue;
+            }
+            clan[length++] = *c;
+        }
+        clan[length] = 0;
+        if (*clan) sprintf(out, "[%s]", clan);
+        return;
+    }
+
+    if (!party || !PARTY_MEMBER_USED(party, i)) return;
+    const char* clan = PARTY_MEMBER_CLAN(party, i);
+    if (!*clan) return;
+    char plain[16];
+    snprintf(plain, sizeof(plain), "[%s]", clan);
+    strcpy(out, plain);
+    ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), clan, "", plain, out);
+}
+
 // The visible options of menu m, rows starting at y, values right aligned at right.
 static void draw_options(int m, bool inGame, float x, float right, float y) {
     int row = 0;
@@ -791,9 +822,16 @@ void host_menu_ui_draw() {
             draw_text("Only the party host can manage players", 510, 258, 0.5f, white);
             return;
         }
+        // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn
+        // the selected name white.
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-            draw_text(player_name(party, inGame, i), 510, i * 16.5f + 258, 0.5f,
-                      hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white);
+            const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
+            float y = i * 16.5f + 258;
+            char tag[0x80];
+            player_clan_tag(party, inGame, i, tag);
+            draw_text(tag, 510, y, 0.5f, color);
+            draw_text(player_name(party, inGame, i),
+                      510 + R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f, y, 0.5f, color);
         }
         if (m == HOST_MENU_PLAYER) {
             draw_player_modal(party, inGame, 200 + height);
