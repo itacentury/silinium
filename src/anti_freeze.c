@@ -272,6 +272,7 @@ static int af_cmd_arg_number(int arg) {
 
 // "d <index> <value>" is run inside CL_CGameNeedsServerCommand, before it returns. The
 // game's own tokenizer calls, in the same order as the game, so argv is what it sees.
+// The game switches on argv(0)[0] alone, so "dxyz" is handled as "d" too.
 static bool af_configstring_ok(const char* cmd) {
     bool ok = true;
     Cmd_TokenizeString(cmd);
@@ -288,7 +289,7 @@ static bool af_configstring_ok(const char* cmd) {
 }
 
 // "C <weapon>" is run by CG_ServerCommand after CL_CGameNeedsServerCommand returned, with
-// the arguments it left tokenized.
+// the arguments it left tokenized. Like "d", it's matched on argv(0)[0] alone.
 static bool af_weapon_ok() {
     if (af_cmd_argv(0)[0] != 'C') return true;
 
