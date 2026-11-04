@@ -122,6 +122,8 @@
 #define T5_PartyData 0x2023500
 #define T5_CgClientInfoBase 0xC3DFB8 // pointer, + i * 0x5D0 + 0x5DB04 = client name, + 0x5DB50 = clan tag (team message
                                      // popup at 0x1727CC)
+#define T5_CgClientClanSize 8 // clan tag at clientinfo + 0x5DB50: filled from the snapshot by I_strncpyz(.., 8) at
+                              // 0x1698B0, copied to the scoreboard with size 8 at 0x13C738, another field at + 0x5DB58
 #define T5_CgClientNumOffset 0x0 // cg_t.clientNum, the local player's server client slot. 0x116D30 compares it in each of the
                                  // 4 local cg_t (stride 0x6B100), 0x155F7C indexes the 0x5D0 client info array with it
 #define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified)

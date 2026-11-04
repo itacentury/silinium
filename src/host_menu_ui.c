@@ -688,19 +688,22 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (inGame) {
         // An empty slot may still hold the tag of whoever left.
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return;
+        // Reads stay within the tag field. The game keeps only 7 bytes of the tag in
+        // game, color codes included, so a tag the lobby shows in full can be cut here.
         const char* tag = CG_CLIENT_CLAN(i);
-        char clan[16];
+        const int size = T5_CgClientClanSize;
+        char clan[T5_CgClientClanSize];
         int length = 0;
-        for (int c = 0; c < (int)sizeof(clan) && tag[c] && length < (int)sizeof(clan) - 1;
-             c++) {
-            if (tag[c] == '^' && tag[c + 1] >= '0' && tag[c + 1] <= '9') {
+        for (int c = 0; c < size && tag[c] && length < (int)sizeof(clan) - 1; c++) {
+            bool caret = tag[c] == '^' && c + 1 < size;
+            if (caret && tag[c + 1] >= '0' && tag[c + 1] <= '9') {
                 c++;
                 continue;
             }
             // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
             // as a whole.
-            if (tag[c] == '^' && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
-                if (c + 4 >= (int)sizeof(clan)) break;
+            if (caret && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
+                if (c + 4 >= size) break;
                 c += 4 + (unsigned char)tag[c + 4];
                 continue;
             }
