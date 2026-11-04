@@ -206,6 +206,15 @@
 // inlined, there is no function to call.
 #define T5_SvCmdArgs 0x1461F74
 #define T5_SvCmdArgsArgcOffset 0x84
+// (client_t* cl), copies name and clanAbbrev from the userinfo at T5_ClientUserinfoOffset into the client_t. Called on
+// connect and for each "userinfo" from the client.
+#define T5_SV_UserinfoChanged 0x3E49D0
+// (index, buffer, size), the only way the game (ClientUserinfoChanged 0x2C2AE8, ClientConnect 0x2C2FB8) reads userinfo.
+// 0x3E5EF8 calls ClientUserinfoChanged before SV_UserinfoChanged.
+#define T5_SV_GetUserinfo 0x3EAB20
+#define T5_ClientUserinfoOffset 0x720 // char[], userinfo string in client_t
+#define T5_SvClients 0x169529C // pointer to the client_t array (svs.clients), stride T5_ClientSize
+#define T5_ClientSize 0x651C8
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

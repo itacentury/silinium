@@ -20,7 +20,8 @@
    builds them itself with a pointer of its own memory, the renderer (0x798490) uses the
    pointer as is. Sent from another console (chat, player name), the bytes after "^\x01"
    become a pointer to garbage, e.g. "^\x01xx\x12gfx_snow_sheet;" -> 0x12676678. Every
-   console that draws the text freezes.
+   console that draws the text freezes. A name set through userinfo is stored by the host
+   and sent on to every client.
 */
 
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
@@ -127,6 +128,23 @@ static bool af_icon_ok(const char* p) {
                           (uint32_t)ptr[2] << 8 | ptr[3]);
 }
 
+// Removes every icon in place, valid or not: no string from the network needs one.
+// Returns true if anything was removed.
+static bool af_strip_icons(char* s) {
+    char* out = s;
+    const char* p = s;
+    while (*p) {
+        if (!af_is_icon(p)) {
+            *out++ = *p++;
+            continue;
+        }
+        // The whole icon, or what is left of it.
+        for (int i = 0; i < AF_ICON_SIZE && *p; i++) p++;
+    }
+    *out = 0;
+    return out != p;
+}
+
 // Moves an offset into the original text back by the bytes removed before it.
 static void af_shift_offset(int* offset, int at, int removed) {
     if (*offset <= at) return;
@@ -194,12 +212,6 @@ static long long af_first_arg_number(const char* cmd) {
 }
 
 static bool af_server_command_ok(const char* cmd) {
-    // No server command needs a text icon, the game only builds them locally.
-    if (af_has_icon(cmd)) {
-        af_report("a server command with a text icon");
-        return false;
-    }
-
     // CG_ServerCommand and CL_CGameNeedsServerCommand switch on the first character only.
     if (cmd[0] == 'C') {
         // 0 is skipped by the game itself.
@@ -227,10 +239,13 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
         // Outside of this window the game raises its own error, leave that to it.
         if (serverCommandNumber <= sequence &&
             serverCommandNumber > sequence - T5_MaxReliableCommands) {
-            const char* cmd =
-                (const char*)(clc + T5_ServerCommandsOffset +
-                              (serverCommandNumber & (T5_MaxReliableCommands - 1)) *
-                                  T5_ServerCommandSize);
+            char* cmd = (char*)(clc + T5_ServerCommandsOffset +
+                                (serverCommandNumber & (T5_MaxReliableCommands - 1)) *
+                                    T5_ServerCommandSize);
+
+            // No server command needs a text icon, the game only builds them locally. The
+            // rest of the command still runs, e.g. a configstring with a player name.
+            if (af_strip_icons(cmd)) af_report("a text icon in a server command");
 
             // 0 makes CG_ExecuteNewServerCommands go on with the next command. Nothing is
             // tokenized yet.
@@ -278,17 +293,40 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
     return true;
 }
 
+static void af_report_name(int clientNum) {
+    af_report("a text icon in a player name");
+    printf(T5WARNING "Anti-Freeze: the name came from client %i.", clientNum);
+}
+
+// The host sends names and clan tags to every client. Both hooks only run on the host:
+// SV_UserinfoChanged cleans the stored userinfo, SV_GetUserinfo covers the game reading
+// it before SV_UserinfoChanged ran.
+void SV_UserinfoChanged_Hook(void* cl) {
+    if (af_strip_icons((char*)cl + T5_ClientUserinfoOffset))
+        af_report_name(((int)cl - *(int*)T5_SvClients) / T5_ClientSize);
+    SV_UserinfoChanged_Trampoline(cl);
+}
+
+void SV_GetUserinfo_Hook(int index, char* buffer, int bufferSize) {
+    SV_GetUserinfo_Trampoline(index, buffer, bufferSize);
+    if (bufferSize > 0 && af_strip_icons(buffer)) af_report_name(index);
+}
+
 int anti_freeze_init() {
     t5nmi(BG_GetNumWeapons);
     t5nmi(Material_RegisterHandle);
     t5nmi(SV_Cmd_ArgvBuffer);
     t5nmhi(CL_CGameNeedsServerCommand);
     t5nmhi(AddBaseDrawTextCmd);
+    t5nmhi(SV_UserinfoChanged);
+    t5nmhi(SV_GetUserinfo);
 
     int res;
     if ((res = cs_hook_install(CL_CGameNeedsServerCommand, CS_HOOK_TYPE_CTR)) < 0)
         return res;
     if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(SV_GetUserinfo, CS_HOOK_TYPE_CTR)) < 0) return res;
 
     return 0;
 }
