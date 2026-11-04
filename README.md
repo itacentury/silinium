@@ -17,6 +17,11 @@ If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which 
 `SCE_PS3_ROOT` must point to the SDK. Outputs are `bin/<config>/Silinium.prx` and `.sprx`.
 On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools through Wine: `PS3_HOST_DIR=$SCE_PS3_ROOT/host-win32 PS3_TOOL_WRAPPER=wine ./build.sh release`.
 
+### Formatting
+The sources are formatted with clang-format (`.clang-format`, checked by CI with version 20). Run `./build.sh format` or `make format` before committing. To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+
+CI (`.github/workflows/build.yml`) checks the formatting and builds debug and release; the `.sprx` files are attached to each run as artifacts.
+
 ## Usage
 Create a folder in `/dev_hdd0/tmp/Silinium/mp` or `/dev_hdd0/tmp/Silinium/zm`. Beside your created folder create a .mod file that has the same name as your mod to enable it.
 
@@ -49,7 +54,7 @@ Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects 
 | Change Name / Reset Name | Changes the local name with the keyboard in the lobby / restores it. |
 | Player Menu | Lists the clients (in game) or party members (lobby). ✕ on a player opens a menu with **Kick** and **Ban** (in game, or in the lobby party). |
 
-Only the host can end the game with `mr … endround`, the command is dropped for other clients.
+Only the host can end the game with `mr … endround`, the command is dropped for other clients and the host sees "<name> tried to end the game" in the kill feed.
 
 The loader always lifts the restrictions on class names and the clan tag: their keyboards skip the character, profanity and "3arc"/"COD" checks, and the clan tag keeps color codes (`^1`…). The only character dropped from the clan tag is `%`, because other consoles may print the tag as a format string.
 
@@ -113,6 +118,21 @@ I used the second one to don't need to worry about dumping checksums per map/gam
 I made a quick exemple to show how to call C functions from game script.
 You just have to make your function, and return his opd pointer from `Scr_GetFunction`, like i did for `setMemory` with hex strings. If you want to make your own function working with an entity like `self` ahead the function you need to hook `Scr_GetMethod` and use the second argument of this function (type) to return the according opd.
 
+Built-in functions:
+
+| Function | Modes | Effect |
+|---|---|---|
+| `setmemory(address, data)` | MP, ZM | Writes the hex string `data` to the hex `address`. |
+| `callkeyboard(title, clientNum)` | MP | Opens the game keyboard on the host console and returns 1, or 0 while another request is still running. The entered text is sent to the player with that client number: `self waittill("keyboard_input", text);`. Characters outside ASCII become `?`, at most 64 characters. |
+
+```
+if (callkeyboard("Say something", self getEntityNumber()))
+{
+    self waittill("keyboard_input", text);
+    self iPrintln(text);
+}
+```
+
 ## Why I made this now?
 
 I made it for some people few months ago, to help and having some memories times by doing C and PPC. Then someone release his own with closed source when he heard that i made it.
@@ -122,3 +142,6 @@ Recently, by cleaning my desktop i came across that folder, I said to myself it 
 Maybe this code will be useful to someone, who knows?
 
 
+
+# License
+Silinium is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). Credits are in [CREDITS.md](CREDITS.md).

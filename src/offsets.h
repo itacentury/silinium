@@ -1,6 +1,7 @@
 #ifndef OFFSETS_H
 #define OFFSETS_H
 
+// clang-format off: tables of offsets with trailing comments
 // Natives functions
 #define T5_Dvar_FindVar 0x4C55A0
 #define T5_Dvar_FindVar_ZM 0x452AA0
@@ -12,6 +13,12 @@
 #define T5_Scr_GetNumParam_ZM 0x5B5088
 #define T5_Scr_GetString 0x5D0D68
 #define T5_Scr_GetString_ZM 0x5BBCC0
+#define T5_Scr_GetInt 0x5D16C0
+#define T5_Scr_GetInt_ZM 0x5BCB60
+#define T5_Scr_AddInt 0x5DF2A0
+#define T5_Scr_AddInt_ZM 0x5C8BF0
+#define T5_Scr_AddString 0x5DE750
+#define T5_Scr_AddString_ZM 0x5C8840
 #define T5_Scr_LoadRawFile_FastFile 0x5AB578
 #define T5_Scr_LoadRawFile_FastFile_ZM 0x595110
 #define T5_Hunk_AllocateTempMemoryHigh 0x4BD4E0
@@ -45,6 +52,13 @@
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty)
+
+// Both are tail calls of CL_ConsolePrint (0x1AF228) with channel 2 / 3
+#define T5_CG_GameMessage 0x113550 // (localClientNum, msg)
+#define T5_Sys_IsMainThread 0x3D2CF8 // compares the current thread id with the saved one
+#define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
+#define T5_GEntities 0x12AB290 // g_entities
+#define T5_GEntitySize 0x2F8
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData
 #define T5_VM_Notify 0x5CD370
@@ -146,5 +160,7 @@
 // Structs / Pointers
 #define T5_TOC 0x00B576E8
 #define T5_TOC_ZM 0x00A544B0
+
+// clang-format on
 
 #endif

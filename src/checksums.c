@@ -4,12 +4,11 @@
 #include <stdint.h>
 
 // Bob Jenkins' one-at-a-time hash (signed arithmetic shifts, as in InfinityOps).
-// Wrapping math is done in uint32_t to avoid signed overflow UB; only the right shifts are signed.
-int jenkins_hash(const char *key)
-{
+// Wrapping math is done in uint32_t to avoid signed overflow UB; only the right shifts
+// are signed.
+int jenkins_hash(const char* key) {
     uint32_t hash = 0;
-    for (; *key; key++)
-    {
+    for (; *key; key++) {
         hash += (uint32_t)(signed char)*key;
         hash += hash << 10;
         hash ^= (uint32_t)((int32_t)hash >> 6);
@@ -23,6 +22,7 @@ int jenkins_hash(const char *key)
 // Precomputed GSC opcode checksums of the unmodified scripts, keyed by
 // jenkins_hash(mapname) / jenkins_hash(gametype). Names were recovered by hashing known
 // map and gametype names; every entry resolved.
+// clang-format off
 static const ChecksumEntry Table_SP[11] = {
     { (int)0x50E4D67A, (int)0x67EA3F3C, 0x07112B77, 0x000AEC07 }, // zombie_theater / zom
     { (int)0x07C2B3D3, (int)0x67EA3F3C, 0x4189326F, 0x000B8D53 }, // zombie_pentagon / zom
@@ -351,16 +351,17 @@ static const ChecksumEntry Table_MP[312] = {
     { (int)0xEA52B87A, (int)0xCD71DB69, 0x41BACED5, 0x0007DD88 }, // mp_silo / oic
     { (int)0xEA52B87A, (int)0x7901E0EE, 0x61A1ADEA, 0x0007E3D4 }, // mp_silo / shrp
 };
+// clang-format on
 
-const ChecksumEntry *checksum_lookup(bool multiplayer, const char *mapname, const char *gametype)
-{
-    const ChecksumEntry *table = multiplayer ? Table_MP : Table_SP;
-    unsigned int count = multiplayer ? sizeof(Table_MP) / sizeof(Table_MP[0]) : sizeof(Table_SP) / sizeof(Table_SP[0]);
+const ChecksumEntry* checksum_lookup(bool multiplayer, const char* mapname,
+                                     const char* gametype) {
+    const ChecksumEntry* table = multiplayer ? Table_MP : Table_SP;
+    unsigned int count = multiplayer ? sizeof(Table_MP) / sizeof(Table_MP[0])
+                                     : sizeof(Table_SP) / sizeof(Table_SP[0]);
     int mapHash = jenkins_hash(mapname);
     int gametypeHash = jenkins_hash(gametype);
 
-    for (unsigned int i = 0; i < count; i++)
-    {
+    for (unsigned int i = 0; i < count; i++) {
         if (table[i].mapHash == mapHash && table[i].gametypeHash == gametypeHash)
             return &table[i];
     }

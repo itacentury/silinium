@@ -9,8 +9,9 @@
     uint64_t name##_opd;              \
     name##_t name;
 
-#define t5ni(name)                                                                                                    \
-    name##_opd = isMultiplayer ? ((uint64_t)T5_##name << 32) | T5_TOC : ((uint64_t)T5_##name##_ZM << 32) | T5_TOC_ZM; \
+#define t5ni(name)                                                             \
+    name##_opd = isMultiplayer ? ((uint64_t)T5_##name << 32) | T5_TOC          \
+                               : ((uint64_t)T5_##name##_ZM << 32) | T5_TOC_ZM; \
     name = (name##_t) & name##_opd;
 
 #define t5nhd(ret_type, name, args)   \
@@ -20,19 +21,18 @@
     name##_t name##_Trampoline;       \
     ret_type name##_Hook args;
 
-#define t5nhi(name)                                                                                                   \
-    name##_opd = isMultiplayer ? ((uint64_t)T5_##name << 32) | T5_TOC : ((uint64_t)T5_##name##_ZM << 32) | T5_TOC_ZM; \
-    name = (name##_t) & name##_opd;                                                                                   \
+#define t5nhi(name)                                                            \
+    name##_opd = isMultiplayer ? ((uint64_t)T5_##name << 32) | T5_TOC          \
+                               : ((uint64_t)T5_##name##_ZM << 32) | T5_TOC_ZM; \
+    name = (name##_t) & name##_opd;                                            \
     name##_Trampoline = 0;
 
 // MP only natives/hooks (no _ZM offset)
-#define t5nmi(name)                                  \
+#define t5nmi(name)                                    \
     name##_opd = ((uint64_t)T5_##name << 32) | T5_TOC; \
     name = (name##_t) & name##_opd;
 
-#define t5nmhi(name) \
-    t5nmi(name)      \
-    name##_Trampoline = 0;
+#define t5nmhi(name) t5nmi(name) name##_Trampoline = 0;
 
 #define t5o(name) (isMultiplayer ? T5_##name : T5_##name##_ZM)
 
@@ -43,8 +43,7 @@
 #define SCRIPTS_PATH "/dev_hdd0/tmp/Silinium"
 
 // Game structs
-typedef union DvarValue
-{
+typedef union DvarValue {
     bool enabled;
     int integer;
     uint32_t unsignedInt;
@@ -52,19 +51,17 @@ typedef union DvarValue
     uint64_t unsignedInt64;
     float value;
     float vector[4];
-    const char *string;
+    const char* string;
     char color[4];
 } DvarValue;
 
-typedef enum scriptInstance_t
-{
+typedef enum scriptInstance_t {
     SCRIPTINSTANCE_SERVER = 0,
     SCRIPTINSTANCE_CLIENT = 1,
     SCRIPT_INSTANCE_MAX = 2
 } scriptInstance_t;
 
-typedef enum dvarType_t
-{
+typedef enum dvarType_t {
     DVAR_TYPE_BOOL = 0x0,
     DVAR_TYPE_FLOAT = 0x1,
     DVAR_TYPE_FLOAT_2 = 0x2,
@@ -80,10 +77,9 @@ typedef enum dvarType_t
     DVAR_TYPE_COUNT = 0xC
 } dvarType_t;
 
-typedef struct dvar_s
-{
-    const char *name;
-    const char *description;
+typedef struct dvar_s {
+    const char* name;
+    const char* description;
     int hash;
     unsigned int flags;
     dvarType_t type;
@@ -94,26 +90,23 @@ typedef struct dvar_s
     DvarValue reset;
     DvarValue saved;
     char domain[10];
-    struct dvar_s *hashNext;
+    struct dvar_s* hashNext;
 } dvar_s;
 
 // Customs
-typedef struct opd32
-{
-    void *function;
+typedef struct opd32 {
+    void* function;
     int toc;
 } opd32;
-typedef struct opd32 *popd32;
+typedef struct opd32* popd32;
 
-typedef struct scrChecksum_t
-{
+typedef struct scrChecksum_t {
     int checksum;
     int programLen;
     int substract;
-} scrChecksum_t; // 0xC (unknown struct not in pdb)
+} scrChecksum_t;  // 0xC (unknown struct not in pdb)
 
-typedef struct GSCLoader
-{
+typedef struct GSCLoader {
     char currentModName[256];
 } GSCLoader;
 
