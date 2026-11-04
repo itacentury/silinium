@@ -680,6 +680,11 @@ static const char* player_name(int party, bool inGame, int i) {
 // Size of the buffer ClanTag_Format writes to, like the lobby list's.
 #define CLAN_TAG_MAX 0x80
 
+// The player list's tags and their widths (scaled to 0.5), built once per frame by
+// build_player_rows.
+static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
+static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
+
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
 // player's own color codes are dropped too. out must hold CLAN_TAG_MAX bytes.
@@ -789,16 +794,17 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     draw_options(HOST_MENU_PLAYER, inGame, 570, 730, y + 38);
 }
 
-// Wide enough for the longest "[tag]name" row plus 10 padding each side, at least the
+// Builds every row's tag and tag width for the draw loop and returns the list box width:
+// wide enough for the longest "[tag]name" row plus 10 padding each side, at least the
 // default 300.
-static float player_list_width(int party, bool inGame) {
+static float build_player_rows(int party, bool inGame) {
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        char tag[CLAN_TAG_MAX];
+        char* tag = playerTags[i];
         player_clan_tag(party, inGame, i, tag);
-        float w = (R_TextWidth(tag, 0x7FFFFFFF, font) +
-                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font)) *
-                  0.5f;
+        playerTagWidths[i] = *tag ? R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f : 0;
+        float w = playerTagWidths[i] +
+                  R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
         if (w > widest) widest = w;
     }
     return widest + 20 > 300 ? widest + 20 : 300;
@@ -834,7 +840,7 @@ void host_menu_ui_draw() {
     float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
     // The player list grows around the center at 650, so titles and the modal stay
     // centered.
-    float width = players && !notHost ? player_list_width(party, inGame) : 300;
+    float width = players && !notHost ? build_player_rows(party, inGame) : 300;
     float left = 650 - width / 2;
     draw_shader(left - 2, 200, 2, height, accent, whiteMaterial);
     draw_shader(left + width - 1, 200, 2, height, accent, whiteMaterial);
@@ -866,12 +872,10 @@ void host_menu_ui_draw() {
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
             float y = i * 16.5f + 258;
-            char tag[CLAN_TAG_MAX];
-            player_clan_tag(party, inGame, i, tag);
             float x = left + 10;
-            if (*tag) {
-                draw_text(tag, x, y, 0.5f, color);
-                x += R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f;
+            if (*playerTags[i]) {
+                draw_text(playerTags[i], x, y, 0.5f, color);
+                x += playerTagWidths[i];
             }
             draw_text(player_name(party, inGame, i), x, y, 0.5f, color);
         }
