@@ -360,10 +360,17 @@ static void reset_name() {
 
 static void open_player_menu() { hostMenu.current = HOST_MENU_KICK; }
 
+// Only the host can act on players: in game the host runs the listen server, in the lobby
+// it hosts the lobby's party.
+static bool can_manage_players(bool inGame) {
+    return inGame ? Dvar_GetBool("sv_running") : host_menu_lobby_party() != 0;
+}
+
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     bool inGame = Dvar_GetBool("cl_ingame");
+    if (!can_manage_players(inGame)) return;
     if (inGame) {
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) {
             return;
@@ -382,10 +389,13 @@ static void open_player_modal() {
 }
 
 // The modal's slot is a member index in the lobby and a client num in game, so it can't
-// survive the switch.
+// survive the switch. It also closes when host rights are lost.
 static void close_stale_player_modal() {
-    if (hostMenu.current == HOST_MENU_PLAYER &&
-        Dvar_GetBool("cl_ingame") != hostMenu.playerModalInGame) {
+    if (hostMenu.current != HOST_MENU_PLAYER) {
+        return;
+    }
+    bool inGame = Dvar_GetBool("cl_ingame");
+    if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame)) {
         hostMenu.current = HOST_MENU_KICK;
     }
 }
@@ -398,7 +408,11 @@ static bool ban_allowed(bool inGame) {
 
 static void queue_kick(bool ban) {
     int member = hostMenu.cursor[HOST_MENU_KICK];
-    if (Dvar_GetBool("cl_ingame")) {
+    bool inGame = Dvar_GetBool("cl_ingame");
+    if (!can_manage_players(inGame)) {
+        return;
+    }
+    if (inGame) {
         if (!CG_CLIENTINFO_BASE || member == CG_CLIENTNUM) {
             return;
         }
@@ -933,8 +947,10 @@ void host_menu_ui_draw() {
     // The player modal is drawn over the player list, so the box keeps showing the list.
     bool players = m == HOST_MENU_KICK || m == HOST_MENU_PLAYER;
     int boxMenu = players ? HOST_MENU_KICK : m;
-    int party = (players && !inGame) ? host_menu_lobby_party() : 0;
-    bool notHost = players && !inGame && !party;
+    // Clients see the list too, only the host can open the player modal.
+    int party = (players && !inGame) ? host_menu_lobby_view_party() : 0;
+    bool notHost = players && !inGame && !party;  // not in a lobby
+    bool viewOnly = players && !notHost && !can_manage_players(inGame);
 
     float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
     // The player list grows around the center at 650, so titles and the modal stay
@@ -961,6 +977,8 @@ void host_menu_ui_draw() {
     if (players) {
         if (notHost) {
             draw_text_box("\x02 - Back", 10, 20, 0.5f);
+        } else if (viewOnly) {
+            draw_text_box("\x14\x15 - Scroll | \x02 - Back", 10, 20, 0.5f);
         } else if (m == HOST_MENU_PLAYER) {
             draw_text_box(
                 "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back", 10, 20,
@@ -971,7 +989,7 @@ void host_menu_ui_draw() {
         }
         draw_session_info(inGame);
         if (notHost) {
-            draw_text("Only the party host can manage players", 510, 258, 0.5f, white);
+            draw_text("Not in a lobby", 510, 258, 0.5f, white);
             return;
         }
         // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn

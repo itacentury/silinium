@@ -88,7 +88,9 @@ t5nhd(void, ClanName_Sanitize, ());
 int host_menu_init();
 // The host menu hooks are installed.
 bool host_menu_ready();
-// The active party the local player hosts, 0 if there is none.
+// The party of the pregame lobby the local player is in, 0 outside a lobby.
+int host_menu_lobby_view_party();
+// That party if the local player hosts it, else 0.
 int host_menu_lobby_party();
 // Called once per server script load, after the scripts are compiled.
 void host_menu_on_server_scripts_loaded();

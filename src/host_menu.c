@@ -43,16 +43,21 @@ static int party_used_count(int party) {
     return count;
 }
 
-// It's unverified which of the two structs is the pregame party, so take whichever one we
-// host. When we host both (a private party taken into a public lobby), take the bigger
-// one: the lobby also holds the party's members.
-int host_menu_lobby_party() {
-    bool lobby = party_is_local_host(T5_LobbyParty);
-    bool game = party_is_local_host(T5_GameParty);
+// It's unverified which of the two structs is the pregame lobby (the game has a lobby
+// list feeder for each), so take the active one with more members: a public lobby also
+// holds the members of the private party taken into it. In matchmaking we can host the
+// private party while being a client of the lobby, so the host flag can't pick it. On a
+// tie take the one we don't host, so a tie never hands out host rights.
+int host_menu_lobby_view_party() {
+    bool lobby = party_is_active(T5_LobbyParty);
+    bool game = party_is_active(T5_GameParty);
     if (lobby && game) {
-        return party_used_count(T5_GameParty) > party_used_count(T5_LobbyParty)
-                   ? T5_GameParty
-                   : T5_LobbyParty;
+        int lobbyCount = party_used_count(T5_LobbyParty);
+        int gameCount = party_used_count(T5_GameParty);
+        if (lobbyCount != gameCount) {
+            return gameCount > lobbyCount ? T5_GameParty : T5_LobbyParty;
+        }
+        return party_is_local_host(T5_LobbyParty) ? T5_GameParty : T5_LobbyParty;
     }
     if (lobby) {
         return T5_LobbyParty;
@@ -61,6 +66,11 @@ int host_menu_lobby_party() {
         return T5_GameParty;
     }
     return 0;
+}
+
+int host_menu_lobby_party() {
+    int party = host_menu_lobby_view_party();
+    return party && party_is_local_host(party) ? party : 0;
 }
 
 // Server commands don't reach the pregame lobby, so the member is removed through the
