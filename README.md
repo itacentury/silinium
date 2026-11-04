@@ -65,7 +65,7 @@ Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects 
 | Prestige | Sets the prestige (0–16, lobby only). |
 | Change Name / Reset Name | Changes the local name with the keyboard in the lobby / restores it. |
 | End Game | Ends the match with the same `mr … endround` command as End Game in the pause menu (in game only). Works as host, and as client on hosts that don't block the command. |
-| Player Menu | Lists the clients (in game) or party members (lobby), each with their clan tag in front (in the lobby colored like in the lobby list, in game without color). ✕ on a player opens a menu with **Kick** and **Ban** (in game, or in the lobby party). |
+| Player Menu | Lists the clients (in game) or party members (lobby). Each row shows the rank icon and level, then the clan tag in front of the name (in the lobby colored like in the lobby list, in game without color). Only the host can act on players: ✕ on a player opens a menu with **Kick** and **Ban** (in game when hosting the match, in the lobby when hosting its party). Clients can scroll the list but not select anyone. Outside a lobby it shows "Not in a lobby". The host box below the controls shows the host's clan tag in front of their name. |
 
 When you host with Silinium, only you can end the game with `mr … endround`: the command is dropped for other clients and you see "<name> tried to end the game" in the kill feed.
 
