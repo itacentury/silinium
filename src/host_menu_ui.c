@@ -779,6 +779,21 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     draw_options(HOST_MENU_PLAYER, inGame, 570, 730, y + 38);
 }
 
+// Wide enough for the longest "[tag]name" row plus 10 padding each side, at least the
+// default 300.
+static float player_list_width(int party, bool inGame) {
+    float widest = 0;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        char tag[0x80];
+        player_clan_tag(party, inGame, i, tag);
+        float w = (R_TextWidth(tag, 0x7FFFFFFF, font) +
+                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font)) *
+                  0.5f;
+        if (w > widest) widest = w;
+    }
+    return widest + 20 > 300 ? widest + 20 : 300;
+}
+
 void host_menu_ui_draw() {
     if (!font) {
         font = R_RegisterFont(FONT, 0);
@@ -807,9 +822,13 @@ void host_menu_ui_draw() {
     bool notHost = players && !inGame && !party;
 
     float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
-    draw_shader(498, 200, 2, height, accent, whiteMaterial);
-    draw_shader(799, 200, 2, height, accent, whiteMaterial);
-    draw_shader(500, 200, 300, height, background, whiteMaterial);
+    // The player list grows around the center at 650, so titles and the modal stay
+    // centered.
+    float width = players && !notHost ? player_list_width(party, inGame) : 300;
+    float left = 650 - width / 2;
+    draw_shader(left - 2, 200, 2, height, accent, whiteMaterial);
+    draw_shader(left + width - 1, 200, 2, height, accent, whiteMaterial);
+    draw_shader(left, 200, width, height, background, whiteMaterial);
 
     draw_text("Silinium", get_aligned_x(650, 0.6f, "Silinium", ALIGN_CENTER), 220, 0.6f,
               white);
@@ -839,7 +858,7 @@ void host_menu_ui_draw() {
             float y = i * 16.5f + 258;
             char tag[0x80];
             player_clan_tag(party, inGame, i, tag);
-            float x = 510;
+            float x = left + 10;
             if (*tag) {
                 draw_text(tag, x, y, 0.5f, color);
                 x += R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f;
