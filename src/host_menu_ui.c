@@ -690,8 +690,8 @@ static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
 // Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
 static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
 static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
-// Width of the icon and level column (scaled to 0.5), the same for every occupied row so
-// the tags and names all start at one x.
+// Width of the icon and level column (scaled to 0.5). Every row is indented by it, empty
+// slots too, so the tags and names all start at one x.
 static float playerRankColumn;
 // The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
 // first lookup, so the rank icon table is only searched when they change.
@@ -929,7 +929,7 @@ static int build_player_rows(int party, bool inGame) {
 
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        float w = (*playerLevels[i] ? playerRankColumn : 0) + playerTagWidths[i] +
+        float w = playerRankColumn + playerTagWidths[i] +
                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
         if (w > widest) widest = w;
     }
@@ -1025,14 +1025,15 @@ void host_menu_ui_draw() {
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
             float y = i * 16.5f + 258;
             float x = left + 10;
-            // Icon, level and tag/name each start at a fixed x, also without an icon.
+            // Icon, level and tag/name each start at a fixed x, also on rows without an
+            // icon or level (empty slots), so the names form one straight column.
             if (*playerLevels[i]) {
                 if (playerRankIcons[i])
                     draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,
                                 white, playerRankIcons[i]);
                 draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, 0.5f, color);
-                x += playerRankColumn;
             }
+            x += playerRankColumn;
             if (*playerTags[i]) {
                 draw_text(playerTags[i], x, y, 0.5f, color);
                 x += playerTagWidths[i];
