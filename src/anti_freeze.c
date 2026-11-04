@@ -197,13 +197,20 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
     return buffer;
 }
 
+// The tokenizer splits on every byte <= ' '. The signed compare also counts 0x80..0xFF,
+// in case the game compares a signed char.
+static bool af_is_separator(char c) { return c && (signed char)c <= ' '; }
+
 // strtol(argv1) like the game reads it: the token after the command, quotes removed by
-// the tokenizer. Saturates instead of overflowing. Not strtol itself: it sets errno, a
-// TLS variable, which a PRX can't use.
+// the tokenizer, then whitespace skipped by strtol. Looser than the game where unsure, a
+// mismatch reads a number the game doesn't and drops a malformed command, never the
+// reverse. Saturates instead of overflowing. Not strtol itself: it sets errno, a TLS
+// variable, which a PRX can't use.
 static long long af_first_arg_number(const char* cmd) {
-    while (*cmd && *cmd != ' ') cmd++;
-    while (*cmd == ' ') cmd++;
+    while (*cmd && !af_is_separator(*cmd)) cmd++;
+    while (af_is_separator(*cmd)) cmd++;
     if (*cmd == '"') cmd++;
+    while (af_is_separator(*cmd)) cmd++;
 
     bool negative = *cmd == '-';
     if (*cmd == '-' || *cmd == '+') cmd++;
