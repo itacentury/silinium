@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "client_command.h"
 #include "cshook.h"
 #include "host_menu.h"
 #include "t5.h"
@@ -329,6 +330,8 @@ int anti_freeze_init() {
     if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_GetUserinfo, CS_HOOK_TYPE_CTR)) < 0) return res;
+    // The chat filter runs from the ClientCommand hook.
+    if ((res = client_command_init()) < 0) return res;
 
     return 0;
 }

@@ -24,7 +24,7 @@ t5nhd(void, SV_GetUserinfo, (int index, char* buffer, int bufferSize));
 
 int anti_freeze_init();
 // Host side: false if the client command being run (say, say_team) carries a text icon,
-// see anti_freeze.c.
+// see anti_freeze.c. Called from the ClientCommand hook, see client_command.c.
 bool anti_freeze_client_command_ok(int clientNum, const char* cmd);
 
 #endif /* ANTI_FREEZE_H */

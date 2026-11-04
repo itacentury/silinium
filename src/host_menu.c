@@ -8,7 +8,7 @@
 #include <sys/sys_time.h>
 #include <sys/timer.h>
 
-#include "anti_freeze.h"
+#include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
 #include "t5.h"
@@ -540,18 +540,19 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
 #define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
 static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
 
-// Blocks "mr <n> <menu> endround" from everyone except the host, and chat that would
-// freeze the clients. The command name is matched with the game's I_stricmp like
-// ClientCommand does, so "MR" can't slip past. The response is compared case-sensitively
-// by the script, so other casings of "endround" are harmless.
-void ClientCommand_Hook(int clientNum) {
-    char cmd[37] = {0};
+// Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
+// matched with the game's I_stricmp like ClientCommand does, so "MR" can't slip past. The
+// response is compared case-sensitively by the script, so other casings of "endround" are
+// harmless.
+bool host_menu_client_command_ok(int clientNum, const char* cmd) {
+    if (I_stricmp(cmd, "mr") != 0) {
+        return true;
+    }
+
     char arg3[37] = {0};
-    SV_Cmd_ArgvBuffer(0, cmd, sizeof(cmd));
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
-    if (I_stricmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 &&
-        !is_host(clientNum)) {
+    if (strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
         if (CG_CLIENTINFO_BASE && clientNum >= 0 && clientNum < HOST_MENU_MAX_CLIENTS) {
             system_time_t now = sys_time_get_system_time();
             system_time_t* last = &endroundMessageTime[clientNum];
@@ -561,11 +562,9 @@ void ClientCommand_Hook(int clientNum) {
                                        CG_CLIENT_NAME(clientNum));
             }
         }
-        return;
+        return false;
     }
-    if (!anti_freeze_client_command_ok(clientNum, cmd)) return;
-
-    ClientCommand_Trampoline(clientNum);
+    return true;
 }
 
 // Server frame: runs the queued kick, scorelimit and keyboard requests.
@@ -660,7 +659,6 @@ static int init_host_menu_hooks() {
     t5nmhi(PadGetData);
     t5nmhi(VM_Notify);
     t5nmhi(Menu_PaintAll);
-    t5nmhi(ClientCommand);
     t5nmhi(ClientEndFrame);
     t5nmhi(DDL_SetFromString);
     t5nmhi(ClanName_Sanitize);
@@ -675,7 +673,7 @@ static int init_host_menu_hooks() {
     if ((res = cs_hook_install(Menu_PaintAll, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
     }
-    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) {
+    if ((res = client_command_init()) < 0) {
         return res;
     }
     if ((res = cs_hook_install(ClientEndFrame, CS_HOOK_TYPE_CTR)) < 0) {

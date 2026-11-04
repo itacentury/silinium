@@ -83,7 +83,6 @@ t5nhd(int, VM_Notify,
       (unsigned int inst, unsigned int notifyListOwnerId, unsigned int stringValue,
        void* top));
 t5nhd(void, Menu_PaintAll, (void* a1, void* uiContext));
-t5nhd(void, ClientCommand, (int clientNum));
 t5nhd(void, ClientEndFrame, (void* ent, void* a2));
 t5nhd(int, DDL_SetFromString, (void* state, const char* value, void* buffer));
 t5nhd(void, ClanName_Sanitize, ());
@@ -101,6 +100,9 @@ int host_menu_lobby_view_party();
 int host_menu_lobby_party();
 // Names in the game's ban list (menu and banClient bans).
 int host_menu_ban_count();
+// Host side: false if the client command being run is blocked (endround from a client
+// that isn't the host). Called from the ClientCommand hook, see client_command.c.
+bool host_menu_client_command_ok(int clientNum, const char* cmd);
 // Called once per server script load, after the scripts are compiled.
 void host_menu_on_server_scripts_loaded();
 // Write into the local stats.
