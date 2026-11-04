@@ -23,7 +23,8 @@
    pointer as is. Sent from another console (chat, player name), the bytes after "^\x01"
    become a pointer to garbage, e.g. "^\x01xx\x12gfx_snow_sheet;" -> 0x12676678. Every
    console that draws the text freezes. A name set through userinfo is stored by the host
-   and sent on to every client.
+   and sent on to every client. In the lobby, the host sends every party member's name and
+   clan tag on in the partystate message.
 */
 
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
@@ -394,6 +395,37 @@ void SV_GetUserinfo_Hook(int index, char* buffer, int bufferSize) {
     if (bufferSize > 0 && af_strip_icons(buffer)) af_report_name(index);
 }
 
+// af_strip_icons on a party member field, it may not be NUL-terminated.
+static bool af_strip_field(char* field, int size) {
+    char buffer[T5_PartyMemberNameSize + 1];  // the bigger field
+    memcpy(buffer, field, size);
+    buffer[size] = 0;
+    if (!af_strip_icons(buffer)) return false;
+    // Shorter than the field now, it fits with its NUL.
+    strcpy(field, buffer);
+    return true;
+}
+
+// Lobby names and clan tags don't go through userinfo, the host sends them in partystate.
+// Only the host's partystate sender calls this. Cleans the party struct in place, so the
+// host's lobby list and every later partystate are clean too.
+void Party_WriteMembers_Hook(int party, int unknown, int firstMember, int targetMember,
+                             void* msg) {
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (!PARTY_MEMBER_USED(party, i)) continue;
+        char* member = (char*)PARTY_MEMBER(party, i);
+        bool name =
+            af_strip_field(member + T5_PartyMemberNameOffset, T5_PartyMemberNameSize);
+        bool clan = af_strip_field(member + T5_PartyMemberClanOffset,
+                                   T5_PartyMemberClanSize);
+        if (name || clan) {
+            af_report("a text icon in a party member name");
+            printf(T5WARNING "Anti-Freeze: the name came from party member %i.", i);
+        }
+    }
+    Party_WriteMembers_Trampoline(party, unknown, firstMember, targetMember, msg);
+}
+
 int anti_freeze_init() {
     t5nmi(BG_GetNumWeapons);
     t5nmi(Cmd_TokenizeString);
@@ -405,6 +437,7 @@ int anti_freeze_init() {
     t5nmhi(AddBaseDrawTextCmd);
     t5nmhi(SV_UserinfoChanged);
     t5nmhi(SV_GetUserinfo);
+    t5nmhi(Party_WriteMembers);
     t5nmhi(DB_LoadXAssets);
 
     int res;
@@ -413,6 +446,7 @@ int anti_freeze_init() {
     if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_GetUserinfo, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(Party_WriteMembers, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(DB_LoadXAssets, CS_HOOK_TYPE_CTR)) < 0) return res;
     // The chat filter runs from the ClientCommand hook.
     if ((res = client_command_init()) < 0) return res;

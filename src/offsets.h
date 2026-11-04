@@ -149,16 +149,22 @@
 #define T5_PartyHostIndexOffset 0x5668
 #define T5_PartyActiveOffset 0x5714
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
-#define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
+#define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name, +0x5C clan tag
 #define T5_PartyMemberSize 0x220
 #define T5_PartyMemberNameOffset 0x18
+#define T5_PartyMemberNameSize 0x20 // next field at +0x38
 #define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. T5_PartyMemberClanSize
-                                      // bytes, the COD points follow at +0x64
+                                      // bytes, the COD points follow at +0x64. I_strncpyz'd with 5 by NetMsg_clan
+                                      // (0x212918), 4 bytes are sent
 #define T5_PartyMemberClanSize 8
 #define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
 // Set from the party message "rank <rankId> <prestige> <codpoints>" (sent at 0x1FB768, handled at 0x2122F0)
 #define T5_PartyMemberRankOffset 0xC8 // int, rankId (level - 1)
 #define T5_PartyMemberPrestigeOffset 0xCC // int
+// (party, ?, firstMember, targetMember, msg), writes the members from firstMember on into a partystate message until
+// it's full: name with MSG_WriteString, clan tag with MSG_WriteData. Only called by the host's partystate sender
+// (0x208DB0, "%ipartystate"), at 0x209404, 0x209538 and 0x2096FC.
+#define T5_Party_WriteMembers 0x204820
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int

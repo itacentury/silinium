@@ -26,6 +26,8 @@ t5nhd(void*, AddBaseDrawTextCmd,
        int cursorPos, char cursor));
 t5nhd(void, SV_UserinfoChanged, (void* cl));
 t5nhd(void, SV_GetUserinfo, (int index, char* buffer, int bufferSize));
+t5nhd(void, Party_WriteMembers,
+      (int party, int unknown, int firstMember, int targetMember, void* msg));
 t5nhd(void, DB_LoadXAssets, (void* zoneInfo, int zoneCount, int sync));
 
 int anti_freeze_init();
