@@ -29,10 +29,13 @@
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
 #define AF_MAX_TEXT 1024
 #define AF_MATERIAL_CACHE 16
-#define AF_REPORTED_CACHE 16
+// Every icon takes 8 bytes, only the last one can be cut off by the end of the text.
+#define AF_MAX_ICONS (AF_MAX_TEXT / AF_ICON_SIZE + 1)
+// More than the bad texts on screen at once (chat feed, scoreboard names).
+#define AF_BAD_TEXT_CACHE 32
 
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
-// most checks are a cache hit. Both caches are cleared when zones load or unload.
+// most checks are a cache hit. All caches are cleared when zones load or unload.
 static uint32_t knownMaterials[AF_MATERIAL_CACHE];
 static int knownMaterialsNext = 0;
 
@@ -41,9 +44,16 @@ static int knownMaterialsNext = 0;
 static uint32_t badMaterials[AF_MATERIAL_CACHE];
 static int badMaterialsNext = 0;
 
-// Hashes of the bad texts already reported, so the log counts texts, not draw calls.
-static uint32_t reportedTexts[AF_REPORTED_CACHE];
-static int reportedTextsNext = 0;
+// Bad texts with the verdict of each of their icons. A few texts can carry more distinct
+// bad pointers than badMaterials holds, each draw would evict what the next icon needs
+// and check every icon again, every frame. Also makes the log count texts, not draws.
+typedef struct {
+    uint32_t hash;
+    char text[AF_MAX_TEXT];  // Compared in full, an FNV-1a collision is easy to build.
+    uint8_t bad[(AF_MAX_ICONS + 7) / 8];  // Bit per icon, in the order they are met.
+} af_bad_text;
+static af_bad_text badTexts[AF_BAD_TEXT_CACHE];  // text[0] == 0 if unused
+static int badTextsNext = 0;
 
 static uint32_t droppedCount = 0;
 
@@ -108,6 +118,7 @@ static bool af_material_ok(uint32_t material) {
 static void af_clear_materials() {
     memset(knownMaterials, 0, sizeof(knownMaterials));
     memset(badMaterials, 0, sizeof(badMaterials));
+    memset(badTexts, 0, sizeof(badTexts));
 }
 
 void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
@@ -124,14 +135,24 @@ static uint32_t af_hash(const char* s) {
     return hash;
 }
 
-static bool af_first_report(const char* text) {
-    uint32_t hash = af_hash(text);
-    for (int i = 0; i < AF_REPORTED_CACHE; i++)
-        if (reportedTexts[i] == hash) return false;
+static af_bad_text* af_find_bad_text(const char* text, uint32_t hash) {
+    for (int i = 0; i < AF_BAD_TEXT_CACHE; i++)
+        if (badTexts[i].hash == hash && badTexts[i].text[0] &&
+            strcmp(badTexts[i].text, text) == 0)
+            return &badTexts[i];
+    return NULL;
+}
 
-    reportedTexts[reportedTextsNext] = hash;
-    reportedTextsNext = (reportedTextsNext + 1) % AF_REPORTED_CACHE;
-    return true;
+// NULL if the text doesn't fit, it is then checked on every draw.
+static af_bad_text* af_add_bad_text(const char* text, uint32_t hash) {
+    if (strlen(text) >= AF_MAX_TEXT) return NULL;
+
+    af_bad_text* entry = &badTexts[badTextsNext];
+    badTextsNext = (badTextsNext + 1) % AF_BAD_TEXT_CACHE;
+    entry->hash = hash;
+    strcpy(entry->text, text);
+    memset(entry->bad, 0, sizeof(entry->bad));
+    return entry;
 }
 
 static bool af_icon_ok(const char* p) {
@@ -172,28 +193,47 @@ static void af_shift_offset(int* offset, int at, int removed) {
 // maxChars index into text and are moved to index into the copy.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                                     int* cursorPos, int* maxChars) {
-    // Skip valid icons whole, their width, height and pointer bytes can contain "^\x01".
-    const char* p = text;
-    while (*p) {
-        if (!af_is_icon(p)) {
-            p++;
-            continue;
-        }
-        if (!af_icon_ok(p)) break;
-        p += AF_ICON_SIZE;
-    }
-    if (!*p) return text;
+    if (!af_has_icon(text)) return text;
 
-    if (af_first_report(text)) af_report("a text icon with an invalid material");
+    uint32_t hash = af_hash(text);
+    af_bad_text* entry = af_find_bad_text(text, hash);
+    // Known bad texts replay their verdicts, new ones record them.
+    bool replay = entry != NULL;
+    if (!replay) {
+        // Skip valid icons whole, their width, height and pointer bytes can contain
+        // "^\x01".
+        const char* p = text;
+        while (*p) {
+            if (!af_is_icon(p)) {
+                p++;
+                continue;
+            }
+            if (!af_icon_ok(p)) break;
+            p += AF_ICON_SIZE;
+        }
+        if (!*p) return text;
+
+        af_report("a text icon with an invalid material");
+        entry = af_add_bad_text(text, hash);
+    }
 
     size_t out = 0;
-    p = text;
+    int icon = 0;
+    const char* p = text;
     while (*p && out < size - 1) {
         if (!af_is_icon(p)) {
             buffer[out++] = *p++;
             continue;
         }
-        if (af_icon_ok(p)) {
+        bool ok;
+        if (replay) {
+            ok = !(entry->bad[icon / 8] & (1 << (icon % 8)));
+        } else {
+            ok = af_icon_ok(p);
+            if (!ok && entry) entry->bad[icon / 8] |= 1 << (icon % 8);
+        }
+        icon++;
+        if (ok) {
             if (out + AF_ICON_SIZE > size - 1) break;
             memcpy(&buffer[out], p, AF_ICON_SIZE);
             out += AF_ICON_SIZE;
