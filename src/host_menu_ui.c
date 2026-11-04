@@ -698,8 +698,8 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (inGame) {
         // An empty slot may still hold the tag of whoever left.
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return;
-        // Reads stay within the tag field. The game keeps only 7 bytes of the tag in
-        // game, color codes included, so a tag the lobby shows in full can be cut here.
+        // Reads stay within the tag field. The field is 8 bytes like the lobby's, so in
+        // game the tag only loses its color codes and icons, not visible characters.
         const char* tag = CG_CLIENT_CLAN(i);
         const int size = T5_CgClientClanSize;
         char clan[T5_CgClientClanSize];
@@ -727,10 +727,9 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (!party || !PARTY_MEMBER_USED(party, i)) return;
     const char* clan = PARTY_MEMBER_CLAN(party, i);
     if (!*clan) return;
-    // The clan field's size is unknown (at most 0x9C bytes), so a long clan is cut, not
-    // the ], in the plain and the colored form: "[^%i" + "^7]" + NUL take at most 8 bytes
-    // of out.
-    char cut[CLAN_TAG_MAX - 7];
+    // The clan field is 8 bytes, so at most 7 characters are read: the read stays within
+    // the field even if a peer left no NUL in it. "[^%i" + cut + "^7]" + NUL fit in out.
+    char cut[T5_PartyMemberClanSize];
     snprintf(cut, sizeof(cut), "%.*s", (int)sizeof(cut) - 1, clan);
     char plain[CLAN_TAG_MAX];
     snprintf(plain, sizeof(plain), "[%s]", cut);

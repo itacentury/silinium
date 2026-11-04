@@ -141,8 +141,9 @@
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
 #define T5_PartyMemberSize 0x220
 #define T5_PartyMemberNameOffset 0x18
-#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. At most 8 bytes, the
-                                      // COD points follow at +0x64
+#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. T5_PartyMemberClanSize
+                                      // bytes, the COD points follow at +0x64
+#define T5_PartyMemberClanSize 8
 #define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
 // Set from the party message "rank <rankId> <prestige> <codpoints>" (sent at 0x1FB768, handled at 0x2122F0)
 #define T5_PartyMemberRankOffset 0xC8 // int, rankId (level - 1)
