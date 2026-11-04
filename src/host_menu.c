@@ -463,9 +463,10 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.selectGametypePending = false;
             hostMenu.changeNamePending = false;
             hostMenu.lobbyKickMember = -1;
-            // Each lobby starts on the larger list.
-            hostMenu.lobbyPartyOther = false;
         }
+        // The list choice only applies while both parties are up; each lobby (and the one
+        // after a match) starts on the larger list.
+        if (inGame || !host_menu_lobby_parties_both_active()) hostMenu.lobbyPartyOther = false;
 
         // The game resets the party dvars in the pregame lobby, keep them applied.
         if (hostMenu.forceHost && !inGame) {
