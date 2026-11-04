@@ -24,6 +24,7 @@ int client_command_init() {
     if (installed) return 0;
 
     t5nmi(SV_Cmd_ArgvBuffer);
+    t5nmi(I_stricmp);
     t5nmhi(ClientCommand);
 
     int res;

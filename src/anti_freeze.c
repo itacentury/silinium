@@ -294,9 +294,10 @@ static int af_sv_cmd_argc() {
     return *(int*)(T5_SvCmdArgs + T5_SvCmdArgsArgcOffset + nesting * 4);
 }
 
-// The host sends chat to every client, also to the ones without this module.
+// The host sends chat to every client, also to the ones without this module. "SAY" is
+// chat too, the game matches the command names case-insensitively.
 bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
-    if (strcmp(cmd, "say") != 0 && strcmp(cmd, "say_team") != 0) return true;
+    if (I_stricmp(cmd, "say") != 0 && I_stricmp(cmd, "say_team") != 0) return true;
 
     // All arguments, an empty one ("") doesn't end the command.
     char arg[AF_MAX_TEXT];
