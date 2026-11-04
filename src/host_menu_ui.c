@@ -717,11 +717,15 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (!party || !PARTY_MEMBER_USED(party, i)) return;
     const char* clan = PARTY_MEMBER_CLAN(party, i);
     if (!*clan) return;
-    // Sized like out. The clan field's size is unknown, so a long clan is cut, not the ].
+    // The clan field's size is unknown (at most 0x9C bytes), so a long clan is cut, not
+    // the ], in the plain and the colored form: "[^%i" + "^7]" + NUL take at most 8 bytes
+    // of out.
+    char cut[CLAN_TAG_MAX - 7];
+    snprintf(cut, sizeof(cut), "%.*s", (int)sizeof(cut) - 1, clan);
     char plain[CLAN_TAG_MAX];
-    snprintf(plain, sizeof(plain), "[%.*s]", (int)sizeof(plain) - 3, clan);
+    snprintf(plain, sizeof(plain), "[%s]", cut);
     strcpy(out, plain);
-    ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), clan, "", plain, out);
+    ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), cut, "", plain, out);
 }
 
 // The visible options of menu m, rows starting at y, values right aligned at right.
