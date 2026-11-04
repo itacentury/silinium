@@ -202,6 +202,10 @@
 #define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
 // Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
 #define T5_AddBaseDrawTextCmd 0x7538E8
+// sv_cmd_args, read by SV_Cmd_ArgvBuffer: +0x00 nesting, argc[nesting] at +0x84, argv[nesting] at +0xA4. SV_Cmd_Argc is
+// inlined, there is no function to call.
+#define T5_SvCmdArgs 0x1461F74
+#define T5_SvCmdArgsArgcOffset 0x84
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

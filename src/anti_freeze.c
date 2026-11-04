@@ -26,7 +26,6 @@
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
 #define AF_MAX_TEXT 1024
 #define AF_MATERIAL_CACHE 16
-#define AF_MAX_CHAT_ARGS 64
 #define AF_REPORTED_CACHE 16
 
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
@@ -243,14 +242,20 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
                                          rotation, color, style, cursorPos, cursor);
 }
 
+static int af_sv_cmd_argc() {
+    int nesting = *(int*)T5_SvCmdArgs;
+    return *(int*)(T5_SvCmdArgs + T5_SvCmdArgsArgcOffset + nesting * 4);
+}
+
 // The host sends chat to every client, also to the ones without this module.
 bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
     if (strcmp(cmd, "say") != 0 && strcmp(cmd, "say_team") != 0) return true;
 
+    // All arguments, an empty one ("") doesn't end the command.
     char arg[AF_MAX_TEXT];
-    for (int i = 1; i < AF_MAX_CHAT_ARGS; i++) {
+    int argc = af_sv_cmd_argc();
+    for (int i = 1; i < argc; i++) {
         SV_Cmd_ArgvBuffer(i, arg, sizeof(arg));
-        if (!*arg) break;
         if (af_has_icon(arg)) {
             af_report("chat with a text icon");
             printf(T5WARNING "Anti-Freeze: the chat came from client %i.", clientNum);
