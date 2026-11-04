@@ -711,8 +711,9 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (!party || !PARTY_MEMBER_USED(party, i)) return;
     const char* clan = PARTY_MEMBER_CLAN(party, i);
     if (!*clan) return;
-    char plain[16];
-    snprintf(plain, sizeof(plain), "[%s]", clan);
+    // Sized like out. The clan field's size is unknown, so a long clan is cut, not the ].
+    char plain[0x80];
+    snprintf(plain, sizeof(plain), "[%.*s]", (int)sizeof(plain) - 3, clan);
     strcpy(out, plain);
     ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), clan, "", plain, out);
 }

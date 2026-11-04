@@ -132,7 +132,8 @@
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
 #define T5_PartyMemberSize 0x220
 #define T5_PartyMemberNameOffset 0x18
-#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130
+#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. Size unknown, at
+                                      // most 0x9C bytes (feature int at +0xF8)
 #define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
