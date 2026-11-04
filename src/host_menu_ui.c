@@ -402,12 +402,6 @@ static void close_stale_player_modal() {
     }
 }
 
-// The join handler (0x212FE8) skips the ban check for party id 1 (GameParty), so a ban
-// there would only kick.
-static bool ban_allowed(bool inGame) {
-    return inGame || host_menu_lobby_party() == T5_LobbyParty;
-}
-
 static void queue_kick(bool ban) {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     bool inGame = Dvar_GetBool("cl_ingame");
@@ -428,9 +422,6 @@ static void queue_kick(bool ban) {
     // it runs.
     int party = host_menu_lobby_party();
     if (!party || hostMenu.lobbyKickMember != -1 || !PARTY_MEMBER_USED(party, member)) {
-        return;
-    }
-    if (ban && !ban_allowed(false)) {
         return;
     }
     hostMenu.lobbyKickParty = party;
@@ -580,8 +571,7 @@ void host_menu_ui_init() {
         "Player";  // the modal shows the player's name instead
     hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_KICK;
     add_option(HOST_MENU_PLAYER, "Kick", HOST_MENU_TYPE_ACTION, 0, 0, 0, kick_selected);
-    add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected)
-        ->visible = ban_allowed;
+    add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
 }
 
 // ---------------------------------------------------------------------------

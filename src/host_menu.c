@@ -60,8 +60,8 @@ int host_menu_lobby_party() {
 // party code. The party and name were taken when the kick was chosen; if either changed
 // since, the slot holds someone else. The party only has to still be hosted by us, not
 // shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
-// list party joins are checked against, the same one banClient fills in game. queue_kick
-// only asks for one in LobbyParty, the only party whose joins are checked against it.
+// list party joins are checked against, the same one banClient fills in game. Only
+// LobbyParty joins are checked against it, so enforce_game_party_bans covers GameParty.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (!party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
@@ -77,6 +77,19 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
     }
     Party_RemoveMember(party, member, 1,
                        ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
+}
+
+// The join handler skips the ban check for party id 1 (GameParty, beq at 0x21348C), so a
+// banned player can rejoin it. Remove them again as soon as they show up.
+static void enforce_game_party_bans() {
+    int party = T5_GameParty;
+    if (!party_is_local_host(party)) return;
+    int host = *(int*)(party + T5_PartyHostIndexOffset);
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (i == host || !PARTY_MEMBER_USED(party, i)) continue;
+        if (Party_IsBanned(PARTY_MEMBER_NAME(party, i)))
+            Party_RemoveMember(party, i, 1, "@EXE_PLAYERKICKED_BAN");
+    }
 }
 
 static void write_stat_u8(int addr, uint8_t value) { *(uint8_t*)addr = value; }
@@ -301,6 +314,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             __lwsync();
             hostMenu.lobbyKickMember = -1;
         }
+        enforce_game_party_bans();
         if (hostMenu.selectMapPending) {
             hostMenu.selectMapPending = false;
             Menus_OpenByName(0, uiContext, "select_map");
@@ -469,6 +483,7 @@ static void init_host_menu_offsets() {
     t5nmi(Material_RegisterHandle);
     t5nmi(Party_RemoveMember);
     t5nmi(Party_BanName);
+    t5nmi(Party_IsBanned);
     t5nmi(ClanTag_Format);
     t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);

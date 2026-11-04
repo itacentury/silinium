@@ -66,6 +66,7 @@ t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
 t5nd(void, Party_RemoveMember,
      (int party, int memberIndex, int notify, const char* reason));
 t5nd(void, Party_BanName, (const char* name));
+t5nd(int, Party_IsBanned, (const char* name));
 t5nd(void, ClanTag_Format,
      (int feature, const char* clan, const char* name, const char* plain, char* out));
 t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
