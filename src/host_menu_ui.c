@@ -693,10 +693,9 @@ static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
 // Width of the icon and level column (scaled to 0.5), the same for every occupied row so
 // the tags and names all start at one x.
 static float playerRankColumn;
-// The rank and prestige playerRankIcons[i] was looked up for, -1 before the first lookup,
-// so the rank icon table is only searched when they change.
-static int playerIconRanks[HOST_MENU_MAX_CLIENTS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1,
-                                                     -1, -1, -1, -1, -1, -1, -1, -1, -1};
+// The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
+// first lookup, so the rank icon table is only searched when they change.
+static int playerIconRanks[HOST_MENU_MAX_CLIENTS];
 static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
 // playerListWidth (declared with the input code) is the list box's widest width this
 // visit to the list, 0 outside it.
@@ -835,11 +834,12 @@ static void build_player_rank(int party, bool inGame, int i) {
     }
     // Whether the game's lookup handles values outside the table is unverified.
     int iconRank = rank > RANK_ICON_MAX_RANK ? RANK_ICON_MAX_RANK : rank;
-    int iconPrestige = prestige > RANK_ICON_MAX_PRESTIGE ? RANK_ICON_MAX_PRESTIGE : prestige;
-    if (iconRank != playerIconRanks[i] || iconPrestige != playerIconPrestiges[i]) {
+    int iconPrestige =
+        prestige > RANK_ICON_MAX_PRESTIGE ? RANK_ICON_MAX_PRESTIGE : prestige;
+    if (iconRank + 1 != playerIconRanks[i] || iconPrestige != playerIconPrestiges[i]) {
         playerRankIcons[i] = 0;
         RankIcon_Lookup(iconRank, iconPrestige, &playerRankIcons[i]);
-        playerIconRanks[i] = iconRank;
+        playerIconRanks[i] = iconRank + 1;
         playerIconPrestiges[i] = iconPrestige;
     }
     sprintf(playerLevels[i], "%i", rank + 1);
