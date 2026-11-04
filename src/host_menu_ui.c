@@ -379,23 +379,25 @@ static void open_player_modal() {
                CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
     } else {
         int party = host_menu_lobby_party();
-        if (!party || !PARTY_MEMBER_USED(party, member)) {
-            return;
-        }
+        if (!party || !PARTY_MEMBER_USED(party, member)) return;
+        hostMenu.playerModalParty = party;
     }
+    if (inGame) hostMenu.playerModalParty = 0;
     hostMenu.cursor[HOST_MENU_PLAYER] = 0;
     hostMenu.playerModalInGame = inGame;
     hostMenu.current = HOST_MENU_PLAYER;
 }
 
 // The modal's slot is a member index in the lobby and a client num in game, so it can't
-// survive the switch. It also closes when host rights are lost.
+// survive the switch. The same slot in the other party is someone else, so it also closes
+// when the shown party changes (one of the two went away), and when host rights are lost.
 static void close_stale_player_modal() {
     if (hostMenu.current != HOST_MENU_PLAYER) {
         return;
     }
     bool inGame = Dvar_GetBool("cl_ingame");
-    if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame)) {
+    if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame) ||
+        (!inGame && host_menu_lobby_view_party() != hostMenu.playerModalParty)) {
         hostMenu.current = HOST_MENU_KICK;
     }
 }
@@ -643,7 +645,7 @@ void host_menu_ui_handle_input() {
         }
     } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
         if (can_switch_lists(m, inGame)) {
-            hostMenu.lobbyPartyOther ^= 1;
+            hostMenu.lobbyShowGameParty ^= 1;
             playerListWidth = 0;  // fit the box to the new list
         }
         sys_timer_usleep(200000);
@@ -1010,7 +1012,7 @@ void host_menu_ui_draw() {
     bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
     const char* title = hostMenu.title[boxMenu];
     if (bothLists)
-        title = hostMenu.lobbyPartyOther ? "Players (Party)" : "Players (Lobby)";
+        title = hostMenu.lobbyShowGameParty ? "Players (Party)" : "Players (Lobby)";
     draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), 238, 0.45f, accent);
     if (players) {
         const char* switchHint =

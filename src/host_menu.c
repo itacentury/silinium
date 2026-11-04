@@ -33,50 +33,21 @@ static bool party_is_local_host(int party) {
     return host_menu_party_active(party) && *(int*)(party + T5_PartyIsHostOffset);
 }
 
-static int party_used_count(int party) {
-    int count = 0;
-    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        if (PARTY_MEMBER_USED(party, i)) {
-            count++;
-        }
-    }
-    return count;
-}
-
-// It's unverified which of the two structs is the pregame lobby (the game has a lobby
-// list feeder for each), so take the active one with more members: a public lobby also
-// holds the members of the private party taken into it. In matchmaking we can host the
-// private party while being a client of the lobby, so the host flag can't pick it. On a
-// tie take the one we don't host, so a tie never hands out host rights. Only called with
-// both parties active.
-static int larger_party() {
-    int lobbyCount = party_used_count(T5_LobbyParty);
-    int gameCount = party_used_count(T5_GameParty);
-    if (lobbyCount != gameCount)
-        return gameCount > lobbyCount ? T5_GameParty : T5_LobbyParty;
-    return party_is_local_host(T5_LobbyParty) ? T5_GameParty : T5_LobbyParty;
-}
-
 bool host_menu_lobby_parties_both_active() {
     return host_menu_party_active(T5_LobbyParty) && host_menu_party_active(T5_GameParty);
 }
 
-// With both parties active the larger one is shown unless the player switched to the
-// other one with Triangle.
+// With both parties active LobbyParty ("Lobby") is shown unless the player switched to
+// GameParty ("Party") with Triangle. The choice names a struct, not the larger party, so
+// the list doesn't change when members join one party before the other. In matchmaking we
+// can host the private party while being a client of the lobby, so the shown party may
+// not be one we host.
 int host_menu_lobby_view_party() {
     bool lobby = host_menu_party_active(T5_LobbyParty);
     bool game = host_menu_party_active(T5_GameParty);
-    if (lobby && game) {
-        int party = larger_party();
-        if (!hostMenu.lobbyPartyOther) return party;
-        return party == T5_LobbyParty ? T5_GameParty : T5_LobbyParty;
-    }
-    if (lobby) {
-        return T5_LobbyParty;
-    }
-    if (game) {
-        return T5_GameParty;
-    }
+    if (lobby && game) return hostMenu.lobbyShowGameParty ? T5_GameParty : T5_LobbyParty;
+    if (lobby) return T5_LobbyParty;
+    if (game) return T5_GameParty;
     return 0;
 }
 
@@ -465,8 +436,9 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.lobbyKickMember = -1;
         }
         // The list choice only applies while both parties are up; each lobby (and the one
-        // after a match) starts on the larger list.
-        if (inGame || !host_menu_lobby_parties_both_active()) hostMenu.lobbyPartyOther = false;
+        // after a match) starts on the Lobby list.
+        if (inGame || !host_menu_lobby_parties_both_active())
+            hostMenu.lobbyShowGameParty = false;
 
         // The game resets the party dvars in the pregame lobby, keep them applied.
         if (hostMenu.forceHost && !inGame) {
