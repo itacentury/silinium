@@ -634,15 +634,12 @@ static void init_host_menu_offsets() {
     t5nmi(Menus_OpenByName);
     t5nmi(R_AddCmdDrawStretchPic);
     t5nmi(R_AddCmdDrawText);
-    t5nmi(SV_Cmd_ArgvBuffer);
-    t5nmi(I_stricmp);
     t5nmi(UI_OpenKeyboard);
     t5nmi(Dvar_GetBool);
     t5nmi(R_TextHeight);
     t5nmi(R_TextWidth);
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
-    t5nmi(Material_RegisterHandle);
     t5nmi(Party_RemoveMember);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);

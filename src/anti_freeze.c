@@ -257,12 +257,20 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
     return buffer;
 }
 
-// Cmd_Argv of the command the game tokenized last, "" past argc like the game.
+// Argc of a CmdArgs (T5_CmdArgsSlot or T5_SvCmdArgs) at its current nesting.
+static int af_args_argc(int base) {
+    return *(int*)(base + T5_CmdArgsArgcOffset + *(int*)base * 4);
+}
+
+// Argv of a CmdArgs at its current nesting, "" past argc like the game.
+static const char* af_args_argv(int base, int arg) {
+    if (arg >= af_args_argc(base)) return "";
+    return (*(const char***)(base + T5_CmdArgsArgvOffset + *(int*)base * 4))[arg];
+}
+
+// Cmd_Argv of the command the game tokenized last.
 static const char* af_cmd_argv(int arg) {
-    int args = (int)Sys_GetValue(T5_CmdArgsSlot);
-    int nesting = *(int*)args;
-    if (arg >= *(int*)(args + T5_SvCmdArgsArgcOffset + nesting * 4)) return "";
-    return (*(const char***)(args + T5_CmdArgsArgvOffset + nesting * 4))[arg];
+    return af_args_argv((int)Sys_GetValue(T5_CmdArgsSlot), arg);
 }
 
 // strtol(argv) the way the game reads numbers, truncated to the int the game keeps.
@@ -350,22 +358,15 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
                                          rotation, color, style, cursorPos, cursor);
 }
 
-static int af_sv_cmd_argc() {
-    int nesting = *(int*)T5_SvCmdArgs;
-    return *(int*)(T5_SvCmdArgs + T5_SvCmdArgsArgcOffset + nesting * 4);
-}
-
 // The host sends chat to every client, also to the ones without this module. "SAY" is
 // chat too, the game matches the command names case-insensitively.
 bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
     if (I_stricmp(cmd, "say") != 0 && I_stricmp(cmd, "say_team") != 0) return true;
 
     // All arguments, an empty one ("") doesn't end the command.
-    char arg[AF_MAX_TEXT];
-    int argc = af_sv_cmd_argc();
+    int argc = af_args_argc(T5_SvCmdArgs);
     for (int i = 1; i < argc; i++) {
-        SV_Cmd_ArgvBuffer(i, arg, sizeof(arg));
-        if (af_has_icon(arg)) {
+        if (af_has_icon(af_args_argv(T5_SvCmdArgs, i))) {
             af_report("chat with a text icon");
             printf(T5WARNING "Anti-Freeze: the chat came from client %i.", clientNum);
             return false;
@@ -400,8 +401,6 @@ int anti_freeze_init() {
     t5nmi(Cmd_EndTokenizedString);
     t5nmi(Sys_GetValue);
     t5nmi(game_strtol);
-    t5nmi(Material_RegisterHandle);
-    t5nmi(SV_Cmd_ArgvBuffer);
     t5nmhi(CL_CGameNeedsServerCommand);
     t5nmhi(AddBaseDrawTextCmd);
     t5nmhi(SV_UserinfoChanged);

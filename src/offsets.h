@@ -205,18 +205,18 @@
 #define T5_Cmd_TokenizeString 0x39B538
 #define T5_Cmd_TokenizeStringWithLimit 0x39B828
 #define T5_Cmd_EndTokenizedString 0x39A150
-// (index), thread local values. T5_CmdArgsSlot is the tokenized command, same layout as T5_SvCmdArgs, argv[nesting] at
-// T5_CmdArgsArgvOffset.
+// CmdArgs layout of both tokenizers (T5_CmdArgsSlot, T5_SvCmdArgs): +0x00 nesting, argc[nesting] at
+// T5_CmdArgsArgcOffset, argv[nesting] at T5_CmdArgsArgvOffset.
+#define T5_CmdArgsArgcOffset 0x84
+#define T5_CmdArgsArgvOffset 0xA4
+// (index), thread local values. T5_CmdArgsSlot is the client side CmdArgs.
 #define T5_Sys_GetValue 0x3D2C40
 #define T5_CmdArgsSlot 4
-#define T5_CmdArgsArgvOffset 0xA4
 #define T5_game_strtol 0x44824 // the game's strtol, CG_ServerCommand and "d" read argv1 with (argv1, NULL, 10)
 // Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
 #define T5_AddBaseDrawTextCmd 0x7538E8
-// sv_cmd_args, read by SV_Cmd_ArgvBuffer: +0x00 nesting, argc[nesting] at +0x84, argv[nesting] at +0xA4. SV_Cmd_Argc is
-// inlined, there is no function to call.
+// sv_cmd_args, the CmdArgs read by SV_Cmd_ArgvBuffer. SV_Cmd_Argc is inlined, there is no function to call.
 #define T5_SvCmdArgs 0x1461F74
-#define T5_SvCmdArgsArgcOffset 0x84
 // (client_t* cl), copies name and clanAbbrev from the userinfo at T5_ClientUserinfoOffset into the client_t. Called on
 // connect and for each "userinfo" from the client.
 #define T5_SV_UserinfoChanged 0x3E49D0
