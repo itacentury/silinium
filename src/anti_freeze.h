@@ -13,6 +13,11 @@
 #include "offsets.h"
 
 t5nd(int, BG_GetNumWeapons, ());
+t5nd(void, Cmd_TokenizeString, (const char* text));
+t5nd(void, Cmd_TokenizeStringWithLimit, (const char* text, int maxTokens));
+t5nd(void, Cmd_EndTokenizedString, ());
+t5nd(void*, Sys_GetValue, (int index));
+t5nd(long, game_strtol, (const char* s, char** end, int base));
 
 t5nhd(int, CL_CGameNeedsServerCommand, (int localClientNum, int serverCommandNumber));
 t5nhd(void*, AddBaseDrawTextCmd,

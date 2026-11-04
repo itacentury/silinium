@@ -197,51 +197,52 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
     return buffer;
 }
 
-// The tokenizer splits on every byte <= ' '. The signed compare also counts 0x80..0xFF,
-// in case the game compares a signed char.
-static bool af_is_separator(char c) { return c && (signed char)c <= ' '; }
-
-// strtol(argv1) like the game reads it: the token after the command, quotes removed by
-// the tokenizer, then whitespace skipped by strtol. Looser than the game where unsure, a
-// mismatch reads a number the game doesn't and drops a malformed command, never the
-// reverse. Saturates instead of overflowing. Not strtol itself: it sets errno, a TLS
-// variable, which a PRX can't use.
-static long long af_first_arg_number(const char* cmd) {
-    while (*cmd && !af_is_separator(*cmd)) cmd++;
-    while (af_is_separator(*cmd)) cmd++;
-    if (*cmd == '"') cmd++;
-    while (af_is_separator(*cmd)) cmd++;
-
-    bool negative = *cmd == '-';
-    if (*cmd == '-' || *cmd == '+') cmd++;
-
-    long long value = 0;
-    for (; *cmd >= '0' && *cmd <= '9'; cmd++)
-        if (value < 0x7FFFFFFF) value = value * 10 + (*cmd - '0');
-    return negative ? -value : value;
+// Cmd_Argv of the command the game tokenized last, "" past argc like the game.
+static const char* af_cmd_argv(int arg) {
+    int args = (int)Sys_GetValue(T5_CmdArgsSlot);
+    int nesting = *(int*)args;
+    if (arg >= *(int*)(args + T5_SvCmdArgsArgcOffset + nesting * 4)) return "";
+    return (*(const char***)(args + T5_CmdArgsArgvOffset + nesting * 4))[arg];
 }
 
-static bool af_server_command_ok(const char* cmd) {
-    // CG_ServerCommand and CL_CGameNeedsServerCommand switch on the first character only.
-    if (cmd[0] == 'C') {
-        // 0 is skipped by the game itself.
-        long long weapon = af_first_arg_number(cmd);
-        if (weapon != 0 && (weapon < 0 || weapon >= BG_GetNumWeapons())) {
-            af_report("a server command with an invalid weapon");
-            return false;
-        }
-    } else if (cmd[0] == 'd') {
-        long long index = af_first_arg_number(cmd);
-        if (index < 0 || index >= T5_MaxConfigstrings) {
-            af_report("a server command with an invalid configstring");
-            return false;
-        }
+// strtol(argv) the way the game reads numbers, truncated to the int the game keeps.
+static int af_cmd_arg_number(int arg) {
+    return (int)game_strtol(af_cmd_argv(arg), NULL, 10);
+}
+
+// "d <index> <value>" is run inside CL_CGameNeedsServerCommand, before it returns. The
+// game's own tokenizer calls, in the same order as the game, so argv is what it sees.
+static bool af_configstring_ok(const char* cmd) {
+    bool ok = true;
+    Cmd_TokenizeString(cmd);
+    if (af_cmd_argv(0)[0] == 'd') {
+        Cmd_EndTokenizedString();
+        Cmd_TokenizeStringWithLimit(cmd, 3);
+        // Compared unsigned by the game, a negative index is too big as well.
+        ok = (uint32_t)af_cmd_arg_number(1) < T5_MaxConfigstrings;
     }
-    return true;
+    Cmd_EndTokenizedString();
+
+    if (!ok) af_report("a server command with an invalid configstring");
+    return ok;
+}
+
+// "C <weapon>" is run by CG_ServerCommand after CL_CGameNeedsServerCommand returned, with
+// the arguments it left tokenized.
+static bool af_weapon_ok() {
+    if (af_cmd_argv(0)[0] != 'C') return true;
+
+    // 0 is skipped by the game itself, BG_GetWeaponDef takes the index unsigned.
+    int weapon = af_cmd_arg_number(1);
+    if (weapon == 0 || (uint32_t)weapon < (uint32_t)BG_GetNumWeapons()) return true;
+
+    af_report("a server command with an invalid weapon");
+    return false;
 }
 
 int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber) {
     int clc = *(int*)T5_ClientConnection;
+    bool checked = false;
     if (clc) {
         clc += localClientNum * T5_ClientConnectionSize;
         int sequence = *(int*)(clc + T5_ServerCommandSequenceOffset);
@@ -257,15 +258,23 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
             // rest of the command still runs, e.g. a configstring with a player name.
             if (af_strip_icons(cmd)) af_report("a text icon in a server command");
 
-            // 0 makes CG_ExecuteNewServerCommands go on with the next command. Nothing is
-            // tokenized yet.
-            if (!af_server_command_ok(cmd)) {
+            // 0 makes CG_ExecuteNewServerCommands go on with the next command.
+            if (!af_configstring_ok(cmd)) {
                 *(int*)(clc + T5_LastExecutedServerCommandOffset) = serverCommandNumber;
                 return 0;
             }
+            checked = true;
         }
     }
-    return CL_CGameNeedsServerCommand_Trampoline(localClientNum, serverCommandNumber);
+
+    int res = CL_CGameNeedsServerCommand_Trampoline(localClientNum, serverCommandNumber);
+    // On 1 the command is still tokenized for CG_ServerCommand. Returning 0 instead, the
+    // caller doesn't end it, so end it here. The game already set the last executed one.
+    if (checked && res && !af_weapon_ok()) {
+        Cmd_EndTokenizedString();
+        return 0;
+    }
+    return res;
 }
 
 void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float x,
@@ -324,6 +333,11 @@ void SV_GetUserinfo_Hook(int index, char* buffer, int bufferSize) {
 
 int anti_freeze_init() {
     t5nmi(BG_GetNumWeapons);
+    t5nmi(Cmd_TokenizeString);
+    t5nmi(Cmd_TokenizeStringWithLimit);
+    t5nmi(Cmd_EndTokenizedString);
+    t5nmi(Sys_GetValue);
+    t5nmi(game_strtol);
     t5nmi(Material_RegisterHandle);
     t5nmi(SV_Cmd_ArgvBuffer);
     t5nmhi(CL_CGameNeedsServerCommand);

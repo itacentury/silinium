@@ -200,6 +200,17 @@
 #define T5_ServerCommandSize 0x400
 #define T5_MaxConfigstrings 0xAC2 // "d <index> <value>": CL_CGameNeedsServerCommand calls Com_Error above 0xAC1
 #define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
+// The client side tokenizer. CL_CGameNeedsServerCommand tokenizes with Cmd_TokenizeString, "d" ends it and tokenizes
+// again with Cmd_TokenizeStringWithLimit(text, 3). CG_ExecuteNewServerCommands ends it only when 1 was returned.
+#define T5_Cmd_TokenizeString 0x39B538
+#define T5_Cmd_TokenizeStringWithLimit 0x39B828
+#define T5_Cmd_EndTokenizedString 0x39A150
+// (index), thread local values. T5_CmdArgsSlot is the tokenized command, same layout as T5_SvCmdArgs, argv[nesting] at
+// T5_CmdArgsArgvOffset.
+#define T5_Sys_GetValue 0x3D2C40
+#define T5_CmdArgsSlot 4
+#define T5_CmdArgsArgvOffset 0xA4
+#define T5_game_strtol 0x44824 // the game's strtol, CG_ServerCommand and "d" read argv1 with (argv1, NULL, 10)
 // Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
 #define T5_AddBaseDrawTextCmd 0x7538E8
 // sv_cmd_args, read by SV_Cmd_ArgvBuffer: +0x00 nesting, argc[nesting] at +0x84, argv[nesting] at +0xA4. SV_Cmd_Argc is
