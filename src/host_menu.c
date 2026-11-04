@@ -47,17 +47,29 @@ static int party_used_count(int party) {
 // list feeder for each), so take the active one with more members: a public lobby also
 // holds the members of the private party taken into it. In matchmaking we can host the
 // private party while being a client of the lobby, so the host flag can't pick it. On a
-// tie take the one we don't host, so a tie never hands out host rights.
+// tie take the one we don't host, so a tie never hands out host rights. Only called with
+// both parties active.
+static int larger_party() {
+    int lobbyCount = party_used_count(T5_LobbyParty);
+    int gameCount = party_used_count(T5_GameParty);
+    if (lobbyCount != gameCount)
+        return gameCount > lobbyCount ? T5_GameParty : T5_LobbyParty;
+    return party_is_local_host(T5_LobbyParty) ? T5_GameParty : T5_LobbyParty;
+}
+
+bool host_menu_lobby_parties_both_active() {
+    return party_is_active(T5_LobbyParty) && party_is_active(T5_GameParty);
+}
+
+// With both parties active the larger one is shown unless the player switched to the
+// other one with Triangle.
 int host_menu_lobby_view_party() {
     bool lobby = party_is_active(T5_LobbyParty);
     bool game = party_is_active(T5_GameParty);
     if (lobby && game) {
-        int lobbyCount = party_used_count(T5_LobbyParty);
-        int gameCount = party_used_count(T5_GameParty);
-        if (lobbyCount != gameCount) {
-            return gameCount > lobbyCount ? T5_GameParty : T5_LobbyParty;
-        }
-        return party_is_local_host(T5_LobbyParty) ? T5_GameParty : T5_LobbyParty;
+        int party = larger_party();
+        if (!hostMenu.lobbyPartyOther) return party;
+        return party == T5_LobbyParty ? T5_GameParty : T5_LobbyParty;
     }
     if (lobby) {
         return T5_LobbyParty;
@@ -75,11 +87,12 @@ int host_menu_lobby_party() {
 
 // Server commands don't reach the pregame lobby, so the member is removed through the
 // party code. The party and name were taken when the kick was chosen; if either changed
-// since, the slot holds someone else. A ban adds the name to the list party joins are
-// checked against, the same one banClient fills in game. queue_kick only asks for one in
-// LobbyParty, the only party whose joins are checked against it.
+// since, the slot holds someone else. The party only has to still be hosted by us, not
+// shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
+// list party joins are checked against, the same one banClient fills in game. queue_kick
+// only asks for one in LobbyParty, the only party whose joins are checked against it.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
-    if (party != host_menu_lobby_party() ||
+    if (!party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
         !PARTY_MEMBER_USED(party, member)) {
         return;
@@ -450,6 +463,8 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.selectGametypePending = false;
             hostMenu.changeNamePending = false;
             hostMenu.lobbyKickMember = -1;
+            // Each lobby starts on the larger list.
+            hostMenu.lobbyPartyOther = false;
         }
 
         // The game resets the party dvars in the pregame lobby, keep them applied.

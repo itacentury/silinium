@@ -586,6 +586,15 @@ void host_menu_ui_init() {
 // Input (runs in the menu thread)
 // ---------------------------------------------------------------------------
 
+// The player list's box width, set by the draw code and reset when the list changes.
+static int playerListWidth;
+
+// Triangle switches between the lobby's two parties, only in the list itself (the modal
+// acts on a member of the shown one).
+static bool can_switch_lists(int m, bool inGame) {
+    return m == HOST_MENU_KICK && !inGame && host_menu_lobby_parties_both_active();
+}
+
 void host_menu_ui_handle_input() {
     uint16_t digital1 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL1];
     uint16_t digital2 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL2];
@@ -632,6 +641,12 @@ void host_menu_ui_handle_input() {
             hostMenu.current = hostMenu.parent[m];
             sys_timer_usleep(150000);
         }
+    } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
+        if (can_switch_lists(m, inGame)) {
+            hostMenu.lobbyPartyOther ^= 1;
+            playerListWidth = 0;  // fit the box to the new list
+        }
+        sys_timer_usleep(200000);
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
         if (option->type == HOST_MENU_TYPE_INT) {
             signed char* value = (signed char*)option->value;
@@ -683,8 +698,8 @@ static float playerRankColumn;
 static int playerIconRanks[HOST_MENU_MAX_CLIENTS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                      -1, -1, -1, -1, -1, -1, -1, -1, -1};
 static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
-// The player list box's widest width this visit to the list, 0 outside it.
-static int playerListWidth;
+// playerListWidth (declared with the input code) is the list box's widest width this
+// visit to the list, 0 outside it.
 
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
@@ -970,22 +985,28 @@ void host_menu_ui_draw() {
 
     draw_text("Silinium", get_aligned_x(650, 0.6f, "Silinium", ALIGN_CENTER), 220, 0.6f,
               white);
-    draw_text(hostMenu.title[boxMenu],
-              get_aligned_x(650, 0.45f, hostMenu.title[boxMenu], ALIGN_CENTER), 238,
-              0.45f, accent);
+    // With both parties active the title names the list shown.
+    bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
+    const char* title = hostMenu.title[boxMenu];
+    if (bothLists)
+        title = hostMenu.lobbyPartyOther ? "Players (Party)" : "Players (Lobby)";
+    draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), 238, 0.45f, accent);
     if (players) {
-        if (notHost) {
-            draw_text_box("\x02 - Back", 10, 20, 0.5f);
-        } else if (viewOnly) {
-            draw_text_box("\x14\x15 - Scroll | \x02 - Back", 10, 20, 0.5f);
-        } else if (m == HOST_MENU_PLAYER) {
-            draw_text_box(
-                "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back", 10, 20,
-                0.5f);
-        } else {
-            draw_text_box("\x14\x15 - Scroll | \x01 - Select | \x02 - Back", 10, 20,
-                          0.5f);
-        }
+        const char* switchHint =
+            can_switch_lists(m, inGame) ? " | \x04 - Switch List" : "";
+        char controls[96];
+        if (notHost)
+            snprintf(controls, sizeof(controls), "\x02 - Back");
+        else if (viewOnly)
+            snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s | \x02 - Back",
+                     switchHint);
+        else if (m == HOST_MENU_PLAYER)
+            snprintf(controls, sizeof(controls),
+                     "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back");
+        else
+            snprintf(controls, sizeof(controls),
+                     "\x14\x15 - Scroll | \x01 - Select%s | \x02 - Back", switchHint);
+        draw_text_box(controls, 10, 20, 0.5f);
         draw_session_info(inGame);
         if (notHost) {
             draw_text("Not in a lobby", 510, 258, 0.5f, white);
