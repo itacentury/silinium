@@ -678,7 +678,8 @@ static const char* player_name(int party, bool inGame, int i) {
 }
 
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
-// feature of the party member), in game without any color, color codes are dropped.
+// feature of the party member), in game without any color like on the scoreboard, so the
+// player's own color codes are dropped too.
 static void player_clan_tag(int party, bool inGame, int i, char* out) {
     out[0] = 0;
     if (inGame) {
