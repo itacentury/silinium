@@ -32,7 +32,7 @@
 #define AF_REPORTED_CACHE 16
 
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
-// most checks are a cache hit.
+// most checks are a cache hit. Both caches are cleared when zones load or unload.
 static uint32_t knownMaterials[AF_MATERIAL_CACHE];
 static int knownMaterialsNext = 0;
 
@@ -101,6 +101,20 @@ static bool af_material_ok(uint32_t material) {
     knownMaterials[knownMaterialsNext] = material;
     knownMaterialsNext = (knownMaterialsNext + 1) % AF_MATERIAL_CACHE;
     return true;
+}
+
+// Material pointers are only valid while their zone is loaded: after an unload the memory
+// is reused, and a pointer rejected before a zone loaded can be a real material after.
+static void af_clear_materials() {
+    memset(knownMaterials, 0, sizeof(knownMaterials));
+    memset(badMaterials, 0, sizeof(badMaterials));
+}
+
+void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
+    af_clear_materials();
+    DB_LoadXAssets_Trampoline(zoneInfo, zoneCount, sync);
+    // Text drawn while it ran (loading screen) may have cached the old pointers again.
+    af_clear_materials();
 }
 
 // FNV-1a
@@ -345,6 +359,7 @@ int anti_freeze_init() {
     t5nmhi(AddBaseDrawTextCmd);
     t5nmhi(SV_UserinfoChanged);
     t5nmhi(SV_GetUserinfo);
+    t5nmhi(DB_LoadXAssets);
 
     int res;
     if ((res = cs_hook_install(CL_CGameNeedsServerCommand, CS_HOOK_TYPE_CTR)) < 0)
@@ -352,6 +367,7 @@ int anti_freeze_init() {
     if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_GetUserinfo, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(DB_LoadXAssets, CS_HOOK_TYPE_CTR)) < 0) return res;
     // The chat filter runs from the ClientCommand hook.
     if ((res = client_command_init()) < 0) return res;
 

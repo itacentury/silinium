@@ -26,6 +26,7 @@ t5nhd(void*, AddBaseDrawTextCmd,
        int cursorPos, char cursor));
 t5nhd(void, SV_UserinfoChanged, (void* cl));
 t5nhd(void, SV_GetUserinfo, (int index, char* buffer, int bufferSize));
+t5nhd(void, DB_LoadXAssets, (void* zoneInfo, int zoneCount, int sync));
 
 int anti_freeze_init();
 // Host side: false if the client command being run (say, say_team) carries a text icon,
