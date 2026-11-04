@@ -51,6 +51,7 @@ typedef struct HostMenu {
     bool changeNamePending;
     bool selectMapPending;
     bool selectGametypePending;
+    bool endGamePending;
     bool scorelimitPending;
     bool maxPlayersSet;  // Max Players was applied with the menu, the TDM scorelimit
                          // follows it

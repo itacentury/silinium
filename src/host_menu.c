@@ -279,6 +279,14 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             host_menu_ui_open_name_keyboard();
         }
     } else {
+        // The same command as End Game in the pause menu. -1 is the menu index the game
+        // sends for a menu that isn't a script menu.
+        if (hostMenu.endGamePending) {
+            hostMenu.endGamePending = false;
+            char buffer[64];
+            sprintf(buffer, "cmd mr %i -1 endround\n", *(int*)T5_ClServerId);
+            Cbuf_AddText(0, buffer);
+        }
         show_game_message();
         open_requested_keyboard();
     }
@@ -371,6 +379,7 @@ static void host_menu_thread(uint64_t arg) {
         if (!inGame) {
             hostMenu.kickClient = -1;
             hostMenu.scorelimitPending = false;
+            hostMenu.endGamePending = false;
             keyboardState = KEYBOARD_IDLE;
             gameMessagePending = false;
         }

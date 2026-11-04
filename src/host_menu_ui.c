@@ -294,6 +294,14 @@ static void select_gametype() {
     hostMenu.selectGametypePending = true;
 }
 
+static void end_game() {
+    sys_timer_usleep(200000);  // let X go before the game sees buttons again
+    hostMenu.open = false;
+    hostMenu.endGamePending = true;
+}
+
+static bool in_game_only(bool inGame) { return inGame; }
+
 static const char* dlcDvars[] = {"ui_showDLCMaps", "dlc2", "dlc3", "dlc4", "dlc5"};
 #define DLC_DVAR_COUNT (sizeof(dlcDvars) / sizeof(*dlcDvars))
 static bool dlcOriginal[DLC_DVAR_COUNT];
@@ -509,6 +517,8 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, change_name)
         ->lobbyOnly = true;
     add_option(HOST_MENU_MAIN, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, reset_name);
+    add_option(HOST_MENU_MAIN, "End Game", HOST_MENU_TYPE_ACTION, 0, 0, 0, end_game)
+        ->visible = in_game_only;
     add_option(HOST_MENU_MAIN, "Player Menu", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
                open_player_menu);
 

@@ -59,6 +59,7 @@
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
+#define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData
 #define T5_VM_Notify 0x5CD370
