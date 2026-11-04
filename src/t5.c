@@ -151,7 +151,9 @@ int init_game() {
     if (isMultiplayer) {
         init_mp_offsets();
         if ((err = anti_freeze_init()) < 0) {
-            printf(T5ERROR "Anti-Freeze init failed (0x%08X).", err);
+            printf(T5ERROR
+                   "Anti-Freeze init failed (0x%08X), it may be partially active.",
+                   err);
         } else {
             printf(T5INFO "Anti-Freeze ready.");
         }

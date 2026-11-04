@@ -441,13 +441,14 @@ int anti_freeze_init() {
     t5nmhi(DB_LoadXAssets);
 
     int res;
+    // Before the text filter, so its caches are always cleared once it runs.
+    if ((res = cs_hook_install(DB_LoadXAssets, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(CL_CGameNeedsServerCommand, CS_HOOK_TYPE_CTR)) < 0)
         return res;
     if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(SV_GetUserinfo, CS_HOOK_TYPE_CTR)) < 0) return res;
     if ((res = cs_hook_install(Party_WriteMembers, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(DB_LoadXAssets, CS_HOOK_TYPE_CTR)) < 0) return res;
     // The chat filter runs from the ClientCommand hook.
     if ((res = client_command_init()) < 0) return res;
 
