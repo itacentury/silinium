@@ -1,5 +1,6 @@
 #include "anti_freeze.h"
 
+#include <cell/atomic.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,13 +44,14 @@ static int badMaterialsNext = 0;
 static uint32_t reportedTexts[AF_REPORTED_CACHE];
 static int reportedTextsNext = 0;
 
-static int droppedCount = 0;
+static uint32_t droppedCount = 0;
 
 static void af_report(const char* what) {
-    // A tool can send thousands, keep the log readable.
-    droppedCount++;
-    if (droppedCount <= 8 || (droppedCount & 0xFF) == 0)
-        printf(T5WARNING "Anti-Freeze: dropped %s (%i so far).", what, droppedCount);
+    // A tool can send thousands, keep the log readable. Called from the server and the
+    // main thread, the count is taken once so both see their own value.
+    uint32_t count = cellAtomicIncr32(&droppedCount) + 1;  // returns the old value
+    if (count <= 8 || (count & 0xFF) == 0)
+        printf(T5WARNING "Anti-Freeze: dropped %s (%u so far).", what, count);
 }
 
 static bool af_is_icon(const char* p) { return p[0] == '^' && (p[1] == 1 || p[1] == 2); }
