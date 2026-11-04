@@ -204,7 +204,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
 
     uint32_t hash = af_hash(text);
     af_bad_text* entry = af_find_bad_text(text, hash);
-    // Known bad texts replay their verdicts, new ones record them.
+    // Known bad texts skip the icons they found bad, new ones record them.
     bool replay = entry != NULL;
     if (!replay) {
         // Skip valid icons whole, their width, height and pointer bytes can contain
@@ -232,13 +232,9 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             buffer[out++] = *p++;
             continue;
         }
-        bool ok;
-        if (replay) {
-            ok = !(entry->bad[icon / 8] & (1 << (icon % 8)));
-        } else {
-            ok = af_icon_ok(p);
-            if (!ok && entry) entry->bad[icon / 8] |= 1 << (icon % 8);
-        }
+        // Only the bad bits are trusted, a cleared or reused entry reads as all good.
+        bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) && af_icon_ok(p);
+        if (!ok && !replay && entry) entry->bad[icon / 8] |= 1 << (icon % 8);
         icon++;
         if (ok) {
             if (out + AF_ICON_SIZE > size - 1) break;
