@@ -684,15 +684,23 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     if (inGame) {
         // An empty slot may still hold the tag of whoever left.
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return;
+        const char* tag = CG_CLIENT_CLAN(i);
         char clan[16];
         int length = 0;
-        for (const char* c = CG_CLIENT_CLAN(i); *c && length < (int)sizeof(clan) - 1;
+        for (int c = 0; c < (int)sizeof(clan) && tag[c] && length < (int)sizeof(clan) - 1;
              c++) {
-            if (*c == '^' && c[1]) {
+            if (tag[c] == '^' && tag[c + 1] >= '0' && tag[c + 1] <= '9') {
                 c++;
                 continue;
             }
-            clan[length++] = *c;
+            // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
+            // as a whole.
+            if (tag[c] == '^' && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
+                if (c + 4 >= (int)sizeof(clan)) break;
+                c += 4 + (unsigned char)tag[c + 4];
+                continue;
+            }
+            clan[length++] = tag[c];
         }
         clan[length] = 0;
         if (*clan) sprintf(out, "[%s]", clan);
