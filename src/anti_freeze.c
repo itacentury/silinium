@@ -127,8 +127,16 @@ static bool af_icon_ok(const char* p) {
                           (uint32_t)ptr[2] << 8 | ptr[3]);
 }
 
-// Returns text if it has no bad icon, else a copy in buffer without them.
-static const char* af_sanitize_text(const char* text, char* buffer, size_t size) {
+// Moves an offset into the original text back by the bytes removed before it.
+static void af_shift_offset(int* offset, int at, int removed) {
+    if (*offset <= at) return;
+    *offset -= *offset - at < removed ? *offset - at : removed;
+}
+
+// Returns text if it has no bad icon, else a copy in buffer without them. cursorPos and
+// maxChars index into text and are moved to index into the copy.
+static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
+                                    int* cursorPos, int* maxChars) {
     // Skip valid icons whole, their width, height and pointer bytes can contain "^\x01".
     const char* p = text;
     while (*p) {
@@ -158,7 +166,11 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size)
             continue;
         }
         // Skip the whole icon, or what is left of it.
+        int at = (int)(p - text);
         for (int i = 0; i < AF_ICON_SIZE && *p; i++) p++;
+        int removed = (int)(p - text) - at;
+        af_shift_offset(cursorPos, at, removed);
+        af_shift_offset(maxChars, at, removed);
     }
     buffer[out] = 0;
     return buffer;
@@ -237,7 +249,8 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
                               int cursorPos, char cursor) {
     // The game copies the text into the render command, a copy on the stack is enough.
     char buffer[AF_MAX_TEXT];
-    if (text) text = af_sanitize_text(text, buffer, sizeof(buffer));
+    if (text)
+        text = af_sanitize_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars);
     return AddBaseDrawTextCmd_Trampoline(text, maxChars, font, x, y, w, xScale, yScale,
                                          rotation, color, style, cursorPos, cursor);
 }
