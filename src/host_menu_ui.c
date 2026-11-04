@@ -684,6 +684,8 @@ static const char* player_name(int party, bool inGame, int i) {
 // build_player_rows.
 static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
 static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
+// The player list box's widest width this visit to the list, 0 outside it.
+static int playerListWidth;
 
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
@@ -799,7 +801,7 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 // default 300 and at most 600, so a long tag from a modded peer can't push the box off
 // screen (its row overflows instead). The width is an even whole number so the box
 // centered at 650 stays pixel-aligned.
-static float build_player_rows(int party, bool inGame) {
+static int build_player_rows(int party, bool inGame) {
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         char* tag = playerTags[i];
@@ -831,6 +833,7 @@ void host_menu_ui_draw() {
     }
 
     if (!hostMenu.open) {
+        playerListWidth = 0;
         if (hostMenu.showControls) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
         }
@@ -848,8 +851,16 @@ void host_menu_ui_draw() {
 
     float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
     // The player list grows around the center at 650, so titles and the modal stay
-    // centered.
-    float width = players && !notHost ? build_player_rows(party, inGame) : 300;
+    // centered. It keeps its widest width until the list is left, so names don't shift
+    // sideways when a long-named player leaves.
+    float width = 300;
+    if (players && !notHost) {
+        int w = build_player_rows(party, inGame);
+        if (w > playerListWidth) playerListWidth = w;
+        width = playerListWidth;
+    } else {
+        playerListWidth = 0;
+    }
     float left = 650 - width / 2;
     draw_shader(left - 2, 200, 2, height, accent, whiteMaterial);
     draw_shader(left + width - 1, 200, 2, height, accent, whiteMaterial);
