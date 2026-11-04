@@ -233,7 +233,9 @@
 #define T5_SvClients 0x169529C // pointer to the client_t array (svs.clients), stride T5_ClientSize
 #define T5_ClientSize 0x651C8
 // (XZoneInfo* zones, count, sync), XZoneInfo = {name, allocFlags, freeFlags}. Every zone load and unload goes through it:
-// Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}).
+// Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}). The
+// unload is inlined here, its free helpers (0x7384A8, 0x3D4410, 0x3D3FD8, 0x3D6388) have no other caller; quit
+// exits the process.
 #define T5_DB_LoadXAssets 0x2615C0
 
 #define PPC_NOP 0x60000000
