@@ -472,6 +472,7 @@ static void init_host_menu_offsets() {
     t5nmi(Party_RemoveMember);
     t5nmi(Party_BanName);
     t5nmi(ClanTag_Format);
+    t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
     t5nmi(CG_GameMessage);

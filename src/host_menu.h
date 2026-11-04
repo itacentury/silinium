@@ -18,6 +18,10 @@
 #define CG_CLIENTNUM (*(int*)(CG_CLIENTINFO_BASE + T5_CgClientNumOffset))
 #define CG_CLIENT_NAME(i) ((const char*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + 0x5DB04))
 #define CG_CLIENT_CLAN(i) ((const char*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + 0x5DB50))
+#define CG_CLIENT_RANK(i) \
+    (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientRankOffset))
+#define CG_CLIENT_PRESTIGE(i) \
+    (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientPrestigeOffset))
 #define PLAYLIST_ENTRY(i) (T5_PlaylistEntries + (i) * 0x98)
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
@@ -28,6 +32,10 @@
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanOffset))
 #define PARTY_MEMBER_CLAN_FEATURE(party, i) \
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanFeatureOffset))
+#define PARTY_MEMBER_RANK(party, i) \
+    (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberRankOffset))
+#define PARTY_MEMBER_PRESTIGE(party, i) \
+    (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
 
@@ -60,6 +68,7 @@ t5nd(void, Party_RemoveMember,
 t5nd(void, Party_BanName, (const char* name));
 t5nd(void, ClanTag_Format,
      (int feature, const char* clan, const char* name, const char* plain, char* out));
+t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
 t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));

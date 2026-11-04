@@ -684,8 +684,23 @@ static const char* player_name(int party, bool inGame, int i) {
 // build_player_rows.
 static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
 static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
+// Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
+static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
+static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
+// Width of the icon and level column (scaled to 0.5), the same for every occupied row so
+// the tags and names all start at one x.
+static float playerRankColumn;
+// The rank and prestige playerRankIcons[i] was looked up for, -1 before the first lookup,
+// so the rank icon table is only searched when they change.
+static int playerIconRanks[HOST_MENU_MAX_CLIENTS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1,
+                                                     -1, -1, -1, -1, -1, -1, -1, -1, -1};
+static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
 // The player list box's widest width this visit to the list, 0 outside it.
 static int playerListWidth;
+
+// Rank icon size and the gap after the icon and after the level.
+#define RANK_ICON_SIZE 15.0f
+#define RANK_GAP 4.0f
 
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
@@ -733,6 +748,41 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     snprintf(plain, sizeof(plain), "[%s]", cut);
     strcpy(out, plain);
     ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), cut, "", plain, out);
+}
+
+// The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
+// false for an empty slot. Both are clamped, a modded peer can send any value.
+static bool player_rank(int party, bool inGame, int i, int* rank, int* prestige) {
+    if (inGame) {
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return false;
+        *rank = CG_CLIENT_RANK(i);
+        *prestige = CG_CLIENT_PRESTIGE(i);
+    } else {
+        if (!party || !PARTY_MEMBER_USED(party, i)) return false;
+        *rank = PARTY_MEMBER_RANK(party, i);
+        *prestige = PARTY_MEMBER_PRESTIGE(party, i);
+    }
+    if (*rank < 0) *rank = 0;
+    if (*rank > 254) *rank = 254;  // level fits in 3 digits
+    if (*prestige < 0) *prestige = 0;
+    if (*prestige > 255) *prestige = 255;
+    return true;
+}
+
+// Fills row i's rank icon and level text.
+static void build_player_rank(int party, bool inGame, int i) {
+    int rank, prestige;
+    if (!player_rank(party, inGame, i, &rank, &prestige)) {
+        playerLevels[i][0] = 0;
+        return;
+    }
+    if (rank != playerIconRanks[i] || prestige != playerIconPrestiges[i]) {
+        playerRankIcons[i] = 0;
+        RankIcon_Lookup(rank, prestige, &playerRankIcons[i]);
+        playerIconRanks[i] = rank;
+        playerIconPrestiges[i] = prestige;
+    }
+    sprintf(playerLevels[i], "%i", rank + 1);
 }
 
 // The visible options of menu m, rows starting at y, values right aligned at right.
@@ -796,18 +846,30 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     draw_options(HOST_MENU_PLAYER, inGame, 570, 730, y + 38);
 }
 
-// Builds every row's tag and tag width for the draw loop and returns the list box width:
-// wide enough for the longest "[tag]name" row plus 10 padding each side, at least the
-// default 300 and at most 600, so a long tag from a modded peer can't push the box off
-// screen (its row overflows instead). The width is an even whole number so the box
-// centered at 650 stays pixel-aligned.
+// Builds every row's rank, tag and their widths for the draw loop and returns the list
+// box width: wide enough for the longest "icon level [tag]name" row plus 10 padding each
+// side, at least the default 300 and at most 600, so a long tag from a modded peer can't
+// push the box off screen (its row overflows instead). The width is an even whole number
+// so the box centered at 650 stays pixel-aligned.
 static int build_player_rows(int party, bool inGame) {
-    float widest = 0;
+    // The level column fits at least "50" (the highest level), so it doesn't shrink when
+    // the last player with a two digit level leaves.
+    float levelWidth = R_TextWidth("50", 0x7FFFFFFF, font) * 0.5f;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         char* tag = playerTags[i];
         player_clan_tag(party, inGame, i, tag);
         playerTagWidths[i] = *tag ? R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f : 0;
-        float w = playerTagWidths[i] +
+        build_player_rank(party, inGame, i);
+        if (*playerLevels[i]) {
+            float w = R_TextWidth(playerLevels[i], 0x7FFFFFFF, font) * 0.5f;
+            if (w > levelWidth) levelWidth = w;
+        }
+    }
+    playerRankColumn = RANK_ICON_SIZE + RANK_GAP + levelWidth + RANK_GAP;
+
+    float widest = 0;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        float w = (*playerLevels[i] ? playerRankColumn : 0) + playerTagWidths[i] +
                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
         if (w > widest) widest = w;
     }
@@ -893,6 +955,14 @@ void host_menu_ui_draw() {
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
             float y = i * 16.5f + 258;
             float x = left + 10;
+            // Icon, level and tag/name each start at a fixed x, also without an icon.
+            if (*playerLevels[i]) {
+                if (playerRankIcons[i])
+                    draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,
+                                white, playerRankIcons[i]);
+                draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, 0.5f, color);
+                x += playerRankColumn;
+            }
             if (*playerTags[i]) {
                 draw_text(playerTags[i], x, y, 0.5f, color);
                 x += playerTagWidths[i];
