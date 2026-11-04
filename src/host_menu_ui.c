@@ -140,32 +140,6 @@ static const char* lookup_name(const DisplayName* names, int count,
     return internal;
 }
 
-// Host, map and gametype, one box each below the controls box.
-static void draw_session_info(bool inGame) {
-    const char* map = inGame ? "" : dvar_string("ui_mapname");
-    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
-    if (!*map) {
-        map = dvar_string("mapname");
-    }
-    if (!*gametype) {
-        gametype = dvar_string("g_gametype");
-    }
-
-    const char* host = dvar_string("party_hostname");
-    char lines[3][64];
-    snprintf(lines[0], sizeof(lines[0]), "Host: %s", *host ? host : "-");
-    snprintf(lines[1], sizeof(lines[1]), "Map: %s",
-             lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
-    snprintf(lines[2], sizeof(lines[2]), "Gametype: %s",
-             lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
-                         gametype));
-
-    float step = R_TextHeight(font) * 0.5f + 10;
-    for (int i = 0; i < 3; i++) {
-        draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Option callbacks
 // ---------------------------------------------------------------------------
@@ -748,6 +722,57 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     snprintf(plain, sizeof(plain), "[%s]", cut);
     strcpy(out, plain);
     ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), cut, "", plain, out);
+}
+
+// The host's tag like player_clan_tag builds it, "" if the host isn't found. The host is
+// found by name, the party host index is unverified. In the lobby both parties are
+// searched, also when the local player isn't the host. out must hold CLAN_TAG_MAX bytes.
+static void host_clan_tag(bool inGame, const char* host, char* out) {
+    out[0] = 0;
+    if (inGame) {
+        if (!CG_CLIENTINFO_BASE) return;
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+            if (!strcmp(CG_CLIENT_NAME(i), host)) {
+                player_clan_tag(0, true, i, out);
+                return;
+            }
+        return;
+    }
+    static const int parties[] = {T5_LobbyParty, T5_GameParty};
+    for (int p = 0; p < 2; p++) {
+        int party = parties[p];
+        if (!*(int*)(party + T5_PartyActiveOffset)) continue;
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+            if (PARTY_MEMBER_USED(party, i) &&
+                !strcmp(PARTY_MEMBER_NAME(party, i), host)) {
+                player_clan_tag(party, false, i, out);
+                return;
+            }
+    }
+}
+
+// Host, map and gametype, one box each below the controls box.
+static void draw_session_info(bool inGame) {
+    const char* map = inGame ? "" : dvar_string("ui_mapname");
+    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
+    if (!*map) map = dvar_string("mapname");
+    if (!*gametype) gametype = dvar_string("g_gametype");
+
+    const char* host = dvar_string("party_hostname");
+    char tag[CLAN_TAG_MAX] = "";
+    if (*host) host_clan_tag(inGame, host, tag);
+    char hostLine[CLAN_TAG_MAX + 64];
+    snprintf(hostLine, sizeof(hostLine), "Host: %s%s", tag, *host ? host : "-");
+    char lines[2][64];
+    snprintf(lines[0], sizeof(lines[0]), "Map: %s",
+             lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
+    snprintf(lines[1], sizeof(lines[1]), "Gametype: %s",
+             lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
+                         gametype));
+
+    float step = R_TextHeight(font) * 0.5f + 10;
+    draw_text_box(hostLine, 10, 20 + step, 0.5f);
+    for (int i = 0; i < 2; i++) draw_text_box(lines[i], 10, 20 + (i + 2) * step, 0.5f);
 }
 
 // The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
