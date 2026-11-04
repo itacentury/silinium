@@ -166,18 +166,24 @@ static bool af_icon_ok(const char* p) {
                           (uint32_t)ptr[2] << 8 | ptr[3]);
 }
 
-// Removes every icon in place, valid or not: no string from the network needs one.
-// Returns true if anything was removed.
+// Removes every icon in place, valid or not: no string from the network needs one. Only
+// the icon bytes up to a '\' or '"' go, in userinfo and server commands those are the
+// separators and closing quotes after the name. Returns true if anything was removed.
 static bool af_strip_icons(char* s) {
     char* out = s;
     const char* p = s;
     while (*p) {
+        // A removed icon between a '^' and a 0x01 or 0x02 would join them to a new one.
+        if ((*p == 1 || *p == 2) && out > s && out[-1] == '^') {
+            p++;
+            continue;
+        }
         if (!af_is_icon(p)) {
             *out++ = *p++;
             continue;
         }
-        // The whole icon, or what is left of it.
-        for (int i = 0; i < AF_ICON_SIZE && *p; i++) p++;
+        p += 2;  // '^' and type, af_is_icon checked both
+        for (int i = 2; i < AF_ICON_SIZE && *p && *p != '\\' && *p != '"'; i++) p++;
     }
     *out = 0;
     return out != p;
