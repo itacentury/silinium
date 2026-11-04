@@ -88,6 +88,8 @@ t5nhd(void, ClanName_Sanitize, ());
 int host_menu_init();
 // The host menu hooks are installed.
 bool host_menu_ready();
+// The party struct is active.
+bool host_menu_party_active(int party);
 // Both party structs are active, so the player list can switch between them.
 bool host_menu_lobby_parties_both_active();
 // The party of the pregame lobby the player list shows, 0 outside a lobby.

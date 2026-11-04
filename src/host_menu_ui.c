@@ -772,7 +772,7 @@ static void host_clan_tag(bool inGame, const char* host, char* out) {
     static const int parties[] = {T5_LobbyParty, T5_GameParty};
     for (int p = 0; p < 2; p++) {
         int party = parties[p];
-        if (!*(int*)(party + T5_PartyActiveOffset)) continue;
+        if (!host_menu_party_active(party)) continue;
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
             if (PARTY_MEMBER_USED(party, i) &&
                 !strcmp(PARTY_MEMBER_NAME(party, i), host)) {

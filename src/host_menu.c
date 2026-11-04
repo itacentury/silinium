@@ -13,10 +13,10 @@
 #include "t5.h"
 #include "utils.h"
 
-static bool party_is_active(int party) { return *(int*)(party + T5_PartyActiveOffset); }
+bool host_menu_party_active(int party) { return *(int*)(party + T5_PartyActiveOffset); }
 
 static bool party_is_host(int party, int clientNum) {
-    return party_is_active(party) &&
+    return host_menu_party_active(party) &&
            *(int*)(party + T5_PartyHostIndexOffset) == clientNum;
 }
 
@@ -30,7 +30,7 @@ static bool is_host(int clientNum) {
 }
 
 static bool party_is_local_host(int party) {
-    return party_is_active(party) && *(int*)(party + T5_PartyIsHostOffset);
+    return host_menu_party_active(party) && *(int*)(party + T5_PartyIsHostOffset);
 }
 
 static int party_used_count(int party) {
@@ -58,14 +58,14 @@ static int larger_party() {
 }
 
 bool host_menu_lobby_parties_both_active() {
-    return party_is_active(T5_LobbyParty) && party_is_active(T5_GameParty);
+    return host_menu_party_active(T5_LobbyParty) && host_menu_party_active(T5_GameParty);
 }
 
 // With both parties active the larger one is shown unless the player switched to the
 // other one with Triangle.
 int host_menu_lobby_view_party() {
-    bool lobby = party_is_active(T5_LobbyParty);
-    bool game = party_is_active(T5_GameParty);
+    bool lobby = host_menu_party_active(T5_LobbyParty);
+    bool game = host_menu_party_active(T5_GameParty);
     if (lobby && game) {
         int party = larger_party();
         if (!hostMenu.lobbyPartyOther) return party;
