@@ -694,9 +694,15 @@ static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
 // slots too, so the tags and names all start at one x.
 static float playerRankColumn;
 // The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
-// first lookup, so the rank icon table is only searched when they change.
+// first lookup, so the rank icon table is only searched when they change. Reset to 0 by
+// build_player_rows when cl_ingame or mapname changes.
 static int playerIconRanks[HOST_MENU_MAX_CLIENTS];
 static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
+// cl_ingame and mapname the cached icons were looked up under. The lobby and the match
+// may load the icons from different zones and the UI zone can be unloaded on map load,
+// so the cache is dropped when either changes.
+static bool playerIconsInGame;
+static char playerIconsMap[64];
 // playerListWidth (declared with the input code) is the list box's widest width this
 // visit to the list, 0 outside it.
 
@@ -912,6 +918,14 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 // push the box off screen (its row overflows instead). The width is an even whole number
 // so the box centered at 650 stays pixel-aligned.
 static int build_player_rows(int party, bool inGame) {
+    // Compared with the last build, so a switch while the menu was closed is caught too.
+    char map[sizeof(playerIconsMap)];
+    snprintf(map, sizeof(map), "%s", dvar_string("mapname"));
+    if (inGame != playerIconsInGame || strcmp(map, playerIconsMap)) {
+        memset(playerIconRanks, 0, sizeof(playerIconRanks));
+        playerIconsInGame = inGame;
+        strcpy(playerIconsMap, map);
+    }
     // The level column fits at least "50" (the highest level), so it doesn't shrink when
     // the last player with a two digit level leaves.
     float levelWidth = R_TextWidth("50", 0x7FFFFFFF, font) * 0.5f;
