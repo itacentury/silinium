@@ -796,7 +796,8 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 
 // Builds every row's tag and tag width for the draw loop and returns the list box width:
 // wide enough for the longest "[tag]name" row plus 10 padding each side, at least the
-// default 300.
+// default 300 and at most 600, so a long tag from a modded peer can't push the box off
+// screen (its row overflows instead).
 static float build_player_rows(int party, bool inGame) {
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
@@ -807,7 +808,10 @@ static float build_player_rows(int party, bool inGame) {
                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
         if (w > widest) widest = w;
     }
-    return widest + 20 > 300 ? widest + 20 : 300;
+    float width = widest + 20;
+    if (width < 300) width = 300;
+    if (width > 600) width = 600;
+    return width;
 }
 
 void host_menu_ui_draw() {
