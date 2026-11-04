@@ -73,6 +73,17 @@ The loader always lifts the restrictions on class names and the clan tag: their 
 
 Quick Recovery and Prestige write to your online stats, only in the lobby. Quick Recovery also sets the `rank` stat, which the menus show the level from.
 
+## Anti-Freeze
+In multiplayer the loader blocks what the "Freeze PS3" options of RTM tools send to other consoles ([src/anti_freeze.c](src/anti_freeze.c)). It is always on and not available in zombies.
+
+| Attack | Protection |
+|---|---|
+| A host sends `C <n>` with an invalid weapon (e.g. `C 2026`, `C 44444444444`). The game looks the weapon up without a bounds check. | Server commands with a weapon outside the weapon table are dropped. |
+| A host sends `d <index> …` with a configstring index outside the 2754 configstrings. | Dropped. |
+| Chat or a player name with a text icon (`^` followed by the byte 1 or 2). The game reads the next bytes as a pointer to the icon's material, so text from another console points to garbage and every console that draws it freezes. | Text icons with a pointer that isn't a loaded material are removed before the text is drawn (chat, names, lobby list, scoreboard…). Server commands with a text icon are dropped. As host, chat with a text icon isn't sent on to the other players, so it also protects players without the loader. |
+
+Each block is logged as `Anti-Freeze: dropped …` in the console output.
+
 ## Development
 VS Code is used for this project, you can also use Visual Studio if you prefer but you'll need to created a new solution using the VSIX from the SDK and make sure to don't forget to include the required libraries `libc.a libfs_stub.a liblv2_stub.a`.
 

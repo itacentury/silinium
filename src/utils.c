@@ -13,6 +13,11 @@ int sys_dbg_process_write(uint64_t address, const void* data, size_t size) {
     return_to_user_prog(int);
 }
 
+int sys_dbg_process_read(uint64_t address, void* data, size_t size) {
+    system_call_4(904, sys_process_getpid(), address, size, (uintptr_t)data);
+    return_to_user_prog(int);
+}
+
 int apply_instruction_patch(const InstructionPatch* patch, bool apply) {
     int from = apply ? patch->original : patch->patched;
     int to = apply ? patch->patched : patch->original;

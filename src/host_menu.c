@@ -8,6 +8,7 @@
 #include <sys/sys_time.h>
 #include <sys/timer.h>
 
+#include "anti_freeze.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
 #include "t5.h"
@@ -539,10 +540,10 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
 #define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
 static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
 
-// Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
-// matched with the game's I_stricmp like ClientCommand does, so "MR" can't slip past. The
-// response is compared case-sensitively by the script, so other casings of "endround" are
-// harmless.
+// Blocks "mr <n> <menu> endround" from everyone except the host, and chat that would
+// freeze the clients. The command name is matched with the game's I_stricmp like
+// ClientCommand does, so "MR" can't slip past. The response is compared case-sensitively
+// by the script, so other casings of "endround" are harmless.
 void ClientCommand_Hook(int clientNum) {
     char cmd[37] = {0};
     char arg3[37] = {0};
@@ -562,6 +563,7 @@ void ClientCommand_Hook(int clientNum) {
         }
         return;
     }
+    if (!anti_freeze_client_command_ok(clientNum, cmd)) return;
 
     ClientCommand_Trampoline(clientNum);
 }

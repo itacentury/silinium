@@ -187,6 +187,22 @@
 // menu script runs "statWriteDDL ... 0" for prestige camos and the clan tag color when joining a lobby.
 #define T5_DDL_SetFromString 0x5E74E8
 
+// Anti-Freeze (MP only)
+// (localClientNum, serverCommandNumber), tokenizes the reliable server command and returns 0 if CG_ServerCommand
+// (0x164BB8) shouldn't run it. Called by CG_ExecuteNewServerCommands (0x166DF0) for each new command.
+#define T5_CL_CGameNeedsServerCommand 0x1A6F00
+#define T5_ClientConnection 0xD223C8 // pointer, + localClientNum * T5_ClientConnectionSize
+#define T5_ClientConnectionSize 0x35890
+#define T5_ServerCommandSequenceOffset 0x4348 // int, last received reliable command
+#define T5_LastExecutedServerCommandOffset 0x434C // int, set by CL_CGameNeedsServerCommand
+#define T5_ServerCommandsOffset 0x4350 // T5_MaxReliableCommands commands of T5_ServerCommandSize chars
+#define T5_MaxReliableCommands 128
+#define T5_ServerCommandSize 0x400
+#define T5_MaxConfigstrings 0xAC2 // "d <index> <value>": CL_CGameNeedsServerCommand calls Com_Error above 0xAC1
+#define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
+// Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
+#define T5_AddBaseDrawTextCmd 0x7538E8
+
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020
 #define PPC_B(from, to) (0x48000000 | (((to) - (from)) & 0x03FFFFFC)) // b to (relative, no link)

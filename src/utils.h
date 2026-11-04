@@ -13,6 +13,8 @@
 #endif
 
 int sys_dbg_process_write(uint64_t address, const void* data, size_t size);
+// Returns an error code instead of crashing on unmapped memory.
+int sys_dbg_process_read(uint64_t address, void* data, size_t size);
 
 typedef struct InstructionPatch {
     int address;

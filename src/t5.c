@@ -5,6 +5,7 @@
 #include <sys/memory.h>
 #include <sys/timer.h>
 
+#include "anti_freeze.h"
 #include "cshook.h"
 #include "host_menu.h"
 #include "offsets.h"
@@ -137,8 +138,15 @@ int init_game() {
         return -3;
     }
 
-    // The Host menu only exists for MP, the loader keeps running if it fails.
+    // The Host menu and the anti-freeze only exist for MP, the loader keeps running if
+    // they fail.
     if (isMultiplayer) {
+        if ((err = anti_freeze_init()) < 0) {
+            printf(T5ERROR "Anti-Freeze init failed (0x%08X).", err);
+        } else {
+            printf(T5INFO "Anti-Freeze ready.");
+        }
+
         if ((err = host_menu_init()) < 0) {
             printf(T5ERROR "Host menu init failed (0x%08X).", err);
         } else {
