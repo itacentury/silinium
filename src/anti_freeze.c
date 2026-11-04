@@ -27,11 +27,21 @@
 #define AF_MAX_TEXT 1024
 #define AF_MATERIAL_CACHE 16
 #define AF_MAX_CHAT_ARGS 64
+#define AF_REPORTED_CACHE 16
 
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
 // most checks are a cache hit.
 static uint32_t knownMaterials[AF_MATERIAL_CACHE];
 static int knownMaterialsNext = 0;
+
+// Materials that failed af_material_ok. A bad text stays on screen for seconds (chat
+// feed, scoreboard) and is drawn every frame.
+static uint32_t badMaterials[AF_MATERIAL_CACHE];
+static int badMaterialsNext = 0;
+
+// Hashes of the bad texts already reported, so the log counts texts, not draw calls.
+static uint32_t reportedTexts[AF_REPORTED_CACHE];
+static int reportedTextsNext = 0;
 
 static int droppedCount = 0;
 
@@ -53,12 +63,7 @@ static bool af_has_icon(const char* s) {
 // A real icon points to a loaded material, and looking up the material's name returns the
 // same pointer. The memory is read with sys_dbg_process_read, a garbage pointer must not
 // crash here either.
-static bool af_material_ok(uint32_t material) {
-    if (!material || (material & 3)) return false;
-
-    for (int i = 0; i < AF_MATERIAL_CACHE; i++)
-        if (knownMaterials[i] == material) return true;
-
+static bool af_material_check(uint32_t material) {
     uint32_t namePtr;
     if (sys_dbg_process_read(material, &namePtr, sizeof(namePtr)) != 0 || !namePtr)
         return false;
@@ -73,10 +78,42 @@ static bool af_material_ok(uint32_t material) {
     }
     if (len == 0 || len == (int)sizeof(name)) return false;
 
-    if ((uint32_t)Material_RegisterHandle(name, 0) != material) return false;
+    return (uint32_t)Material_RegisterHandle(name, 0) == material;
+}
+
+static bool af_material_ok(uint32_t material) {
+    if (!material || (material & 3)) return false;
+
+    for (int i = 0; i < AF_MATERIAL_CACHE; i++) {
+        if (knownMaterials[i] == material) return true;
+        if (badMaterials[i] == material) return false;
+    }
+
+    if (!af_material_check(material)) {
+        badMaterials[badMaterialsNext] = material;
+        badMaterialsNext = (badMaterialsNext + 1) % AF_MATERIAL_CACHE;
+        return false;
+    }
 
     knownMaterials[knownMaterialsNext] = material;
     knownMaterialsNext = (knownMaterialsNext + 1) % AF_MATERIAL_CACHE;
+    return true;
+}
+
+// FNV-1a
+static uint32_t af_hash(const char* s) {
+    uint32_t hash = 0x811C9DC5;
+    for (; *s; s++) hash = (hash ^ (unsigned char)*s) * 0x01000193;
+    return hash;
+}
+
+static bool af_first_report(const char* text) {
+    uint32_t hash = af_hash(text);
+    for (int i = 0; i < AF_REPORTED_CACHE; i++)
+        if (reportedTexts[i] == hash) return false;
+
+    reportedTexts[reportedTextsNext] = hash;
+    reportedTextsNext = (reportedTextsNext + 1) % AF_REPORTED_CACHE;
     return true;
 }
 
@@ -98,7 +135,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size)
         if (af_is_icon(p) && !af_icon_ok(p)) break;
     if (!*p) return text;
 
-    af_report("a text icon with an invalid material");
+    if (af_first_report(text)) af_report("a text icon with an invalid material");
 
     size_t out = 0;
     p = text;
