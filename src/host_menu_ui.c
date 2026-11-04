@@ -704,6 +704,9 @@ static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
 #define RANK_GAP 4.0f
+// Range of mp/rankIconTable.csv: rankId rows 0-49, prestige columns 0-15.
+#define RANK_ICON_MAX_RANK 49
+#define RANK_ICON_MAX_PRESTIGE 15
 
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
@@ -804,7 +807,8 @@ static void draw_session_info(bool inGame) {
 }
 
 // The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
-// false for an empty slot. Both are clamped, a modded peer can send any value.
+// false for an empty slot. Both are clamped, a modded peer can send any value. The clamp
+// keeps the level in 3 digits; the rank icon lookup clamps further to the table's range.
 static bool player_rank(int party, bool inGame, int i, int* rank, int* prestige) {
     if (inGame) {
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return false;
@@ -829,11 +833,14 @@ static void build_player_rank(int party, bool inGame, int i) {
         playerLevels[i][0] = 0;
         return;
     }
-    if (rank != playerIconRanks[i] || prestige != playerIconPrestiges[i]) {
+    // Whether the game's lookup handles values outside the table is unverified.
+    int iconRank = rank > RANK_ICON_MAX_RANK ? RANK_ICON_MAX_RANK : rank;
+    int iconPrestige = prestige > RANK_ICON_MAX_PRESTIGE ? RANK_ICON_MAX_PRESTIGE : prestige;
+    if (iconRank != playerIconRanks[i] || iconPrestige != playerIconPrestiges[i]) {
         playerRankIcons[i] = 0;
-        RankIcon_Lookup(rank, prestige, &playerRankIcons[i]);
-        playerIconRanks[i] = rank;
-        playerIconPrestiges[i] = prestige;
+        RankIcon_Lookup(iconRank, iconPrestige, &playerRankIcons[i]);
+        playerIconRanks[i] = iconRank;
+        playerIconPrestiges[i] = iconPrestige;
     }
     sprintf(playerLevels[i], "%i", rank + 1);
 }
