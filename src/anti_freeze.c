@@ -233,7 +233,8 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             continue;
         }
         // Only the bad bits are trusted, a cleared or reused entry reads as all good.
-        bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) && af_icon_ok(p);
+        bool ok =
+            !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) && af_icon_ok(p);
         if (!ok && !replay && entry) entry->bad[icon / 8] |= 1 << (icon % 8);
         icon++;
         if (ok) {
