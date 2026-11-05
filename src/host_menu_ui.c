@@ -300,8 +300,6 @@ static void end_game() {
     hostMenu.endGamePending = true;
 }
 
-static bool in_game_only(bool inGame) { return inGame; }
-
 static const char* dlcDvars[] = {"ui_showDLCMaps", "dlc2", "dlc3", "dlc4", "dlc5"};
 #define DLC_DVAR_COUNT (sizeof(dlcDvars) / sizeof(*dlcDvars))
 static bool dlcOriginal[DLC_DVAR_COUNT];
@@ -455,7 +453,7 @@ static HostMenuOption* add_option(HostMenuId m, const char* text, HostMenuOption
 }
 
 static bool option_visible(const HostMenuOption* option, bool inGame) {
-    return !(option->lobbyOnly && inGame) &&
+    return !(option->lobbyOnly && inGame) && !(option->inGameOnly && !inGame) &&
            (!option->visible || option->visible(inGame));
 }
 
@@ -518,7 +516,7 @@ void host_menu_ui_init() {
         ->lobbyOnly = true;
     add_option(HOST_MENU_MAIN, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, reset_name);
     add_option(HOST_MENU_MAIN, "End Game", HOST_MENU_TYPE_ACTION, 0, 0, 0, end_game)
-        ->visible = in_game_only;
+        ->inGameOnly = true;
     add_option(HOST_MENU_MAIN, "Player Menu", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
                open_player_menu);
 
