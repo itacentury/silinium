@@ -67,6 +67,6 @@ All sources are in `src/`.
   which checks the original instruction first.
 - Mod folder and file names must be lowercase (the game requests canonical names,
   the PS3 HDD is case-sensitive).
-- Many offsets and game function names are reverse engineered (the neighboring
-  `bo1-re` repository holds that work). Mark unconfirmed findings in comments
+- Many offsets and game function names are reverse engineered (the
+  [bo1-re](https://github.com/itacentury/bo1-re) repository holds that work). Mark unconfirmed findings in comments
   instead of presenting them as facts.

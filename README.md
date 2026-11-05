@@ -20,7 +20,7 @@ On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools throug
 ### HEN
 The code is the same for CFW and PS3HEN, only the signature differs: HEN does not load fake-signed SELFs. `./build.sh release hen` additionally signs `bin/release/Silinium_hen.sprx` with [scetool](https://github.com/naehrwert/scetool) (retail APP SELF, key revision 4, like the HEN build of InfinityOps). scetool and its keys are not part of the repo. Keep the keys outside the repo and point `PS3` at their folder; `data/` in the repo root (scetool's default) is gitignored as a fallback. Set `SCETOOL` to the binary if it is not on `PATH`. CI only builds the CFW `.sprx`.
 
-HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with `tools/hen_eboot.py` from bo1-re, for example:
+HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with [`tools/hen_eboot.py`](https://github.com/itacentury/bo1-re/blob/main/tools/hen_eboot.py) from [bo1-re](https://github.com/itacentury/bo1-re). Run it from a bo1-re clone, because it imports other scripts from the same `tools/` folder. It also signs with scetool and uses the same `SCETOOL` / `PS3` setup as `./build.sh release hen`. In Git Bash set `MSYS_NO_PATHCONV=1`, otherwise the `/dev_hdd0/...` path gets rewritten. For example:
 
 ```
 python3 tools/hen_eboot.py path/to/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx -o EBOOT_MP.BIN
