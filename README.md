@@ -55,7 +55,7 @@ Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects 
 | End Game | Ends the match with the same `mr … endround` command as End Game in the pause menu (in game only). Works as host, and as client on hosts that don't block the command. |
 | Player Menu | Lists the clients (in game) or party members (lobby). ✕ on a player opens a menu with **Kick** and **Ban** (in game, or in the lobby party). |
 
-Only the host can end the game with `mr … endround`, the command is dropped for other clients and the host sees "<name> tried to end the game" in the kill feed.
+When you host with Silinium, only you can end the game with `mr … endround`: the command is dropped for other clients and you see "<name> tried to end the game" in the kill feed.
 
 The loader always lifts the restrictions on class names and the clan tag: their keyboards skip the character, profanity and "3arc"/"COD" checks, and the clan tag keeps color codes (`^1`…). The only character dropped from the clan tag is `%`, because other consoles may print the tag as a format string.
 
