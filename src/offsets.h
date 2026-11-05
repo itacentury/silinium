@@ -281,10 +281,11 @@
 #define T5_Stats_CustomClassBodyBit 0x164C // cacloadouts.customclass1.body (0x2C9 bit 4)
 #define T5_Stats_PrestigeClassBodyBit 0x1BE5 // cacloadouts.prestigeclass1.body (0x37C bit 5)
 #define T5_Stats_BodyItemBits 8
-// Body item ids: what the tool's "Character" box writes, the only bodies seen. The statsTable rows are unverified.
-#define T5_BodyItemFirst 0x62
-#define T5_BodyItemLast 0x66
-#define T5_BodyItemDefault 0x62 // the body of every class in the 11 dumps
+// Body item ids: the statsTable rows of group "body" (stock PC raw mp/statsTable.csv, assumed identical on PS3).
+// 0x61 is armor_null, which _armor.gsc replaces with standard_mp, so only 0x62-0x66 are real bodies.
+#define T5_BodyItemFirst 0x62 // standard_mp (Lightweight)
+#define T5_BodyItemLast 0x66 // hardened_mp (Hardline)
+#define T5_BodyItemDefault 0x62 // standard_mp, the body of every class in the 11 dumps
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020
