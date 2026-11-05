@@ -274,7 +274,8 @@
 // above 1. The names of the individual states above 1 are unverified.
 #define T5_ClientStateOffset 0x0
 #define T5_ClientStateConnected 2 // lowest state of a connected client
-#define T5_ClientStatsOffset 0x5A4F8 // 0x9968 bytes, same layout as T5_Stats_Base, no checksum over the data
+// 0x9968 bytes, 32 full chunks of 0x4C6 and a partial 33rd. Same layout as T5_Stats_Base, no checksum over the data.
+#define T5_ClientStatsOffset 0x5A4F8
 #define T5_ClientStatsMaskOffset 0x651B8 // uint64_t, received chunks
 #define T5_ClientStatsMaskComplete 0x1FFFFFFFFull // 33 chunks, what SV_GetClientStatInt (0x3E2700) compares with
 #define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
