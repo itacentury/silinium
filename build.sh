@@ -23,7 +23,7 @@ NAME="Silinium"
 SRC_DIR="src"
 OBJ_DIR="objs/$CONFIG"
 OUT_DIR="bin/$CONFIG"
-# Must match clang-format-version in .github/workflows/build.yml, other versions format differently.
+# Must match clang-format-version in .github/workflows/format.yml, other versions format differently.
 CLANG_FORMAT_VERSION="20"
 
 cd "$(dirname "$0")"

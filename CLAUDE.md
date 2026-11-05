@@ -26,9 +26,9 @@ See @docs/code-style.md for code style and convention rules (applies on every ma
 make release / make format         # same via the SDK makefiles, if available
 ```
 
-CI (`.github/workflows/build.yml`) first checks formatting with clang-format 20
-over `src/`, then builds debug and release. Run `./build.sh format` before
-pushing. Commits that only reformat go into `.git-blame-ignore-revs`.
+CI (`.github/workflows/format.yml`) only checks formatting with clang-format 20
+over `src/`; it does not build, because the PS3 SDK is not distributed to CI.
+Build locally before pushing. Run `./build.sh format` before pushing. Commits that only reformat go into `.git-blame-ignore-revs`.
 
 ## Architecture
 
