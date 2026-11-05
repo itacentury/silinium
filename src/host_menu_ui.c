@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/timer.h>
 
+#include "anti_class.h"
 #include "host_menu.h"
 #include "t5.h"
 #include "utils.h"
@@ -551,7 +552,7 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
                0, 0, disable_dlc);
     add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
-               &hostMenu.antiGodmodeClasses, 0, 0, nothing);
+               &hostMenu.antiGodmodeClasses, 0, 0, anti_class_check_clients);
     add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;

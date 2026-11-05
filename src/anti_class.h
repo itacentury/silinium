@@ -14,4 +14,7 @@ t5nhd(void, SV_ReceiveStats, (uint64_t from0, uint64_t from1, uint64_t from2, vo
 // only, needs the host menu state).
 int anti_class_init();
 
+// Checks the clients whose stats are already in, for turning the option on in game.
+void anti_class_check_clients();
+
 #endif /* ANTI_CLASS_H */

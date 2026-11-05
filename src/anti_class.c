@@ -139,6 +139,23 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     }
 }
 
+// The fixed body only reaches later getdstat reads, a player who already spawned with the
+// class probably keeps it until the next spawn or class change (unverified).
+void anti_class_check_clients() {
+    if (!hostMenu.antiGodmodeClasses || !*(int*)T5_SvsClients) {
+        return;
+    }
+
+    int count = max_clients();
+    for (int i = 0; i < count; i++) {
+        // A free slot keeps the stats of its last client.
+        bool inUse = CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(i);
+        if (inUse && CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete) {
+            check_client_classes(i, CLIENT(i));
+        }
+    }
+}
+
 int anti_class_init() {
     t5nmhi(SV_ReceiveStats);
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
