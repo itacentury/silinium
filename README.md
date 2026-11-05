@@ -32,7 +32,7 @@ Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/
 ### Formatting
 The sources are formatted with clang-format 20 (`.clang-format`, checked by CI with that version; other versions format differently). Run `./build.sh format` or `make format` before committing; both refuse to run with another clang-format version. Set `CLANG_FORMAT` if version 20 is not the first `clang-format` on `PATH` (e.g. `CLANG_FORMAT=clang-format-20`). To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
-CI (`.github/workflows/format.yml`) only checks the formatting. It does not build, because the PS3 SDK is not distributed to CI, so build locally before pushing.
+CI (`.github/workflows/format.yml`) only checks the formatting. It does not build, because the PS3 SDK cannot be redistributed, so build locally before pushing.
 
 ## Usage
 Create a folder in `/dev_hdd0/tmp/Silinium/mp` or `/dev_hdd0/tmp/Silinium/zm`. Beside your created folder create a .mod file that has the same name as your mod to enable it.
