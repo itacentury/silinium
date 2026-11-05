@@ -11,6 +11,7 @@
 #   SCETOOL           scetool command for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored).
 #                     Not run through PS3_TOOL_WRAPPER; include a wrapper yourself, e.g. "wine scetool.exe".
 #                     Split on whitespace like PS3_TOOL_WRAPPER, so a path with spaces needs scetool on PATH instead.
+#                     Relative paths resolve from the repo root (the script cds there), so use an absolute path; same for PS3.
 #   CLANG_FORMAT      clang-format command for the format mode, default: clang-format. Must be version 20,
 #                     e.g. CLANG_FORMAT=clang-format-20 or the path to an LLVM 20 install.
 
@@ -68,8 +69,8 @@ if [ "$CONFIG" = "format" ]; then
 fi
 
 read -r -a SCETOOL_CMD <<< "${SCETOOL:-scetool}"
-if [ "$TARGET" = "hen" ] && ! command -v "${SCETOOL_CMD[0]}" >/dev/null; then
-    echo "error: scetool not found (${SCETOOL_CMD[*]}), set SCETOOL" >&2
+if [ "$TARGET" = "hen" ] && { [ ${#SCETOOL_CMD[@]} -eq 0 ] || ! command -v "${SCETOOL_CMD[0]}" >/dev/null; }; then
+    echo "error: scetool not found (${SCETOOL:-scetool}), set SCETOOL" >&2
     exit 1
 fi
 
