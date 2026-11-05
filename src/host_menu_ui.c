@@ -379,15 +379,13 @@ static void open_player_modal() {
         }
         printf(T5INFO "Player menu: slot %i (%s), local client %i (%s).", member,
                CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
+        hostMenu.playerModalParty = 0;
     } else {
         int party = host_menu_lobby_party();
         if (!party || !PARTY_MEMBER_USED(party, member)) {
             return;
         }
         hostMenu.playerModalParty = party;
-    }
-    if (inGame) {
-        hostMenu.playerModalParty = 0;
     }
     hostMenu.cursor[HOST_MENU_PLAYER] = 0;
     hostMenu.playerModalInGame = inGame;
@@ -426,8 +424,9 @@ static void queue_kick(bool ban) {
 
     // Remember who was picked, so the kick doesn't hit whoever is in the slot by the time
     // it runs.
-    int party = host_menu_lobby_party();
-    if (!party || hostMenu.lobbyKickMember != -1 || !PARTY_MEMBER_USED(party, member)) {
+    int party = hostMenu.playerModalParty;
+    if (!party || host_menu_lobby_party() != party || hostMenu.lobbyKickMember != -1 ||
+        !PARTY_MEMBER_USED(party, member)) {
         return;
     }
     hostMenu.lobbyKickParty = party;
