@@ -21,6 +21,17 @@ OUT_DIR="bin/$CONFIG"
 
 cd "$(dirname "$0")"
 
+usage() {
+    echo "usage: $0 [debug|release|clean|format] [hen]" >&2
+    exit 1
+}
+
+case "$CONFIG" in
+    debug|release) [ -z "$TARGET" ] || [ "$TARGET" = "hen" ] || usage ;;
+    clean|format)  [ -z "$TARGET" ] || usage ;;
+    *)             usage ;;
+esac
+
 if [ "$CONFIG" = "clean" ]; then
     rm -rf bin objs
     echo "# cleaned bin/ and objs/"
@@ -31,16 +42,6 @@ if [ "$CONFIG" = "format" ]; then
     clang-format -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
     echo "# formatted $SRC_DIR/"
     exit 0
-fi
-
-if [ "$CONFIG" != "debug" ] && [ "$CONFIG" != "release" ]; then
-    echo "usage: $0 [debug|release|clean|format] [hen]" >&2
-    exit 1
-fi
-
-if [ -n "$TARGET" ] && [ "$TARGET" != "hen" ]; then
-    echo "usage: $0 [debug|release] [hen]" >&2
-    exit 1
 fi
 
 SCETOOL="${SCETOOL:-scetool}"
