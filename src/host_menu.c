@@ -441,8 +441,10 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         return;
     }
 
-    // The ban list is party state, so it's cleared on this thread. Before restore_bans,
-    // so nothing comes back in the same frame.
+    // Also safe in a match: the game only touches the ban list from this thread (main
+    // thread), banClient included, because server commands wait for the server frame
+    // (0x3F0650) and then run here (0x39C258). Traced over direct calls only. Before
+    // restore_bans, so nothing comes back in the same frame.
     if (hostMenu.unbanAllPending) {
         hostMenu.unbanAllPending = false;
         unban_all();
