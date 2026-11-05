@@ -62,6 +62,41 @@ int host_menu_lobby_party() {
     return party && party_is_local_host(party) ? party : 0;
 }
 
+#define PARTY_REMOVE_COOLDOWN_US (1000 * 1000)
+
+static struct {
+    int party;
+    int member;
+    char name[sizeof(hostMenu.lobbyKickName)];
+    system_time_t time;
+} lastRemoval;
+
+// Whether Party_RemoveMember frees the slot right away is unverified. If it doesn't, the
+// banned member would be removed (and sent "endparty") every frame, so a slot just
+// removed is skipped for a second. The name is compared so another player taking the slot
+// in that second is still removed.
+static void remove_party_member(int party, int member, const char* reason) {
+    static bool logged;
+    const char* name = PARTY_MEMBER_NAME(party, member);
+    system_time_t now = sys_time_get_system_time();
+    if (lastRemoval.party == party && lastRemoval.member == member &&
+        strncmp(lastRemoval.name, name, sizeof(lastRemoval.name) - 1) == 0 &&
+        now - lastRemoval.time < PARTY_REMOVE_COOLDOWN_US) {
+        return;
+    }
+    lastRemoval.party = party;
+    lastRemoval.member = member;
+    strncpy(lastRemoval.name, name, sizeof(lastRemoval.name) - 1);
+    lastRemoval.name[sizeof(lastRemoval.name) - 1] = 0;
+    lastRemoval.time = now;
+    Party_RemoveMember(party, member, 1, reason);
+    if (!logged) {
+        logged = true;
+        printf(T5INFO "Party_RemoveMember: slot %d still used afterwards: %d.", member,
+               PARTY_MEMBER_USED(party, member));
+    }
+}
+
 // Server commands don't reach the pregame lobby, so the member is removed through the
 // party code. The party and name were taken when the kick was chosen; if either changed
 // since, the slot holds someone else. The party only has to still be hosted by us, not
@@ -81,8 +116,8 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (ban) {
         Party_BanName(memberName);
     }
-    Party_RemoveMember(party, member, 1,
-                       ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
+    remove_party_member(party, member,
+                        ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
 }
 
 // The join handler skips the ban check for party id 1 (GameParty, beq at 0x21348C), so a
@@ -98,7 +133,7 @@ static void enforce_game_party_bans() {
             continue;
         }
         if (Party_IsBanned(PARTY_MEMBER_NAME(party, i))) {
-            Party_RemoveMember(party, i, 1, "@EXE_PLAYERKICKED_BAN");
+            remove_party_member(party, i, "@EXE_PLAYERKICKED_BAN");
         }
     }
 }
