@@ -34,6 +34,7 @@ typedef struct HostMenuOption {
     signed char max;
     void (*func)(void);
     bool lobbyOnly;                // hidden while in game
+    bool inGameOnly;               // hidden while in lobby
     bool (*visible)(bool inGame);  // extra condition for showing it, 0 = none
 } HostMenuOption;
 
@@ -51,6 +52,7 @@ typedef struct HostMenu {
     bool changeNamePending;
     bool selectMapPending;
     bool selectGametypePending;
+    bool endGamePending;
     bool scorelimitPending;
     bool maxPlayersSet;  // Max Players was applied with the menu, the TDM scorelimit
                          // follows it

@@ -42,6 +42,7 @@
 #define T5_R_AddCmdDrawStretchPic 0x751940
 #define T5_R_AddCmdDrawText 0x754410
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
+#define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it
 #define T5_UI_OpenKeyboard 0x56A118
 #define T5_Dvar_GetBool 0x4C7BF0
 #define T5_R_TextHeight 0x734340
@@ -59,6 +60,7 @@
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
+#define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData
 #define T5_VM_Notify 0x5CD370

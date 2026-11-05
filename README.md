@@ -52,9 +52,10 @@ Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects 
 | Prestige Unlocks | Removes the prestige requirement from create-a-class slots 6–10, weapon options such as the gold camo, face paints, clan tag features and calling cards (emblem backgrounds and icons), so they can be bought and used at any prestige. Items that only unlock after buying more items of the same group (classified, such as "Purchase 3 more face paints") are unlocked too. Rank requirements and COD point costs stay. It only works while the plugin is running, but what you buy or pick meanwhile is saved in your stats. When joining a lobby the game sets a prestige camo and the clan tag color back to none; while the option is on this is prevented. The server side check (`isItemLocked`) is only patched in matches you host. |
 | Prestige | Sets the prestige (0–16, lobby only). |
 | Change Name / Reset Name | Changes the local name with the keyboard in the lobby / restores it. |
+| End Game | Ends the match with the same `mr … endround` command as End Game in the pause menu (in game only). Works as host, and as client on hosts that don't block the command. |
 | Player Menu | Lists the clients (in game) or party members (lobby). ✕ on a player opens a menu with **Kick** and **Ban** (in game, or in the lobby party). |
 
-Only the host can end the game with `mr … endround`, the command is dropped for other clients and the host sees "<name> tried to end the game" in the kill feed.
+When you host with Silinium, only you can end the game with `mr … endround`: the command is dropped for other clients and you see "<name> tried to end the game" in the kill feed.
 
 The loader always lifts the restrictions on class names and the clan tag: their keyboards skip the character, profanity and "3arc"/"COD" checks, and the clan tag keeps color codes (`^1`…). The only character dropped from the clan tag is `%`, because other consoles may print the tag as a format string.
 
