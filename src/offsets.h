@@ -79,6 +79,10 @@
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
+// Likely Scr_GetEntityId(inst, entnum, classnum, clientNum), unverified: Scr_AddEntity (0x5DF800) calls it with the
+// script instance first, and it looks up entnum + 0x800000 in the per-instance class map at 0xB62DD0 (12 bytes per
+// class), like CoD4's Scr_GetEntityId.
+#define T5_Scr_GetEntityId 0x5C2B00
 #define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData

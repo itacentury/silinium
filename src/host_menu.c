@@ -331,41 +331,52 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
     return DDL_SetFromString_Trampoline(state, value, buffer);
 }
 
-// Kill feed message, written on the server thread and shown on the UI thread.
-static char gameMessage[128];
-static volatile bool gameMessagePending;
+// Kill feed messages, queued on the server thread and shown on the UI thread once the
+// host has spawned, so they don't scroll by behind the loading screen or the class menu.
+// Only the server thread moves the head and only the UI thread the tail.
+#define GAME_MESSAGE_COUNT 8
+static char gameMessages[GAME_MESSAGE_COUNT][128];
+static volatile uint32_t gameMessageHead;
+static volatile uint32_t gameMessageTail;
+// Set on the host's first spawn in a match, cleared on every server script load.
+static volatile bool hostSpawned;
 
 void host_menu_game_message(const char* format, ...) {
-    if (gameMessagePending) {
+    uint32_t head = gameMessageHead;
+    if (head - gameMessageTail == GAME_MESSAGE_COUNT) {
         return;
     }
+    char* message = gameMessages[head % GAME_MESSAGE_COUNT];
     va_list args;
     va_start(args, format);
-    vsnprintf(gameMessage, sizeof(gameMessage), format, args);
+    vsnprintf(message, sizeof(*gameMessages), format, args);
     va_end(args);
-    // The text has to be visible before the flag that marks it ready.
+    // The text has to be visible before the head that marks it ready.
     __lwsync();
-    gameMessagePending = true;
+    gameMessageHead = head + 1;
 }
 
 // CL_ConsolePrint drops prints that don't come from the main thread, which guards buffers
 // that aren't thread-safe. Menu_PaintAll is expected to run on it; if it doesn't, the
-// message is dropped instead of patching the check out for every caller.
-static void show_game_message() {
+// messages are dropped instead of patching the check out for every caller.
+static void show_game_messages() {
     static bool warned;
-    if (!gameMessagePending) {
+    if (!hostSpawned) {
         return;
     }
-    __lwsync();
-    if (Sys_IsMainThread()) {
-        CG_GameMessage(0, gameMessage);
-    } else if (!warned) {
-        warned = true;
-        printf(T5WARNING
-               "Menu_PaintAll is not on the main thread, dropped kill feed message.");
+    for (uint32_t tail = gameMessageTail; tail != gameMessageHead; tail++) {
+        __lwsync();
+        if (Sys_IsMainThread()) {
+            CG_GameMessage(0, gameMessages[tail % GAME_MESSAGE_COUNT]);
+        } else if (!warned) {
+            warned = true;
+            printf(T5WARNING
+                   "Menu_PaintAll is not on the main thread, dropped kill feed message.");
+        }
+        // The slot may only be reused once the text has been read.
+        __lwsync();
+        gameMessageTail = tail + 1;
     }
-    __lwsync();
-    gameMessagePending = false;
 }
 
 // callkeyboard: requested on the server thread, opened on the UI thread, and the text is
@@ -447,7 +458,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // Also safe in a match: the game only touches the ban list from the main thread,
     // banClient included, because server commands wait for the server frame (0x3F0650)
     // and then run on the main thread at 0x39C258 (traced over direct calls only).
-    // Menu_PaintAll is expected to run there too (see show_game_message), so the flag
+    // Menu_PaintAll is expected to run there too (see show_game_messages), so the flag
     // stays set until it does. The guard is only needed in a match: the lobby callers
     // below rely on the UI-thread rule. Before restore_bans, so nothing comes back in the
     // same frame.
@@ -498,7 +509,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             sprintf(buffer, "cmd mr %i -1 endround\n", *(int*)T5_ClServerId);
             Cbuf_AddText(0, buffer);
         }
-        show_game_message();
+        show_game_messages();
         open_requested_keyboard();
     }
     host_menu_ui_draw();
@@ -514,6 +525,7 @@ void host_menu_on_server_scripts_loaded() {
     if (!SL_GetString) {
         return;
     }
+    hostSpawned = false;
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
     keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }
@@ -531,6 +543,13 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
         }
         if (hostMenu.depatchBounces) {
             host_menu_set_bounce_dvars(true);
+        }
+        // The owner is the spawning player, so its entity id already exists and the
+        // lookup doesn't allocate one. cg.clientNum is the host's server slot.
+        if (!hostSpawned && CG_CLIENTINFO_BASE &&
+            notifyListOwnerId == Scr_GetEntityId(SCRIPTINSTANCE_SERVER, CG_CLIENTNUM,
+                                                 CLASS_NUM_ENTITY, 0)) {
+            hostSpawned = true;
         }
     }
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
@@ -627,7 +646,6 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.antiClassCheckPending = false;
             hostMenu.endGamePending = false;
             keyboardState = KEYBOARD_IDLE;
-            gameMessagePending = false;
         }
         // Lobby menus and kicks can't happen in game, so don't let them carry over to the
         // next lobby.
@@ -677,6 +695,7 @@ static void init_host_menu_offsets() {
     t5nmi(CG_GameMessage);
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
+    t5nmi(Scr_GetEntityId);
 }
 
 static int init_host_menu_hooks() {
