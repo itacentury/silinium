@@ -535,10 +535,30 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
 }
 
-// A blocked endround is reported at most once per client in this window, so a client
-// repeating the command can't flood the host's kill feed.
-#define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
-static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
+// Each kind of blocked attempt is reported at most once per client in this window, so a
+// client repeating it can't flood the host's kill feed.
+#define REPORT_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
+static system_time_t reportTime[HOST_MENU_REPORT_COUNT][HOST_MENU_MAX_CLIENTS];
+
+static const char* const reportText[HOST_MENU_REPORT_COUNT] = {
+    [HOST_MENU_REPORT_END_GAME] = "tried to end the game",
+    [HOST_MENU_REPORT_FREEZE] = "tried to freeze the game",
+};
+
+void host_menu_report_client(int clientNum, HostMenuReport report) {
+    if (!CG_CLIENTINFO_BASE || clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS ||
+        report < 0 || report >= HOST_MENU_REPORT_COUNT) {
+        return;
+    }
+
+    system_time_t now = sys_time_get_system_time();
+    system_time_t* last = &reportTime[report][clientNum];
+    if (*last && now - *last < REPORT_MESSAGE_COOLDOWN_US) {
+        return;
+    }
+    *last = now;
+    host_menu_game_message("^1%s %s", CG_CLIENT_NAME(clientNum), reportText[report]);
+}
 
 // Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
 // matched with the game's I_stricmp like ClientCommand does, so "MR" can't slip past. The
@@ -553,15 +573,7 @@ bool host_menu_client_command_ok(int clientNum, const char* cmd) {
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
     if (strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
-        if (CG_CLIENTINFO_BASE && clientNum >= 0 && clientNum < HOST_MENU_MAX_CLIENTS) {
-            system_time_t now = sys_time_get_system_time();
-            system_time_t* last = &endroundMessageTime[clientNum];
-            if (!*last || now - *last >= ENDROUND_MESSAGE_COOLDOWN_US) {
-                *last = now;
-                host_menu_game_message("^1%s tried to end the game",
-                                       CG_CLIENT_NAME(clientNum));
-            }
-        }
+        host_menu_report_client(clientNum, HOST_MENU_REPORT_END_GAME);
         return false;
     }
     return true;

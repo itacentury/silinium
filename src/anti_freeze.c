@@ -424,6 +424,7 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
         if (af_has_icon(af_args_argv(T5_SvCmdArgs, i))) {
             af_report("chat with a text icon");
             printf(T5WARNING "Anti-Freeze: the chat came from client %i.", clientNum);
+            host_menu_report_client(clientNum, HOST_MENU_REPORT_FREEZE);
             return false;
         }
     }
@@ -433,6 +434,7 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
 static void af_report_name(int clientNum) {
     af_report("a text icon in a player name");
     printf(T5WARNING "Anti-Freeze: the name came from client %i.", clientNum);
+    host_menu_report_client(clientNum, HOST_MENU_REPORT_FREEZE);
 }
 
 // The host sends names and clan tags to every client. Both hooks only run on the host:

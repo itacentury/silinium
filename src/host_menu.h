@@ -111,6 +111,15 @@ void host_menu_write_prestige(int prestige);
 // Shows a message in the kill feed of the local player, in game only. Called from the
 // server thread; while one is waiting to be shown, further ones are dropped.
 void host_menu_game_message(const char* format, ...);
+// Blocked attempts of a client, reported to the host with host_menu_game_message.
+typedef enum {
+    HOST_MENU_REPORT_END_GAME,
+    HOST_MENU_REPORT_FREEZE,
+    HOST_MENU_REPORT_COUNT
+} HostMenuReport;
+// "<name> tried to ..." in the host's kill feed, at most once per client and kind every
+// few seconds. Called from the server thread, also works if host_menu_init failed.
+void host_menu_report_client(int clientNum, HostMenuReport report);
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);
