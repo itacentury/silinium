@@ -370,7 +370,9 @@ static bool can_manage_players(bool inGame) {
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     bool inGame = Dvar_GetBool("cl_ingame");
-    if (!can_manage_players(inGame)) return;
+    if (!can_manage_players(inGame)) {
+        return;
+    }
     if (inGame) {
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) {
             return;
@@ -379,10 +381,14 @@ static void open_player_modal() {
                CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
     } else {
         int party = host_menu_lobby_party();
-        if (!party || !PARTY_MEMBER_USED(party, member)) return;
+        if (!party || !PARTY_MEMBER_USED(party, member)) {
+            return;
+        }
         hostMenu.playerModalParty = party;
     }
-    if (inGame) hostMenu.playerModalParty = 0;
+    if (inGame) {
+        hostMenu.playerModalParty = 0;
+    }
     hostMenu.cursor[HOST_MENU_PLAYER] = 0;
     hostMenu.playerModalInGame = inGame;
     hostMenu.current = HOST_MENU_PLAYER;
@@ -631,7 +637,9 @@ void host_menu_ui_handle_input() {
             sys_timer_usleep(150000);
         }
     } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
-        if (can_switch_lists(m, inGame)) hostMenu.lobbyShowGameParty ^= 1;
+        if (can_switch_lists(m, inGame)) {
+            hostMenu.lobbyShowGameParty ^= 1;
+        }
         sys_timer_usleep(200000);
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
         if (option->type == HOST_MENU_TYPE_INT) {
@@ -709,7 +717,9 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
     out[0] = 0;
     if (inGame) {
         // An empty slot may still hold the tag of whoever left.
-        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return;
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) {
+            return;
+        }
         // Reads stay within the tag field. The field is 8 bytes like the lobby's, so in
         // game the tag only loses its color codes and icons, not visible characters.
         const char* tag = CG_CLIENT_CLAN(i);
@@ -725,20 +735,28 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
             // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
             // as a whole.
             if (caret && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
-                if (c + 4 >= size) break;
+                if (c + 4 >= size) {
+                    break;
+                }
                 c += 4 + (unsigned char)tag[c + 4];
                 continue;
             }
             clan[length++] = tag[c];
         }
         clan[length] = 0;
-        if (*clan) sprintf(out, "[%s]", clan);
+        if (*clan) {
+            sprintf(out, "[%s]", clan);
+        }
         return;
     }
 
-    if (!party || !PARTY_MEMBER_USED(party, i)) return;
+    if (!party || !PARTY_MEMBER_USED(party, i)) {
+        return;
+    }
     const char* clan = PARTY_MEMBER_CLAN(party, i);
-    if (!*clan) return;
+    if (!*clan) {
+        return;
+    }
     // The clan field is 8 bytes, so at most 7 characters are read: the read stays within
     // the field even if a peer left no NUL in it. "[^%i" + cut + "^7]" + NUL fit in out.
     char cut[T5_PartyMemberClanSize];
@@ -755,24 +773,30 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
 static void host_clan_tag(bool inGame, const char* host, char* out) {
     out[0] = 0;
     if (inGame) {
-        if (!CG_CLIENTINFO_BASE) return;
-        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+        if (!CG_CLIENTINFO_BASE) {
+            return;
+        }
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
             if (!strcmp(CG_CLIENT_NAME(i), host)) {
                 player_clan_tag(0, true, i, out);
                 return;
             }
+        }
         return;
     }
     static const int parties[] = {T5_LobbyParty, T5_GameParty};
     for (int p = 0; p < 2; p++) {
         int party = parties[p];
-        if (!host_menu_party_active(party)) continue;
-        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+        if (!host_menu_party_active(party)) {
+            continue;
+        }
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
             if (PARTY_MEMBER_USED(party, i) &&
                 !strcmp(PARTY_MEMBER_NAME(party, i), host)) {
                 player_clan_tag(party, false, i, out);
                 return;
             }
+        }
     }
 }
 
@@ -780,12 +804,18 @@ static void host_clan_tag(bool inGame, const char* host, char* out) {
 static void draw_session_info(bool inGame) {
     const char* map = inGame ? "" : dvar_string("ui_mapname");
     const char* gametype = inGame ? "" : dvar_string("ui_gametype");
-    if (!*map) map = dvar_string("mapname");
-    if (!*gametype) gametype = dvar_string("g_gametype");
+    if (!*map) {
+        map = dvar_string("mapname");
+    }
+    if (!*gametype) {
+        gametype = dvar_string("g_gametype");
+    }
 
     const char* host = dvar_string("party_hostname");
     char tag[CLAN_TAG_MAX] = "";
-    if (*host) host_clan_tag(inGame, host, tag);
+    if (*host) {
+        host_clan_tag(inGame, host, tag);
+    }
     char hostLine[CLAN_TAG_MAX + 64];
     snprintf(hostLine, sizeof(hostLine), "Host: %s%s", tag, *host ? host : "-");
     char lines[2][64];
@@ -797,7 +827,9 @@ static void draw_session_info(bool inGame) {
 
     float step = R_TextHeight(font) * 0.5f + 10;
     draw_text_box(hostLine, 10, 20 + step, 0.5f);
-    for (int i = 0; i < 2; i++) draw_text_box(lines[i], 10, 20 + (i + 2) * step, 0.5f);
+    for (int i = 0; i < 2; i++) {
+        draw_text_box(lines[i], 10, 20 + (i + 2) * step, 0.5f);
+    }
 }
 
 // The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
@@ -805,18 +837,30 @@ static void draw_session_info(bool inGame) {
 // keeps the level in 3 digits; the rank icon lookup clamps further to the table's range.
 static bool player_rank(int party, bool inGame, int i, int* rank, int* prestige) {
     if (inGame) {
-        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) return false;
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) {
+            return false;
+        }
         *rank = CG_CLIENT_RANK(i);
         *prestige = CG_CLIENT_PRESTIGE(i);
     } else {
-        if (!party || !PARTY_MEMBER_USED(party, i)) return false;
+        if (!party || !PARTY_MEMBER_USED(party, i)) {
+            return false;
+        }
         *rank = PARTY_MEMBER_RANK(party, i);
         *prestige = PARTY_MEMBER_PRESTIGE(party, i);
     }
-    if (*rank < 0) *rank = 0;
-    if (*rank > 254) *rank = 254;  // level fits in 3 digits
-    if (*prestige < 0) *prestige = 0;
-    if (*prestige > 255) *prestige = 255;
+    if (*rank < 0) {
+        *rank = 0;
+    }
+    if (*rank > 254) {
+        *rank = 254;  // level fits in 3 digits
+    }
+    if (*prestige < 0) {
+        *prestige = 0;
+    }
+    if (*prestige > 255) {
+        *prestige = 255;
+    }
     return true;
 }
 
@@ -925,7 +969,9 @@ static int build_player_rows(int party, bool inGame) {
         build_player_rank(party, inGame, i);
         if (*playerLevels[i]) {
             float w = R_TextWidth(playerLevels[i], 0x7FFFFFFF, font) * 0.5f;
-            if (w > levelWidth) levelWidth = w;
+            if (w > levelWidth) {
+                levelWidth = w;
+            }
         }
     }
     playerRankColumn = RANK_ICON_SIZE + RANK_GAP + levelWidth + RANK_GAP;
@@ -934,15 +980,23 @@ static int build_player_rows(int party, bool inGame) {
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         float w = playerRankColumn + playerTagWidths[i] +
                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
-        if (w > widest) widest = w;
+        if (w > widest) {
+            widest = w;
+        }
     }
     // Round up to an even whole number so left = 650 - width / 2 and the accent
     // borders land on whole pixels.
     int width = (int)widest + 20;
-    if (width < widest + 20) width++;  // ceil (widest >= 0)
-    width = (width + 1) & ~1;          // round up to even
-    if (width < 300) width = 300;
-    if (width > 600) width = 600;
+    if (width < widest + 20) {
+        width++;  // ceil (widest >= 0)
+    }
+    width = (width + 1) & ~1;  // round up to even
+    if (width < 300) {
+        width = 300;
+    }
+    if (width > 600) {
+        width = 600;
+    }
     return width;
 }
 
@@ -987,7 +1041,9 @@ void host_menu_ui_draw() {
             playerListWidth = 0;  // fit the box to the new list
         }
         int w = build_player_rows(party, inGame);
-        if (w > playerListWidth) playerListWidth = w;
+        if (w > playerListWidth) {
+            playerListWidth = w;
+        }
         width = playerListWidth;
     } else {
         playerListWidth = 0;
@@ -1002,24 +1058,26 @@ void host_menu_ui_draw() {
     // With both parties active the title names the list shown.
     bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
     const char* title = hostMenu.title[boxMenu];
-    if (bothLists)
+    if (bothLists) {
         title = hostMenu.lobbyShowGameParty ? "Players (Party)" : "Players (Lobby)";
+    }
     draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), 238, 0.45f, accent);
     if (players) {
         const char* switchHint =
             can_switch_lists(m, inGame) ? " | \x04 - Switch List" : "";
         char controls[96];
-        if (notHost)
+        if (notHost) {
             snprintf(controls, sizeof(controls), "\x02 - Back");
-        else if (viewOnly)
+        } else if (viewOnly) {
             snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s | \x02 - Back",
                      switchHint);
-        else if (m == HOST_MENU_PLAYER)
+        } else if (m == HOST_MENU_PLAYER) {
             snprintf(controls, sizeof(controls),
                      "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back");
-        else
+        } else {
             snprintf(controls, sizeof(controls),
                      "\x14\x15 - Scroll | \x01 - Select%s | \x02 - Back", switchHint);
+        }
         draw_text_box(controls, 10, 20, 0.5f);
         draw_session_info(inGame);
         if (notHost) {
@@ -1035,9 +1093,10 @@ void host_menu_ui_draw() {
             // Icon, level and tag/name each start at a fixed x, also on rows without an
             // icon or level (empty slots), so the names form one straight column.
             if (*playerLevels[i]) {
-                if (playerRankIcons[i])
+                if (playerRankIcons[i]) {
                     draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,
                                 white, playerRankIcons[i]);
+                }
                 draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, 0.5f, color);
             }
             x += playerRankColumn;

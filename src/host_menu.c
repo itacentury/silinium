@@ -45,9 +45,15 @@ bool host_menu_lobby_parties_both_active() {
 int host_menu_lobby_view_party() {
     bool lobby = host_menu_party_active(T5_LobbyParty);
     bool game = host_menu_party_active(T5_GameParty);
-    if (lobby && game) return hostMenu.lobbyShowGameParty ? T5_GameParty : T5_LobbyParty;
-    if (lobby) return T5_LobbyParty;
-    if (game) return T5_GameParty;
+    if (lobby && game) {
+        return hostMenu.lobbyShowGameParty ? T5_GameParty : T5_LobbyParty;
+    }
+    if (lobby) {
+        return T5_LobbyParty;
+    }
+    if (game) {
+        return T5_GameParty;
+    }
     return 0;
 }
 
@@ -83,12 +89,17 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
 // banned player can rejoin it. Remove them again as soon as they show up.
 static void enforce_game_party_bans() {
     int party = T5_GameParty;
-    if (!party_is_local_host(party)) return;
+    if (!party_is_local_host(party)) {
+        return;
+    }
     int host = *(int*)(party + T5_PartyHostIndexOffset);
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        if (i == host || !PARTY_MEMBER_USED(party, i)) continue;
-        if (Party_IsBanned(PARTY_MEMBER_NAME(party, i)))
+        if (i == host || !PARTY_MEMBER_USED(party, i)) {
+            continue;
+        }
+        if (Party_IsBanned(PARTY_MEMBER_NAME(party, i))) {
             Party_RemoveMember(party, i, 1, "@EXE_PLAYERKICKED_BAN");
+        }
     }
 }
 
@@ -451,8 +462,9 @@ static void host_menu_thread(uint64_t arg) {
         }
         // The list choice only applies while both parties are up; each lobby (and the one
         // after a match) starts on the Lobby list.
-        if (inGame || !host_menu_lobby_parties_both_active())
+        if (inGame || !host_menu_lobby_parties_both_active()) {
             hostMenu.lobbyShowGameParty = false;
+        }
 
         // The game resets the party dvars in the pregame lobby, keep them applied.
         if (hostMenu.forceHost && !inGame) {
