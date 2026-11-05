@@ -343,7 +343,7 @@ static void disable_dlc() {
 
 // The check writes the clients' stats, so it runs on the server thread.
 static void anti_godmode_classes() {
-    hostMenu.antiClassCheckPending = hostMenu.antiGodmodeClasses;
+    hostMenu.antiGodClassCheckPending = hostMenu.antiGodmodeClasses;
 }
 
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }

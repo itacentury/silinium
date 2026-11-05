@@ -1,5 +1,5 @@
-#ifndef ANTI_CLASS_H
-#define ANTI_CLASS_H
+#ifndef ANTI_GOD_CLASS_H
+#define ANTI_GOD_CLASS_H
 
 #include <stdint.h>
 
@@ -13,10 +13,10 @@ t5nhd(void, SV_ReceiveStats, (uint64_t from0, uint64_t from1, uint64_t from2, vo
 
 // Installs the stats hook that fixes godmode/invisible custom classes of clients (MP
 // only, needs the host menu state).
-int anti_class_init();
+int anti_god_class_init();
 
 // Checks the clients whose stats are already in, for turning the option on in game.
 // Server thread only, the toggle queues it for ClientEndFrame.
-void anti_class_check_clients();
+void anti_god_class_check_clients();
 
-#endif /* ANTI_CLASS_H */
+#endif /* ANTI_GOD_CLASS_H */

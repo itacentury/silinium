@@ -1,4 +1,4 @@
-#include "anti_class.h"
+#include "anti_god_class.h"
 
 #include <stdio.h>
 
@@ -142,7 +142,7 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
 
 // The fixed body only reaches later getdstat reads, a player who already spawned with the
 // class probably keeps it until the next spawn or class change (unverified).
-void anti_class_check_clients() {
+void anti_god_class_check_clients() {
     if (!hostMenu.antiGodmodeClasses || !*(int*)T5_SvsClients) {
         return;
     }
@@ -156,7 +156,7 @@ void anti_class_check_clients() {
     }
 }
 
-int anti_class_init() {
+int anti_god_class_init() {
     t5nmhi(SV_ReceiveStats);
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
 }

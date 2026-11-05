@@ -8,7 +8,7 @@
 #include <sys/sys_time.h>
 #include <sys/timer.h>
 
-#include "anti_class.h"
+#include "anti_god_class.h"
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
@@ -625,9 +625,9 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         sprintf(buffer, "set scr_tdm_scorelimit %i\n", host_menu_get_scorelimit());
         Cbuf_AddText(0, buffer);
     }
-    if (hostMenu.antiClassCheckPending) {
-        hostMenu.antiClassCheckPending = false;
-        anti_class_check_clients();
+    if (hostMenu.antiGodClassCheckPending) {
+        hostMenu.antiGodClassCheckPending = false;
+        anti_god_class_check_clients();
     }
     send_keyboard_input(ent);
     ClientEndFrame_Trampoline(ent, a2);
@@ -643,7 +643,7 @@ static void host_menu_thread(uint64_t arg) {
         if (!inGame) {
             hostMenu.kickClient = -1;
             hostMenu.scorelimitPending = false;
-            hostMenu.antiClassCheckPending = false;
+            hostMenu.antiGodClassCheckPending = false;
             hostMenu.endGamePending = false;
             keyboardState = KEYBOARD_IDLE;
         }
@@ -785,7 +785,7 @@ int host_menu_init() {
     if ((res = init_host_menu_hooks()) < 0) {
         return res;
     }
-    if ((res = anti_class_init()) < 0) {
+    if ((res = anti_god_class_init()) < 0) {
         return res;
     }
 
