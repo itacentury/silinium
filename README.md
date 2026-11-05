@@ -17,6 +17,17 @@ If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which 
 `SCE_PS3_ROOT` must point to the SDK. Outputs are `bin/<config>/Silinium.prx` and `.sprx`.
 On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools through Wine: `PS3_HOST_DIR=$SCE_PS3_ROOT/host-win32 PS3_TOOL_WRAPPER=wine ./build.sh release`.
 
+### HEN
+The code is the same for CFW and PS3HEN, only the signature differs: HEN does not load fake-signed SELFs. `./build.sh release hen` additionally signs `bin/release/Silinium_hen.sprx` with [scetool](https://github.com/naehrwert/scetool) (retail APP SELF, key revision 4, like the HEN build of InfinityOps). scetool and its keys are not part of the repo; set `SCETOOL` to the binary if it is not on `PATH`. CI only builds the CFW `.sprx`.
+
+HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with `tools/hen_eboot.py` from bo1-re, for example:
+
+```
+python3 tools/hen_eboot.py eboots/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx -o EBOOT_MP.BIN
+```
+
+Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/tmp/Silinium.sprx`).
+
 ### Formatting
 The sources are formatted with clang-format (`.clang-format`, checked by CI with version 20). Run `./build.sh format` or `make format` before committing. To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 

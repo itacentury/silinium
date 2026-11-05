@@ -65,6 +65,27 @@
                 "group": "build"
             },
             {
+                // Also signs bin/<config>/Silinium_hen.sprx, needs scetool (SCETOOL or PATH).
+                "label": "Build Debug (HEN)",
+                "type": "shell",
+                "command": "bash ./build.sh debug hen",
+                "problemMatcher": {
+                    "base": "$gcc",
+                    "fileLocation": ["relative", "${workspaceFolder}"]
+                },
+                "group": "build"
+            },
+            {
+                "label": "Build Release (HEN)",
+                "type": "shell",
+                "command": "bash ./build.sh release hen",
+                "problemMatcher": {
+                    "base": "$gcc",
+                    "fileLocation": ["relative", "${workspaceFolder}"]
+                },
+                "group": "build"
+            },
+            {
                 "label": "Clean",
                 "type": "shell",
                 "command": "bash ./build.sh clean",

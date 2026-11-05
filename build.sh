@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Builds Silinium without make / SDK samples by calling the PS3 toolchain directly.
-# Usage: ./build.sh [debug|release|clean|format]
+# Usage: ./build.sh [debug|release|clean|format] [hen]
+#   hen: also sign bin/<config>/Silinium_hen.sprx for PS3HEN with scetool
 #
 # Environment:
 #   SCE_PS3_ROOT      PS3 SDK root (required)
 #   PS3_HOST_DIR      toolchain dir, default: $SCE_PS3_ROOT/host-win32 (Windows) or host-linux
 #   PS3_EXE_SUFFIX    tool suffix, default: .exe on Windows / when using host-win32
 #   PS3_TOOL_WRAPPER  prefix for every tool call, e.g. "wine" to run host-win32 tools on Linux
+#   SCETOOL           scetool binary for the hen build, default: scetool (keys in ./data or $PS3)
 
 set -euo pipefail
 
 CONFIG="${1:-debug}"
+TARGET="${2:-}"
 NAME="Silinium"
 SRC_DIR="src"
 OBJ_DIR="objs/$CONFIG"
@@ -31,7 +34,18 @@ if [ "$CONFIG" = "format" ]; then
 fi
 
 if [ "$CONFIG" != "debug" ] && [ "$CONFIG" != "release" ]; then
-    echo "usage: $0 [debug|release|clean|format]" >&2
+    echo "usage: $0 [debug|release|clean|format] [hen]" >&2
+    exit 1
+fi
+
+if [ -n "$TARGET" ] && [ "$TARGET" != "hen" ]; then
+    echo "usage: $0 [debug|release] [hen]" >&2
+    exit 1
+fi
+
+SCETOOL="${SCETOOL:-scetool}"
+if [ "$TARGET" = "hen" ] && ! command -v "$SCETOOL" >/dev/null; then
+    echo "error: scetool not found ($SCETOOL), set SCETOOL" >&2
     exit 1
 fi
 
@@ -94,5 +108,20 @@ fi
 
 echo "# signing $SPRX"
 $WRAP "$MAKE_FSELF" "$PRX" "$SPRX"
-
 echo "# done: $SPRX"
+
+if [ "$TARGET" = "hen" ]; then
+    HEN_SPRX="$OUT_DIR/${NAME}_hen.sprx"
+    echo "# signing $HEN_SPRX"
+    rm -f "$HEN_SPRX"
+    # Same container as the HEN build of InfinityOps.sprx: retail APP SELF, key revision 4.
+    "$SCETOOL" --sce-type=SELF --compress-data=TRUE --skip-sections=FALSE --self-add-shdrs=TRUE \
+        --key-revision=04 --self-auth-id=1010000001000003 --self-vendor-id=01000002 --self-type=APP \
+        --self-app-version=0001000000000000 --encrypt "$PRX" "$HEN_SPRX"
+    # scetool can exit 0 without writing anything, e.g. when its keys are missing.
+    if [ ! -f "$HEN_SPRX" ]; then
+        echo "error: scetool did not write $HEN_SPRX (keys missing?)" >&2
+        exit 1
+    fi
+    echo "# done: $HEN_SPRX"
+fi
