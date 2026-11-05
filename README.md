@@ -80,12 +80,10 @@ VS Code is used for this project, you can also use Visual Studio if you prefer b
 For a better experience with VS Code and use the tasks:
 
 * Install C/C++ Extension.
-* Git Bash or MSYS2 (unix tools, `bash`, `find`, `curl`).
-* Change `consoleIp` in `Silinium.code-workspace` by yours, and be sure you have a ftp server running on console (e.g webMAN).
+* Git Bash or MSYS2 (unix tools, `bash`) on Windows.
+* clang-format for the `Format All` task.
 
-You can now open `Silinium.code-workspace` in VS Code and press `Ctrl+Shift+B` to build (Debug), or run the other tasks (`Build Release`, `Clean`, `Deploy Debug/Release`, `[GSC] Deploy scripts`) via *Terminal → Run Task*.
-
-Deployments tasks will just create or replace any existing file by FTP commands.
+You can now open `Silinium.code-workspace` in VS Code and press `Ctrl+Shift+B` to pick a task: `Build Debug/Release`, `Build Debug/Release (HEN)`, `Clean` or `Format All` (formats all sources in `src/` with clang-format).
 
 The outputs made with a custom `printf` can be seen in Target Manager on "Console Output" menu.
 
