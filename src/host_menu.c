@@ -38,10 +38,10 @@ bool host_menu_lobby_parties_both_active() {
 }
 
 // With both parties active LobbyParty ("Lobby") is shown unless the player switched to
-// GameParty ("Party") with Triangle. The choice names a struct, not the larger party, so
-// the list doesn't change when members join one party before the other. In matchmaking we
-// can host the private party while being a client of the lobby, so the shown party may
-// not be one we host.
+// GameParty ("Party") with Triangle (labels verified in game). The choice names a struct,
+// not the larger party, so the list doesn't change when members join one party before the
+// other. In matchmaking we can host the private party while being a client of the lobby,
+// so the shown party may not be one we host.
 int host_menu_lobby_view_party() {
     bool lobby = host_menu_party_active(T5_LobbyParty);
     bool game = host_menu_party_active(T5_GameParty);

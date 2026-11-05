@@ -136,8 +136,10 @@
 #define T5_CgClientPrestigeOffset 0x5DB34 // int, clientinfo + 0x3C, from clientState + 0x68 (gclient + 0x2830)
 #define T5_CgClientNumOffset 0x0 // cg_t.clientNum, the local player's server client slot. 0x116D30 compares it in each of the
                                  // 4 local cg_t (stride 0x6B100), 0x155F7C indexes the 0x5D0 client info array with it
-#define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified)
-#define T5_GameParty 0xD5A090 // second party struct Party_IsHost checks (id 1), set up at 0x1E8B38
+#define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified),
+                               // the pregame lobby (verified in game)
+#define T5_GameParty 0xD5A090 // second party struct Party_IsHost checks (id 1), set up at 0x1E8B38, the private party
+                              // (verified in game)
 #define T5_PartyHostIndexOffset 0x5668
 #define T5_PartyActiveOffset 0x5714
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
