@@ -114,6 +114,8 @@ static void remove_party_member(int party, int member, const char* reason) {
 // back.
 static char bannedNames[HOST_MENU_MAX_BANS][sizeof(hostMenu.lobbyKickName)];
 static int bannedNext;
+// Set when Party_BanName did not add a name, cleared by Unban All.
+static bool banRestoreDisabled;
 
 static void remember_ban(const char* name) {
     for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
@@ -145,10 +147,12 @@ int host_menu_ban_count() {
 static int free_ban_entries() { return HOST_MENU_MAX_BANS - host_menu_ban_count(); }
 
 // Clears the menu's remembered bans first, so restore_bans has nothing to put back, then
-// the game's list (menu and banClient bans), zeroed like the party reset's memset does.
+// the game's list (menu and banClient bans), zeroed like the party reset's memset does,
+// and lets restoring start again after it stopped.
 static void unban_all() {
     memset(bannedNames, 0, sizeof(bannedNames));
     bannedNext = 0;
+    banRestoreDisabled = false;
     memset((void*)(T5_LobbyParty + T5_PartyBanListOffset), 0,
            HOST_MENU_MAX_BANS * T5_PartyBanEntrySize);
     printf(T5INFO "Unban All: cleared the ban list.");
@@ -156,8 +160,7 @@ static void unban_all() {
 
 static void restore_bans() {
     static bool logged;
-    static bool disabled;
-    if (disabled ||
+    if (banRestoreDisabled ||
         (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty))) {
         return;
     }
@@ -169,7 +172,7 @@ static void restore_bans() {
         Party_BanName(bannedNames[i]);
         if (!Party_IsBanned(bannedNames[i])) {
             // Retrying every frame would not change anything.
-            disabled = true;
+            banRestoreDisabled = true;
             printf(T5WARNING
                    "Party_BanName did not add %s to the ban list, stopped restoring "
                    "the host menu bans.",
