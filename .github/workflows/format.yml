@@ -3,8 +3,19 @@ name: format
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.clang-format'
+      - '.github/workflows/format.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.clang-format'
+      - '.github/workflows/format.yml'
+
+permissions:
+  contents: read
 
 jobs:
   format:
