@@ -99,6 +99,8 @@ bool host_menu_lobby_parties_both_active();
 int host_menu_lobby_view_party();
 // That party if the local player hosts it, else 0.
 int host_menu_lobby_party();
+// Names in the game's ban list (menu and banClient bans).
+int host_menu_ban_count();
 // Called once per server script load, after the scripts are compiled.
 void host_menu_on_server_scripts_loaded();
 // Write into the local stats.

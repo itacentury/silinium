@@ -589,6 +589,13 @@ static bool can_switch_lists(int m, bool inGame) {
     return m == HOST_MENU_KICK && !inGame && host_menu_lobby_parties_both_active();
 }
 
+// Square clears the ban list, only in the list itself and only while it holds a name. Not
+// limited to the host: in game the list is still the one the lobby checks afterwards.
+static bool can_unban_all(int m, bool inGame) {
+    return m == HOST_MENU_KICK && (inGame || host_menu_lobby_view_party()) &&
+           host_menu_ban_count() > 0;
+}
+
 void host_menu_ui_handle_input() {
     uint16_t digital1 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL1];
     uint16_t digital2 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL2];
@@ -638,6 +645,11 @@ void host_menu_ui_handle_input() {
     } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
         if (can_switch_lists(m, inGame)) {
             hostMenu.lobbyShowGameParty ^= 1;
+        }
+        sys_timer_usleep(200000);
+    } else if (digital2 & CELL_PAD_CTRL_SQUARE) {
+        if (can_unban_all(m, inGame)) {
+            hostMenu.unbanAllPending = true;
         }
         sys_timer_usleep(200000);
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
@@ -1064,18 +1076,26 @@ void host_menu_ui_draw() {
     if (players) {
         const char* switchHint =
             can_switch_lists(m, inGame) ? " | \x04 - Switch List" : "";
-        char controls[96];
+        // \x03 as the Square glyph is inferred from \x01 Cross, \x02 Circle and \x04
+        // Triangle (unverified).
+        char unbanHint[32] = "";
+        if (can_unban_all(m, inGame)) {
+            snprintf(unbanHint, sizeof(unbanHint), " | \x03 - Unban All (%i)",
+                     host_menu_ban_count());
+        }
+        char controls[128];
         if (notHost) {
             snprintf(controls, sizeof(controls), "\x02 - Back");
         } else if (viewOnly) {
-            snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s | \x02 - Back",
-                     switchHint);
+            snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s%s | \x02 - Back",
+                     switchHint, unbanHint);
         } else if (m == HOST_MENU_PLAYER) {
             snprintf(controls, sizeof(controls),
                      "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back");
         } else {
             snprintf(controls, sizeof(controls),
-                     "\x14\x15 - Scroll | \x01 - Select%s | \x02 - Back", switchHint);
+                     "\x14\x15 - Scroll | \x01 - Select%s%s | \x02 - Back", switchHint,
+                     unbanHint);
         }
         draw_text_box(controls, 10, 20, 0.5f);
         draw_session_info(inGame);

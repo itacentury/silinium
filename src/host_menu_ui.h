@@ -75,6 +75,7 @@ typedef struct HostMenu {
     int lobbyKickParty;           // party the queued lobby kick was chosen in
     char lobbyKickName[32];       // name of the member it was chosen for, as long as
                                   // Party_BanName copies
+    bool unbanAllPending;     // set by Square in the player list, run by Menu_PaintAll
     bool lobbyShowGameParty;  // with both parties active, the player list shows GameParty
                               // ("Party") instead of LobbyParty ("Lobby")
 } HostMenu;

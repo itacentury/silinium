@@ -132,14 +132,26 @@ static void remember_ban(const char* name) {
 // go into free entries, so if it replaces, a restored name never pushes out the next one
 // (or a banClient entry) every frame; if it adds nothing, the check after the call
 // catches it.
-static int free_ban_entries() {
+int host_menu_ban_count() {
     int count = 0;
     for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
-        if (!PARTY_BAN_NAME(i)[0]) {
+        if (PARTY_BAN_NAME(i)[0]) {
             count++;
         }
     }
     return count;
+}
+
+static int free_ban_entries() { return HOST_MENU_MAX_BANS - host_menu_ban_count(); }
+
+// Clears the menu's remembered bans first, so restore_bans has nothing to put back, then
+// the game's list (menu and banClient bans), zeroed like the party reset's memset does.
+static void unban_all() {
+    memset(bannedNames, 0, sizeof(bannedNames));
+    bannedNext = 0;
+    memset((void*)(T5_LobbyParty + T5_PartyBanListOffset), 0,
+           HOST_MENU_MAX_BANS * T5_PartyBanEntrySize);
+    printf(T5INFO "Unban All: cleared the ban list.");
 }
 
 static void restore_bans() {
@@ -422,6 +434,13 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     Menu_PaintAll_Trampoline(a1, uiContext);
     if (!uiContext) {
         return;
+    }
+
+    // The ban list is party state, so it's cleared on this thread. Before restore_bans,
+    // so nothing comes back in the same frame.
+    if (hostMenu.unbanAllPending) {
+        hostMenu.unbanAllPending = false;
+        unban_all();
     }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
