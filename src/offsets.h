@@ -271,6 +271,10 @@
 #define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C, 0 while no server runs (zeroed at 0x3EAA0C on shutdown)
 #define T5_SvMaxClients 0x14B4A88 // dvar_t *, SV_FindClientByAddress (0x3EEAF8) loops the clients up to it (name unverified)
 #define T5_ClientSize 0x651C8
+// int at client_t + 0: SV_DropClient stores 1 (0x3E4224) or 0 (0x3E45C4), SV_GetClientStatInt reads stats only
+// above 1. The names of the individual states above 1 are unverified.
+#define T5_ClientStateOffset 0x0
+#define T5_ClientStateConnected 2 // lowest state of a connected client
 #define T5_ClientStatsOffset 0x5A4F8 // 0x9968 bytes, same layout as T5_Stats_Base, no checksum over the data
 #define T5_ClientStatsMaskOffset 0x651B8 // uint64_t, received chunks
 #define T5_ClientStatsMaskComplete 0x1FFFFFFFFull // 33 chunks, what SV_GetClientStatInt (0x3E2700) compares with

@@ -8,6 +8,7 @@
 #include "t5.h"
 
 #define CLIENT(i) (*(int*)T5_SvsClients + (i) * T5_ClientSize)
+#define CLIENT_STATE(client) (*(int*)((client) + T5_ClientStateOffset))
 #define CLIENT_STATS(client) ((uint8_t*)((client) + T5_ClientStatsOffset))
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
 
@@ -91,10 +92,11 @@ static void format_client_name(char* out, int size, int clientNum) {
     snprintf(out, size, "Client %d", clientNum);
 }
 
-// A free slot keeps the stats and mask of its last client until SV_DirectConnect clears
-// the whole client_t (memset at 0x3E66D4).
+// A free or dropped slot keeps the stats and mask of its last client until
+// SV_DirectConnect clears the whole client_t (memset at 0x3E66D4), so only the server
+// state tells whether a player is still there. It is the same gate getdstat uses.
 static bool client_in_use(int clientNum) {
-    return CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(clientNum);
+    return CLIENT_STATE(CLIENT(clientNum)) >= T5_ClientStateConnected;
 }
 
 static void check_client_classes(int clientNum, int client) {
@@ -129,7 +131,8 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
 
     for (int i = 0; i < count; i++) {
-        // The name can still be empty when the mask just became complete.
+        // When the state is set relative to the first stats packet is unverified, but a
+        // mask that just became complete belongs to a live sender found by its address.
         bool isComplete = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
         if (isComplete && (!complete[i] || client_in_use(i))) {
             check_client_classes(i, CLIENT(i));
