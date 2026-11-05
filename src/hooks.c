@@ -23,10 +23,11 @@ char* Scr_LoadRawFile_FastFile_Hook(scriptInstance_t inst, const char* filename,
         get_or_create_mod_path(modPath);
         modPathResolved = true;
 
-        if (*modPath)
+        if (*modPath) {
             printf(T5INFO "Active mod: '%s'.", loader.currentModName);
-        else
+        } else {
             printf(T5INFO "No mod active.");
+        }
     }
 
     // Any file of the active mod with the same path as the game file replaces the
@@ -55,13 +56,16 @@ char* Scr_LoadRawFile_FastFile_Hook(scriptInstance_t inst, const char* filename,
                         return buffer;
                     }
                     printf(T5ERROR "Failed to read '%s' file.", filePath);
-                } else
+                } else {
                     printf(T5ERROR "Cannot open '%s' file.", filePath);
-            } else
+                }
+            } else {
                 printf(T5ERROR "Cannot allocate %i bytes for '%s'.", fileSize + 1,
                        extFilename);
-        } else if (fileSize == 0)
+            }
+        } else if (fileSize == 0) {
             printf(T5WARNING "Ignoring empty '%s' file.", filePath);
+        }
     }
 
     return Scr_LoadRawFile_FastFile_Trampoline(inst, filename, extFilename, codePos,
@@ -74,7 +78,9 @@ void Scr_GetChecksum_Hook(scrChecksum_t* checksum, scriptInstance_t inst) {
     Scr_GetChecksum_Trampoline(checksum, inst);
 
     // Runs once per load right after the compile, before the VM sends any notify.
-    if (inst == SCRIPTINSTANCE_SERVER) host_menu_on_server_scripts_loaded();
+    if (inst == SCRIPTINSTANCE_SERVER) {
+        host_menu_on_server_scripts_loaded();
+    }
 
     // modPath keeps the last resolved mod until the next load re-resolves it, so every
     // call of this load (any instance, any count) sees the same value. If a load aborts
@@ -83,7 +89,9 @@ void Scr_GetChecksum_Hook(scrChecksum_t* checksum, scriptInstance_t inst) {
     modPathResolved = false;  // re-resolve on the next script load
 
     // Only server checksums are verified, and vanilla scripts already have the right one.
-    if (inst != SCRIPTINSTANCE_SERVER || !modActive) return;
+    if (inst != SCRIPTINSTANCE_SERVER || !modActive) {
+        return;
+    }
 
     // Report the checksum of the unmodified scripts for the current map/gametype.
     dvar_s* mapname = Dvar_FindVar("mapname");
@@ -100,9 +108,10 @@ void Scr_GetChecksum_Hook(scrChecksum_t* checksum, scriptInstance_t inst) {
             // loading the map.
             checksum->substract = 0;
             printf(T5INFO "Checksum patched (0x%08X)", checksum->checksum);
-        } else
+        } else {
             printf(T5WARNING "No checksum entry for '%s' / '%s'.",
                    mapname->current.string, gametype->current.string);
+        }
     }
 }
 

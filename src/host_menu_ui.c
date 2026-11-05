@@ -81,9 +81,12 @@ static void* arrowMaterial;
 typedef enum TextAlign { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT } TextAlign;
 
 static float get_aligned_x(float x, float scale, const char* text, TextAlign align) {
-    if (align == ALIGN_CENTER)
+    if (align == ALIGN_CENTER) {
         return x - (R_TextWidth(text, 0x7FFFFFFF, font) / 2) * scale;
-    if (align == ALIGN_RIGHT) return x - R_TextWidth(text, 0x7FFFFFFF, font) * scale;
+    }
+    if (align == ALIGN_RIGHT) {
+        return x - R_TextWidth(text, 0x7FFFFFFF, font) * scale;
+    }
     return x;
 }
 
@@ -126,9 +129,14 @@ static const char* dvar_string(const char* name) {
 // Unknown names are shown as they are.
 static const char* lookup_name(const DisplayName* names, int count,
                                const char* internal) {
-    if (!*internal) return "-";
-    for (int i = 0; i < count; i++)
-        if (!strcmp(names[i].internal, internal)) return names[i].display;
+    if (!*internal) {
+        return "-";
+    }
+    for (int i = 0; i < count; i++) {
+        if (!strcmp(names[i].internal, internal)) {
+            return names[i].display;
+        }
+    }
     return internal;
 }
 
@@ -136,8 +144,12 @@ static const char* lookup_name(const DisplayName* names, int count,
 static void draw_session_info(bool inGame) {
     const char* map = inGame ? "" : dvar_string("ui_mapname");
     const char* gametype = inGame ? "" : dvar_string("ui_gametype");
-    if (!*map) map = dvar_string("mapname");
-    if (!*gametype) gametype = dvar_string("g_gametype");
+    if (!*map) {
+        map = dvar_string("mapname");
+    }
+    if (!*gametype) {
+        gametype = dvar_string("g_gametype");
+    }
 
     const char* host = dvar_string("party_hostname");
     char lines[3][64];
@@ -149,7 +161,9 @@ static void draw_session_info(bool inGame) {
                          gametype));
 
     float step = R_TextHeight(font) * 0.5f + 10;
-    for (int i = 0; i < 3; i++) draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
+    for (int i = 0; i < 3; i++) {
+        draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -159,28 +173,45 @@ static void draw_session_info(bool inGame) {
 void host_menu_set_party_dvars(bool connectToOthers, int minPlayers, int pregameTimer,
                                int connectTimeout, int maxTeamDiff) {
     dvar_s* dvar;
-    if ((dvar = Dvar_FindVar("party_connectToOthers")))
+    if ((dvar = Dvar_FindVar("party_connectToOthers"))) {
         dvar->current.enabled = connectToOthers;
-    if ((dvar = Dvar_FindVar("party_minplayers"))) dvar->current.integer = minPlayers;
-    if ((dvar = Dvar_FindVar("party_pregamestarttimerlength")))
+    }
+    if ((dvar = Dvar_FindVar("party_minplayers"))) {
+        dvar->current.integer = minPlayers;
+    }
+    if ((dvar = Dvar_FindVar("party_pregamestarttimerlength"))) {
         dvar->current.integer = pregameTimer;
-    if ((dvar = Dvar_FindVar("party_connectTimeout")))
+    }
+    if ((dvar = Dvar_FindVar("party_connectTimeout"))) {
         dvar->current.integer = connectTimeout;
-    if ((dvar = Dvar_FindVar("party_maxTeamDiff"))) dvar->current.integer = maxTeamDiff;
+    }
+    if ((dvar = Dvar_FindVar("party_maxTeamDiff"))) {
+        dvar->current.integer = maxTeamDiff;
+    }
 }
 
 void host_menu_set_bounce_dvars(bool depatched) {
     dvar_s* slowdown = *(dvar_s**)T5_DvarPtr_BBA19C;
     dvar_s* fallHeight = *(dvar_s**)T5_DvarPtr_BBA1A4;
 
-    if (slowdown) slowdown->current.enabled = !depatched;
-    if (fallHeight) fallHeight->current.value = depatched ? 9999.0f : 300.0f;
+    if (slowdown) {
+        slowdown->current.enabled = !depatched;
+    }
+    if (fallHeight) {
+        fallHeight->current.value = depatched ? 9999.0f : 300.0f;
+    }
 }
 
 int host_menu_get_scorelimit() {
-    if (hostMenu.maxPlayers < 5) return 3000;
-    if (hostMenu.maxPlayers < 7) return 5000;
-    if (hostMenu.maxPlayers < 13) return 7500;
+    if (hostMenu.maxPlayers < 5) {
+        return 3000;
+    }
+    if (hostMenu.maxPlayers < 7) {
+        return 5000;
+    }
+    if (hostMenu.maxPlayers < 13) {
+        return 7500;
+    }
     return 10000;
 }
 
@@ -188,18 +219,20 @@ static void nothing() {}
 
 static void force_host() {
     static const InstructionPatch patch = {T5_ForceHost_Patch, 0x4182FD0C, PPC_NOP};
-    if (hostMenu.forceHost)
+    if (hostMenu.forceHost) {
         host_menu_set_party_dvars(false, hostMenu.playersToStart, 1, 1, 9);
-    else
+    } else {
         host_menu_set_party_dvars(true, 4, 10, 8000, 1);
+    }
     apply_instruction_patch(&patch, hostMenu.forceHost);
 }
 
 // The hook only forces values when the game writes them, so apply a new player count
 // right away.
 static void set_players_to_start() {
-    if (hostMenu.forceHost)
+    if (hostMenu.forceHost) {
         host_menu_set_party_dvars(false, hostMenu.playersToStart, 1, 1, 9);
+    }
 }
 
 // Appends "party_maxplayers N" to every playlist rule string.
@@ -243,8 +276,9 @@ static void depatch_bounces() {
         {T5_Bounce_Patch1, 0x41820084, PPC_NOP},
         {T5_Bounce_Patch2, 0x409A0018, PPC_NOP},
     };
-    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++)
+    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++) {
         apply_instruction_patch(&patches[i], hostMenu.depatchBounces);
+    }
     host_menu_set_bounce_dvars(hostMenu.depatchBounces);
 }
 
@@ -278,8 +312,9 @@ static const InstructionPatch prestigeUnlockPatches[] = {
 // in the stats and stays.
 static void prestige_unlocks() {
     for (int i = 0; i < sizeof(prestigeUnlockPatches) / sizeof(*prestigeUnlockPatches);
-         i++)
+         i++) {
         apply_instruction_patch(&prestigeUnlockPatches[i], hostMenu.prestigeUnlocks);
+    }
 }
 
 static void select_map() {
@@ -321,18 +356,23 @@ void host_menu_hide_dlc_maps() {
 static void disable_dlc() {
     for (int i = 0; i < DLC_DVAR_COUNT; i++) {
         dvar_s* dvar = Dvar_FindVar(dlcDvars[i]);
-        if (hostMenu.disableDlc)
+        if (hostMenu.disableDlc) {
             dlcOriginal[i] = dvar && dvar->current.enabled;
-        else if (dvar)
+        } else if (dvar) {
             dvar->current.enabled = dlcOriginal[i];
+        }
     }
-    if (hostMenu.disableDlc) host_menu_hide_dlc_maps();
+    if (hostMenu.disableDlc) {
+        host_menu_hide_dlc_maps();
+    }
 }
 
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
 
 static void change_name() {
-    if (!hostMenu.originalName[0]) strcpy(hostMenu.originalName, (char*)T5_PlayerName2);
+    if (!hostMenu.originalName[0]) {
+        strcpy(hostMenu.originalName, (char*)T5_PlayerName2);
+    }
     hostMenu.changeNamePending = true;
 }
 
@@ -351,12 +391,16 @@ static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     bool inGame = Dvar_GetBool("cl_ingame");
     if (inGame) {
-        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) return;
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) {
+            return;
+        }
         printf(T5INFO "Player menu: slot %i (%s), local client %i (%s).", member,
                CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
     } else {
         int party = host_menu_lobby_party();
-        if (!party || !PARTY_MEMBER_USED(party, member)) return;
+        if (!party || !PARTY_MEMBER_USED(party, member)) {
+            return;
+        }
     }
     hostMenu.cursor[HOST_MENU_PLAYER] = 0;
     hostMenu.playerModalInGame = inGame;
@@ -367,8 +411,9 @@ static void open_player_modal() {
 // survive the switch.
 static void close_stale_player_modal() {
     if (hostMenu.current == HOST_MENU_PLAYER &&
-        Dvar_GetBool("cl_ingame") != hostMenu.playerModalInGame)
+        Dvar_GetBool("cl_ingame") != hostMenu.playerModalInGame) {
         hostMenu.current = HOST_MENU_KICK;
+    }
 }
 
 // The join handler (0x212FE8) skips the ban check for party id 1 (GameParty), so a ban
@@ -380,7 +425,9 @@ static bool ban_allowed(bool inGame) {
 static void queue_kick(bool ban) {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     if (Dvar_GetBool("cl_ingame")) {
-        if (!CG_CLIENTINFO_BASE || member == CG_CLIENTNUM) return;
+        if (!CG_CLIENTINFO_BASE || member == CG_CLIENTNUM) {
+            return;
+        }
         // Slot and ban flag share one value, so the game thread never sees one without
         // the other.
         hostMenu.kickClient = (signed char)(member | (ban ? HOST_MENU_KICK_BAN : 0));
@@ -390,9 +437,12 @@ static void queue_kick(bool ban) {
     // Remember who was picked, so the kick doesn't hit whoever is in the slot by the time
     // it runs.
     int party = host_menu_lobby_party();
-    if (!party || hostMenu.lobbyKickMember != -1 || !PARTY_MEMBER_USED(party, member))
+    if (!party || hostMenu.lobbyKickMember != -1 || !PARTY_MEMBER_USED(party, member)) {
         return;
-    if (ban && !ban_allowed(false)) return;
+    }
+    if (ban && !ban_allowed(false)) {
+        return;
+    }
     hostMenu.lobbyKickParty = party;
     strncpy(hostMenu.lobbyKickName, PARTY_MEMBER_NAME(party, member),
             sizeof(hostMenu.lobbyKickName) - 1);
@@ -421,11 +471,14 @@ static void ban_selected() {
 static void keyboard_callback(int localClientNum, const char16* text, int length) {
     char name[17];
     int i;
-    for (i = 0; i < length && i < (int)sizeof(name) - 1 && text[i]; i++)
+    for (i = 0; i < length && i < (int)sizeof(name) - 1 && text[i]; i++) {
         name[i] = text[i] > 0x7F ? '?' : (char)text[i];
+    }
     name[i] = 0;
 
-    if (!*name) return;
+    if (!*name) {
+        return;
+    }
 
     strcpy((char*)T5_PlayerName1, name);
     strcpy((char*)T5_PlayerName2, name);
@@ -459,8 +512,11 @@ static bool option_visible(const HostMenuOption* option, bool inGame) {
 
 static int visible_option_count(int m, bool inGame) {
     int count = 0;
-    for (int i = 0; i < hostMenu.optionCount[m]; i++)
-        if (option_visible(&hostMenu.options[m][i], inGame)) count++;
+    for (int i = 0; i < hostMenu.optionCount[m]; i++) {
+        if (option_visible(&hostMenu.options[m][i], inGame)) {
+            count++;
+        }
+    }
     return count;
 }
 
@@ -468,11 +524,14 @@ static int visible_option_count(int m, bool inGame) {
 static void move_cursor(int m, int step, bool inGame) {
     for (int n = 0; n < hostMenu.optionCount[m]; n++) {
         hostMenu.cursor[m] += step;
-        if (hostMenu.cursor[m] < 0)
+        if (hostMenu.cursor[m] < 0) {
             hostMenu.cursor[m] = hostMenu.optionCount[m] - 1;
-        else if (hostMenu.cursor[m] > hostMenu.optionCount[m] - 1)
+        } else if (hostMenu.cursor[m] > hostMenu.optionCount[m] - 1) {
             hostMenu.cursor[m] = 0;
-        if (option_visible(&hostMenu.options[m][hostMenu.cursor[m]], inGame)) return;
+        }
+        if (option_visible(&hostMenu.options[m][hostMenu.cursor[m]], inGame)) {
+            return;
+        }
     }
 }
 
@@ -522,9 +581,10 @@ void host_menu_ui_init() {
 
     hostMenu.title[HOST_MENU_KICK] = "Players";
     hostMenu.parent[HOST_MENU_KICK] = HOST_MENU_MAIN;
-    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         add_option(HOST_MENU_KICK, "", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                    open_player_modal);  // names are drawn live
+    }
 
     hostMenu.title[HOST_MENU_PLAYER] =
         "Player";  // the modal shows the player's name instead
@@ -570,7 +630,9 @@ void host_menu_ui_handle_input() {
         sys_timer_usleep(150000);
     } else if (digital2 & CELL_PAD_CTRL_CROSS) {
         if (option_visible(option, inGame)) {
-            if (option->type == HOST_MENU_TYPE_BOOL) *(bool*)option->value ^= 1;
+            if (option->type == HOST_MENU_TYPE_BOOL) {
+                *(bool*)option->value ^= 1;
+            }
             option->func();
         }
         sys_timer_usleep(200000);
@@ -585,13 +647,17 @@ void host_menu_ui_handle_input() {
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
         if (option->type == HOST_MENU_TYPE_INT) {
             signed char* value = (signed char*)option->value;
-            if (--*value < option->min) *value = option->max;
+            if (--*value < option->min) {
+                *value = option->max;
+            }
         }
         sys_timer_usleep(125000);
     } else if (digital1 & CELL_PAD_CTRL_RIGHT) {
         if (option->type == HOST_MENU_TYPE_INT) {
             signed char* value = (signed char*)option->value;
-            if (++*value > option->max) *value = option->min;
+            if (++*value > option->max) {
+                *value = option->min;
+            }
         }
         sys_timer_usleep(125000);
     }
@@ -603,10 +669,11 @@ void host_menu_ui_handle_input() {
 
 static const char* player_name(int party, bool inGame, int i) {
     const char* name = "Not In Game";
-    if (inGame && CG_CLIENTINFO_BASE)
+    if (inGame && CG_CLIENTINFO_BASE) {
         name = CG_CLIENT_NAME(i);
-    else if (party)
+    } else if (party) {
         name = PARTY_MEMBER_USED(party, i) ? PARTY_MEMBER_NAME(party, i) : "";
+    }
     return *name ? name : "No Client Connected";
 }
 
@@ -615,7 +682,9 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
     int row = 0;
     for (int i = 0; i < hostMenu.optionCount[m]; i++) {
         HostMenuOption* option = &hostMenu.options[m][i];
-        if (!option_visible(option, inGame)) continue;
+        if (!option_visible(option, inGame)) {
+            continue;
+        }
 
         float rowY = row * 16.5f + y;
         draw_text(option->text, x, rowY, 0.5f, hostMenu.cursor[m] == i ? accent : white);
@@ -633,18 +702,20 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
             case HOST_MENU_TYPE_BOOL:
                 // Centered like the submenu arrow, full when on, only the border when
                 // off.
-                if (*(bool*)option->value)
+                if (*(bool*)option->value) {
                     draw_shader(right - 10, rowY - 13.5f, 10, 10, accent, whiteMaterial);
-                else
+                } else {
                     draw_outline(right - 10, rowY - 13.5f, 10, 10, 2, accent);
+                }
                 break;
             default:
                 break;
         }
 
-        if (valueText)
+        if (valueText) {
             draw_text(valueText, get_aligned_x(right, 0.5f, valueText, ALIGN_RIGHT), rowY,
                       0.5f, white);
+        }
         row++;
     }
 }
@@ -657,7 +728,9 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     float height = visible_option_count(HOST_MENU_PLAYER, inGame) * 16.5f + 40.0f;
     float rowY = member * 16.5f + 258;
     float y = rowY + 6;
-    if (y + height > listBottom) y = rowY - 16 - height;
+    if (y + height > listBottom) {
+        y = rowY - 16 - height;
+    }
 
     draw_shader(560, y, 180, height, modalBackground, whiteMaterial);
     draw_outline(560, y, 180, height, 2, accent);
@@ -666,13 +739,20 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 }
 
 void host_menu_ui_draw() {
-    if (!font) font = R_RegisterFont(FONT, 0);
-    if (!whiteMaterial) whiteMaterial = Material_RegisterHandle("white", 0);
-    if (!arrowMaterial) arrowMaterial = Material_RegisterHandle("ui_arrow_right", 0);
+    if (!font) {
+        font = R_RegisterFont(FONT, 0);
+    }
+    if (!whiteMaterial) {
+        whiteMaterial = Material_RegisterHandle("white", 0);
+    }
+    if (!arrowMaterial) {
+        arrowMaterial = Material_RegisterHandle("ui_arrow_right", 0);
+    }
 
     if (!hostMenu.open) {
-        if (hostMenu.showControls)
+        if (hostMenu.showControls) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
+        }
         return;
     }
 
@@ -696,24 +776,28 @@ void host_menu_ui_draw() {
               get_aligned_x(650, 0.45f, hostMenu.title[boxMenu], ALIGN_CENTER), 238,
               0.45f, accent);
     if (players) {
-        if (notHost)
+        if (notHost) {
             draw_text_box("\x02 - Back", 10, 20, 0.5f);
-        else if (m == HOST_MENU_PLAYER)
+        } else if (m == HOST_MENU_PLAYER) {
             draw_text_box(
                 "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back", 10, 20,
                 0.5f);
-        else
+        } else {
             draw_text_box("\x14\x15 - Scroll | \x01 - Select | \x02 - Back", 10, 20,
                           0.5f);
+        }
         draw_session_info(inGame);
         if (notHost) {
             draw_text("Only the party host can manage players", 510, 258, 0.5f, white);
             return;
         }
-        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
             draw_text(player_name(party, inGame, i), 510, i * 16.5f + 258, 0.5f,
                       hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white);
-        if (m == HOST_MENU_PLAYER) draw_player_modal(party, inGame, 200 + height);
+        }
+        if (m == HOST_MENU_PLAYER) {
+            draw_player_modal(party, inGame, 200 + height);
+        }
         return;
     }
 

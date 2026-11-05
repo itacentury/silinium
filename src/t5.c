@@ -30,10 +30,15 @@ int init_hooks() {
 
     // Create and enable hooks
     int res;
-    if ((res = cs_hook_install(Scr_LoadRawFile_FastFile, CS_HOOK_TYPE_CTR)) < 0)
+    if ((res = cs_hook_install(Scr_LoadRawFile_FastFile, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
-    if ((res = cs_hook_install(Scr_GetChecksum, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(Scr_GetFunction, CS_HOOK_TYPE_CTR)) < 0) return res;
+    }
+    if ((res = cs_hook_install(Scr_GetChecksum, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(Scr_GetFunction, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
 
     return 0;
 }
@@ -52,8 +57,11 @@ int apply_patches() {
     };
 
     int res;
-    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++)
-        if ((res = apply_instruction_patch(&patches[i], true)) < 0) return res;
+    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++) {
+        if ((res = apply_instruction_patch(&patches[i], true)) < 0) {
+            return res;
+        }
+    }
 
     return 0;
 }
@@ -90,7 +98,9 @@ void get_or_create_mod_path(char* path) {
     CellFsDirent ent;
     read = sizeof(CellFsDirent);
     while (!cellFsReaddir(fd, &ent, &read)) {
-        if (!read) break;
+        if (!read) {
+            break;
+        }
 
         // Only names ending in ".mod" count, so e.g. "welcome.mod.off" disables a mod.
         size_t len = strlen(ent.d_name);
@@ -106,11 +116,11 @@ void get_or_create_mod_path(char* path) {
 
 int init_game() {
     // Current process is Black Ops MP 1.13 MP or ZM?
-    if (*(int*)(0x1002C) == 0xB5A4A0)
+    if (*(int*)(0x1002C) == 0xB5A4A0) {
         isMultiplayer = true;
-    else if (*(int*)(0x1002C) == 0xA56728)
+    } else if (*(int*)(0x1002C) == 0xA56728) {
         isMultiplayer = false;
-    else {
+    } else {
         printf(T5ERROR "The process is not Black Ops 1.13 MP/ZM.");
         return -1;
     }
@@ -129,10 +139,11 @@ int init_game() {
 
     // The Host menu only exists for MP, the loader keeps running if it fails.
     if (isMultiplayer) {
-        if ((err = host_menu_init()) < 0)
+        if ((err = host_menu_init()) < 0) {
             printf(T5ERROR "Host menu init failed (0x%08X).", err);
-        else
+        } else {
             printf(T5INFO "Host menu ready.");
+        }
     }
 
     // Show a warning on boot in case no mod is set

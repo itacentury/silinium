@@ -11,14 +11,26 @@ Silinium by Century is a PS3 module for Black Ops 1 that allows you to load cust
 If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which calls the toolchain directly (Git Bash on Windows, bash on Linux):
 
 ```
-./build.sh release   # or: debug (default), clean
+./build.sh release       # or: debug (default), clean, format
+./build.sh release hen   # also sign Silinium_hen.sprx for PS3HEN
 ```
 
 `SCE_PS3_ROOT` must point to the SDK. Outputs are `bin/<config>/Silinium.prx` and `.sprx`.
 On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools through Wine: `PS3_HOST_DIR=$SCE_PS3_ROOT/host-win32 PS3_TOOL_WRAPPER=wine ./build.sh release`.
 
+### HEN
+The code is the same for CFW and PS3HEN, only the signature differs: HEN does not load fake-signed SELFs. `./build.sh release hen` additionally signs `bin/release/Silinium_hen.sprx` with [scetool](https://github.com/naehrwert/scetool) (retail APP SELF, key revision 4, like the HEN build of InfinityOps). scetool and its keys are not part of the repo. Keep the keys outside the repo and point `PS3` at their folder; `data/` in the repo root (scetool's default) is gitignored as a fallback. Set `SCETOOL` to the binary if it is not on `PATH`. It is not run through `PS3_TOOL_WRAPPER`; for a Windows scetool under Wine use e.g. `SCETOOL="wine scetool.exe"`. Use absolute paths for `SCETOOL` and `PS3`; `build.sh` runs scetool from the repo root. CI only builds the CFW `.sprx`.
+
+HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with [`tools/hen_eboot.py`](https://github.com/itacentury/bo1-re/blob/main/tools/hen_eboot.py) from [bo1-re](https://github.com/itacentury/bo1-re). Run it from a bo1-re clone, because it imports other scripts from the same `tools/` folder. It also signs with scetool and uses the same `SCETOOL` / `PS3` setup as `./build.sh release hen`. In Git Bash set `MSYS_NO_PATHCONV=1`, otherwise the `/dev_hdd0/...` path gets rewritten. For example:
+
+```
+python3 tools/hen_eboot.py path/to/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx -o EBOOT_MP.BIN
+```
+
+Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/tmp/Silinium.sprx`).
+
 ### Formatting
-The sources are formatted with clang-format (`.clang-format`, checked by CI with version 20). Run `./build.sh format` or `make format` before committing. To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+The sources are formatted with clang-format 20 (`.clang-format`, checked by CI with that version; other versions format differently). Run `./build.sh format` or `make format` before committing; both refuse to run with another clang-format version. Set `CLANG_FORMAT` if version 20 is not the first `clang-format` on `PATH` (e.g. `CLANG_FORMAT=clang-format-20`). To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
 CI (`.github/workflows/build.yml`) checks the formatting and builds debug and release; the `.sprx` files are attached to each run as artifacts.
 
@@ -62,19 +74,17 @@ The loader always lifts the restrictions on class names and the clan tag: their 
 Quick Recovery and Prestige write to your online stats, only in the lobby. Quick Recovery also sets the `rank` stat, which the menus show the level from.
 
 ## Development
-VS Code is used for this project, you can also use Visual Studio if you prefer but you'll need to created a new solution using the VSIX from the SDK and make sure to don't forget to include the required libraries `libc.a libfs_stub.a`.
+VS Code is used for this project, you can also use Visual Studio if you prefer but you'll need to created a new solution using the VSIX from the SDK and make sure to don't forget to include the required libraries `libc.a libfs_stub.a liblv2_stub.a`.
 
-[docs/stats_ddl.txt](docs/stats_ddl.txt) is a dump of the MP stats DDL, the layout the stats offsets come from. Its byte and bit offsets count from `T5_Stats_Base + 0x28`, bits from the lowest one. Arrays with an enum are indexed by the position in that enum, listed at the end of the file.
+[`data/mp/stats_ddl.txt`](https://github.com/itacentury/bo1-re/blob/main/data/mp/stats_ddl.txt) in bo1-re is a dump of the MP stats DDL, the layout the stats offsets come from (bo1-re generates `include/bo1_mp/stats.h` from it). Its byte and bit offsets count from `T5_Stats_Base + 0x28`, bits from the lowest one. Arrays with an enum are indexed by the position in that enum, listed at the end of the file.
 
 For a better experience with VS Code and use the tasks:
 
 * Install C/C++ Extension.
-* Git Bash or MSYS2 (unix tools, `bash`, `find`, `curl`).
-* Change `consoleIp` in `Silinium.code-workspace` by yours, and be sure you have a ftp server running on console (e.g webMAN).
+* Git Bash or MSYS2 (unix tools, `bash`) on Windows.
+* clang-format 20 for the `Format All` task, e.g. from the [LLVM 20 release](https://github.com/llvm/llvm-project/releases) or `pip install "clang-format==20.*"`. Set `CLANG_FORMAT` to its path if another version comes first on `PATH`.
 
-You can now open `Silinium.code-workspace` in VS Code and press `Ctrl+Shift+B` to build (Debug), or run the other tasks (`Build Release`, `Clean`, `Deploy Debug/Release`, `[GSC] Deploy scripts`) via *Terminal → Run Task*.
-
-Deployments tasks will just create or replace any existing file by FTP commands.
+You can now open `Silinium.code-workspace` in VS Code and press `Ctrl+Shift+B` to pick a task: `Build Debug/Release`, `Build Debug/Release (HEN)`, `Clean` or `Format All` (formats all sources in `src/` with clang-format).
 
 The outputs made with a custom `printf` can be seen in Target Manager on "Console Output" menu.
 

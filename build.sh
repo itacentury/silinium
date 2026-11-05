@@ -1,22 +1,43 @@
 #!/usr/bin/env bash
 # Builds Silinium without make / SDK samples by calling the PS3 toolchain directly.
-# Usage: ./build.sh [debug|release|clean|format]
+# Usage: ./build.sh [debug|release|clean|format] [hen]
+#   hen: also sign bin/<config>/Silinium_hen.sprx for PS3HEN with scetool
 #
 # Environment:
 #   SCE_PS3_ROOT      PS3 SDK root (required)
 #   PS3_HOST_DIR      toolchain dir, default: $SCE_PS3_ROOT/host-win32 (Windows) or host-linux
 #   PS3_EXE_SUFFIX    tool suffix, default: .exe on Windows / when using host-win32
-#   PS3_TOOL_WRAPPER  prefix for every tool call, e.g. "wine" to run host-win32 tools on Linux
+#   PS3_TOOL_WRAPPER  prefix for every SDK tool call, e.g. "wine" to run host-win32 tools on Linux
+#   SCETOOL           scetool command for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored).
+#                     Not run through PS3_TOOL_WRAPPER; include a wrapper yourself, e.g. "wine scetool.exe".
+#                     Split on whitespace like PS3_TOOL_WRAPPER, so a path with spaces needs scetool on PATH instead.
+#                     Relative paths resolve from the repo root (the script cds there), so use an absolute path; same for PS3.
+#   CLANG_FORMAT      clang-format command for the format mode, default: clang-format. Must be version 20,
+#                     e.g. CLANG_FORMAT=clang-format-20 or the path to an LLVM 20 install.
 
 set -euo pipefail
 
 CONFIG="${1:-debug}"
+TARGET="${2:-}"
 NAME="Silinium"
 SRC_DIR="src"
 OBJ_DIR="objs/$CONFIG"
 OUT_DIR="bin/$CONFIG"
+# Must match clang-format-version in .github/workflows/build.yml, other versions format differently.
+CLANG_FORMAT_VERSION="20"
 
 cd "$(dirname "$0")"
+
+usage() {
+    echo "usage: $0 [debug|release|clean|format] [hen]" >&2
+    exit 1
+}
+
+case "$CONFIG" in
+    debug|release) [ -z "$TARGET" ] || [ "$TARGET" = "hen" ] || usage ;;
+    clean|format)  [ -z "$TARGET" ] || usage ;;
+    *)             usage ;;
+esac
 
 if [ "$CONFIG" = "clean" ]; then
     rm -rf bin objs
@@ -24,14 +45,32 @@ if [ "$CONFIG" = "clean" ]; then
     exit 0
 fi
 
+check_clang_format() {
+    if ! command -v "$CLANG_FORMAT" >/dev/null; then
+        echo "error: clang-format not found ($CLANG_FORMAT), set CLANG_FORMAT" >&2
+        exit 1
+    fi
+    local versionLine major
+    versionLine="$("$CLANG_FORMAT" --version | head -n 1)"
+    major="$(echo "$versionLine" | sed -n 's/.*clang-format version \([0-9]*\)\..*/\1/p')"
+    if [ "$major" != "$CLANG_FORMAT_VERSION" ]; then
+        echo "error: clang-format $CLANG_FORMAT_VERSION required (CI checks with it), found: $versionLine" >&2
+        echo "       install it and point CLANG_FORMAT at it" >&2
+        exit 1
+    fi
+}
+
 if [ "$CONFIG" = "format" ]; then
-    clang-format -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
+    CLANG_FORMAT="${CLANG_FORMAT:-clang-format}"
+    check_clang_format
+    "$CLANG_FORMAT" -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
     echo "# formatted $SRC_DIR/"
     exit 0
 fi
 
-if [ "$CONFIG" != "debug" ] && [ "$CONFIG" != "release" ]; then
-    echo "usage: $0 [debug|release|clean|format]" >&2
+read -r -a SCETOOL_CMD <<< "${SCETOOL:-scetool}"
+if [ "$TARGET" = "hen" ] && { [ ${#SCETOOL_CMD[@]} -eq 0 ] || ! command -v "${SCETOOL_CMD[0]}" >/dev/null; }; then
+    echo "error: scetool not found (${SCETOOL:-scetool}), set SCETOOL" >&2
     exit 1
 fi
 
@@ -94,5 +133,20 @@ fi
 
 echo "# signing $SPRX"
 $WRAP "$MAKE_FSELF" "$PRX" "$SPRX"
-
 echo "# done: $SPRX"
+
+if [ "$TARGET" = "hen" ]; then
+    HEN_SPRX="$OUT_DIR/${NAME}_hen.sprx"
+    echo "# signing $HEN_SPRX"
+    rm -f "$HEN_SPRX"
+    # Same container as the HEN build of InfinityOps.sprx: retail APP SELF, key revision 4.
+    "${SCETOOL_CMD[@]}" --sce-type=SELF --compress-data=TRUE --skip-sections=FALSE --self-add-shdrs=TRUE \
+        --key-revision=04 --self-auth-id=1010000001000003 --self-vendor-id=01000002 --self-type=APP \
+        --self-app-version=0001000000000000 --encrypt "$PRX" "$HEN_SPRX"
+    # scetool can exit 0 without writing anything, e.g. when its keys are missing.
+    if [ ! -f "$HEN_SPRX" ]; then
+        echo "error: scetool did not write $HEN_SPRX (keys missing?)" >&2
+        exit 1
+    fi
+    echo "# done: $HEN_SPRX"
+fi

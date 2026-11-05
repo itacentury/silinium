@@ -6,8 +6,6 @@
     ],
     "settings": {
         "task.autoDetect": "off",
-        // IP of the console running an FTP server (e.g. webMAN), used by the deploy tasks.
-        "consoleIp": "192.168.1.100",
 
         "files.exclude": {
             "bin": true,
@@ -20,7 +18,7 @@
         },
         "files.eol": "\n",
 
-        // build.sh and the deploy tasks need a POSIX shell (Git Bash on Windows).
+        // build.sh needs a POSIX shell (Git Bash on Windows).
         "terminal.integrated.defaultProfile.windows": "Git Bash",
 
         "C_Cpp.default.cStandard": "c99",
@@ -65,32 +63,39 @@
                 "group": "build"
             },
             {
+                // Also signs bin/<config>/Silinium_hen.sprx, needs scetool (SCETOOL or PATH).
+                "label": "Build Debug (HEN)",
+                "type": "shell",
+                "command": "bash ./build.sh debug hen",
+                "problemMatcher": {
+                    "base": "$gcc",
+                    "fileLocation": ["relative", "${workspaceFolder}"]
+                },
+                "group": "build"
+            },
+            {
+                "label": "Build Release (HEN)",
+                "type": "shell",
+                "command": "bash ./build.sh release hen",
+                "problemMatcher": {
+                    "base": "$gcc",
+                    "fileLocation": ["relative", "${workspaceFolder}"]
+                },
+                "group": "build"
+            },
+            {
                 "label": "Clean",
                 "type": "shell",
                 "command": "bash ./build.sh clean",
-                "problemMatcher": []
+                "problemMatcher": [],
+                "group": "build"
             },
             {
-                "label": "Deploy Debug",
+                "label": "Format All",
                 "type": "shell",
-                "command": "curl -T bin/debug/Silinium.sprx --ftp-create-dirs ftp://${config:consoleIp}/dev_hdd0/tmp/SprxLoader/BLES01031/Silinium.sprx",
-                "dependsOn": "Build Debug",
-                "problemMatcher": []
-            },
-            {
-                "label": "Deploy Release",
-                "type": "shell",
-                "command": "curl -T bin/release/Silinium.sprx --ftp-create-dirs ftp://${config:consoleIp}/dev_hdd0/tmp/SprxLoader/BLES01031/Silinium.sprx",
-                "dependsOn": "Build Release",
-                "problemMatcher": []
-            },
-            {
-                // Be careful with ftp commands since they run with root privileges.
-                // This only creates or replaces files on the console.
-                "label": "[GSC] Deploy scripts",
-                "type": "shell",
-                "command": "bash -c \"find tmp/Silinium -type f -exec curl --ftp-create-dirs -T '{}' 'ftp://${config:consoleIp}/dev_hdd0/{}' ';'\"",
-                "problemMatcher": []
+                "command": "bash ./build.sh format",
+                "problemMatcher": [],
+                "group": "build"
             }
         ]
     },

@@ -40,8 +40,9 @@ void scrfct_setmemory() {
                    "Function 'setMemory' called from gsc with the following parameters: "
                    "%s, %s.",
                    hexAddress, hexData);
-        } else
+        } else {
             printf(T5ERROR "Cannot resolve setmemory parameters call from gsc.");
+        }
     }
 }
 
@@ -70,9 +71,10 @@ void scrfct_callkeyboard() {
     }
 
     bool opened = host_menu_request_keyboard(title, clientNum);
-    if (!opened)
+    if (!opened) {
         printf(T5WARNING
                "'callkeyboard' for client %i ignored, a keyboard is still open.",
                clientNum);
+    }
     Scr_AddInt(opened, SCRIPTINSTANCE_SERVER);
 }
