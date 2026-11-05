@@ -269,7 +269,6 @@
 // getdstat reads the buffer only once the mask is complete.
 #define T5_SV_ReceiveStats 0x3E2828
 #define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C, 0 while no server runs (zeroed at 0x3EAA0C on shutdown)
-#define T5_SvMaxClients 0x14B4A88 // dvar_t *, SV_FindClientByAddress (0x3EEAF8) loops the clients up to it (name unverified)
 #define T5_ClientSize 0x651C8
 // int at client_t + 0: SV_DropClient stores 1 (0x3E4224) or 0 (0x3E45C4), SV_GetClientStatInt reads stats only
 // above 1. The names of the individual states above 1 are unverified.

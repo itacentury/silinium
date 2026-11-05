@@ -72,7 +72,7 @@ static bool fix_classes(uint8_t* stats) {
 }
 
 static int max_clients() {
-    dvar_s* maxClients = *(dvar_s**)T5_SvMaxClients;
+    dvar_s* maxClients = Dvar_FindVar("sv_maxclients");
     if (!maxClients) {
         return 0;
     }
