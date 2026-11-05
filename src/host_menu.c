@@ -159,12 +159,12 @@ static void unban_all() {
 // (or a banClient entry) every frame; if it adds nothing, the check after the call
 // catches it.
 static void restore_bans() {
-    static bool logged;
     if (banRestoreDisabled ||
         (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty))) {
         return;
     }
     int freeEntries = free_ban_entries();
+    int restored = 0;
     for (int i = 0; i < HOST_MENU_MAX_BANS && freeEntries > 0; i++) {
         if (!bannedNames[i][0] || Party_IsBanned(bannedNames[i])) {
             continue;
@@ -180,10 +180,10 @@ static void restore_bans() {
             return;
         }
         freeEntries--;
-        if (!logged) {
-            logged = true;
-            printf(T5INFO "Ban list was reset, restored the host menu bans.");
-        }
+        restored++;
+    }
+    if (restored > 0) {
+        printf(T5INFO "Ban list was reset, restored %d host menu ban(s).", restored);
     }
 }
 
