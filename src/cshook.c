@@ -34,8 +34,12 @@ int cs_hook_process_write(uint64_t address, const void* data, size_t size) {
 }
 
 int cs_hook_create_prehook(cs_hook_info* hookInfo) {
-    if (!hookInfo) return -1;
-    if (hookInfo->type != CS_HOOK_TYPE_CTR) return -2;
+    if (!hookInfo) {
+        return -1;
+    }
+    if (hookInfo->type != CS_HOOK_TYPE_CTR) {
+        return -2;
+    }
 
     int op[PREHOOK_INSTRUCTIONS_COUNT];
     op[0] = 0x7C0802A6;
@@ -53,15 +57,20 @@ int cs_hook_create_prehook(cs_hook_info* hookInfo) {
     op[12] = 0x4E800020;
 
     if (cs_hook_process_write((uintptr_t)&prehooks[hookInfo->index], &op,
-                              PREHOOK_INSTRUCTIONS_COUNT * 4) != CELL_OK)
+                              PREHOOK_INSTRUCTIONS_COUNT * 4) != CELL_OK) {
         return -3;
+    }
 
     return 0;
 }
 
 int cs_hook_create_trampoline(cs_hook_info* hookInfo) {
-    if (!hookInfo) return -1;
-    if (hookInfo->type != CS_HOOK_TYPE_CTR) return -2;
+    if (!hookInfo) {
+        return -1;
+    }
+    if (hookInfo->type != CS_HOOK_TYPE_CTR) {
+        return -2;
+    }
 
     int op[TRAMPOLINE_INSTRUCTIONS_COUNT];
     op[0] = 0x39800000;
@@ -79,15 +88,20 @@ int cs_hook_create_trampoline(cs_hook_info* hookInfo) {
     *hookInfo->tramp = &hookInfo->trampoline_opd;
 
     if (cs_hook_process_write((uintptr_t)hookInfo->trampoline_opd.function, &op,
-                              TRAMPOLINE_INSTRUCTIONS_COUNT * 4) != CELL_OK)
+                              TRAMPOLINE_INSTRUCTIONS_COUNT * 4) != CELL_OK) {
         return -3;
+    }
 
     return 0;
 }
 
 int cs_hook_resolve_import_opd(cs_hook_info* hookInfo) {
-    if (!hookInfo) return -1;
-    if (hookInfo->type != CS_HOOK_TYPE_IMPORT) return -2;
+    if (!hookInfo) {
+        return -1;
+    }
+    if (hookInfo->type != CS_HOOK_TYPE_IMPORT) {
+        return -2;
+    }
 
     hookInfo->opd_import[0] = *(int*)(((int)hookInfo->source->function) + 4);
     hookInfo->opd_import[1] = *(int*)(((int)hookInfo->source->function) + 8);
@@ -104,15 +118,20 @@ int cs_hook_resolve_import_opd(cs_hook_info* hookInfo) {
 }
 
 cs_hook_info* cs_hook_get_info_from_source(popd32 source) {
-    for (int i = 0; i < MAX_HOOKS_FUNCTIONS; i++)
-        if (hooksInfo[i].source == source) return &hooksInfo[i];
+    for (int i = 0; i < MAX_HOOKS_FUNCTIONS; i++) {
+        if (hooksInfo[i].source == source) {
+            return &hooksInfo[i];
+        }
+    }
 
     return 0;
 }
 
 int cs_hook_enable(popd32 source) {
     cs_hook_info* hookInfo = cs_hook_get_info_from_source(source);
-    if (hookInfo == 0) return -1;
+    if (hookInfo == 0) {
+        return -1;
+    }
 
     if (hookInfo->type == CS_HOOK_TYPE_CTR) {
         int op[4];
@@ -121,23 +140,27 @@ int cs_hook_enable(popd32 source) {
         op[2] = 0x7D8903A6;
         op[3] = 0x4E800420;
         if (cs_hook_process_write((uintptr_t)hookInfo->source->function, &op, 4 * 4) !=
-            CELL_OK)
+            CELL_OK) {
             return -2;
+        }
     } else if (hookInfo->type == CS_HOOK_TYPE_IMPORT) {
         int op[2];
         op[0] = 0x658C0000 + ((((int)&hookInfo->detour + 0x8000) >> 16) &
                               0xFFFF);  // @ha, lwz adds lo signed
         op[1] = 0x818C0000 + ((int)&hookInfo->detour & 0xFFFF);
         if (cs_hook_process_write((uintptr_t)hookInfo->source->function + 4, &op,
-                                  4 * 2) != CELL_OK)
+                                  4 * 2) != CELL_OK) {
             return -2;
+        }
     }
     return 0;
 }
 
 int cs_hook_disable(popd32 source) {
     cs_hook_info* hookInfo = cs_hook_get_info_from_source(source);
-    if (hookInfo == 0) return -1;
+    if (hookInfo == 0) {
+        return -1;
+    }
 
     if (hookInfo->type == CS_HOOK_TYPE_CTR) {
         int op[4];
@@ -146,12 +169,14 @@ int cs_hook_disable(popd32 source) {
         op[2] = *(int*)(&trampolines[hookInfo->index] + 6 * 4);
         op[3] = *(int*)(&trampolines[hookInfo->index] + 7 * 4);
         if (cs_hook_process_write((uintptr_t)hookInfo->source->function, &op, 4 * 4) !=
-            CELL_OK)
+            CELL_OK) {
             return -2;
+        }
     } else if (hookInfo->type == CS_HOOK_TYPE_IMPORT) {
         if (cs_hook_process_write((uintptr_t)hookInfo->source->function + 4,
-                                  &hookInfo->opd_import, 4 * 2) != CELL_OK)
+                                  &hookInfo->opd_import, 4 * 2) != CELL_OK) {
             return -2;
+        }
     }
     return 0;
 }

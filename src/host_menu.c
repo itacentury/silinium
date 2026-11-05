@@ -35,8 +35,11 @@ static bool party_is_local_host(int party) {
 
 static int party_used_count(int party) {
     int count = 0;
-    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++)
-        if (PARTY_MEMBER_USED(party, i)) count++;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (PARTY_MEMBER_USED(party, i)) {
+            count++;
+        }
+    }
     return count;
 }
 
@@ -46,12 +49,17 @@ static int party_used_count(int party) {
 int host_menu_lobby_party() {
     bool lobby = party_is_local_host(T5_LobbyParty);
     bool game = party_is_local_host(T5_GameParty);
-    if (lobby && game)
+    if (lobby && game) {
         return party_used_count(T5_GameParty) > party_used_count(T5_LobbyParty)
                    ? T5_GameParty
                    : T5_LobbyParty;
-    if (lobby) return T5_LobbyParty;
-    if (game) return T5_GameParty;
+    }
+    if (lobby) {
+        return T5_LobbyParty;
+    }
+    if (game) {
+        return T5_GameParty;
+    }
     return 0;
 }
 
@@ -63,11 +71,16 @@ int host_menu_lobby_party() {
 static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (party != host_menu_lobby_party() ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
-        !PARTY_MEMBER_USED(party, member))
+        !PARTY_MEMBER_USED(party, member)) {
         return;
+    }
     const char* memberName = PARTY_MEMBER_NAME(party, member);
-    if (strncmp(memberName, name, sizeof(hostMenu.lobbyKickName) - 1) != 0) return;
-    if (ban) Party_BanName(memberName);
+    if (strncmp(memberName, name, sizeof(hostMenu.lobbyKickName) - 1) != 0) {
+        return;
+    }
+    if (ban) {
+        Party_BanName(memberName);
+    }
     Party_RemoveMember(party, member, 1,
                        ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
 }
@@ -89,7 +102,9 @@ void host_menu_write_recovery() {
     // Which items are perks is only in the stats table, so every item gets the pro bits.
     for (int i = 0; i < T5_Stats_ItemStatsCount; i++) {
         int bit = T5_Stats_ItemStatsBit + i * T5_Stats_ItemStatsBits;
-        for (int b = bit; b < bit + 3; b++) set_stat_bit(T5_Stats_ItemStats, b);
+        for (int b = bit; b < bit + 3; b++) {
+            set_stat_bit(T5_Stats_ItemStats, b);
+        }
     }
 }
 
@@ -114,8 +129,9 @@ int PadGetData_Hook(uint32_t port, CellPadData* data) {
             data->button[CELL_PAD_BTN_OFFSET_DIGITAL1] &= CELL_PAD_CTRL_SELECT;
             data->button[CELL_PAD_BTN_OFFSET_DIGITAL2] = 0;
             for (int i = CELL_PAD_BTN_OFFSET_PRESS_RIGHT;
-                 i <= CELL_PAD_BTN_OFFSET_PRESS_R2; i++)
+                 i <= CELL_PAD_BTN_OFFSET_PRESS_R2; i++) {
                 data->button[i] = 0;
+            }
         }
     }
     return res;
@@ -127,14 +143,24 @@ int PadGetData_Hook(uint32_t port, CellPadData* data) {
 // dropped. Returns the field index (20 camos, then the clan tag color), -1 for other
 // bits.
 static int prestige_unlock_field(int bit) {
-    if (bit == T5_Stats_ClanTagSelectedBit) return 20;
+    if (bit == T5_Stats_ClanTagSelectedBit) {
+        return 20;
+    }
     for (int c = 0; c < 5; c++) {
         int custom = T5_Stats_CustomClassCamoBit + c * T5_Stats_ClassBits;
         int prestige = T5_Stats_PrestigeClassCamoBit + c * T5_Stats_ClassBits;
-        if (bit == custom) return c * 2;
-        if (bit == custom + T5_Stats_SecondaryCamoBits) return c * 2 + 1;
-        if (bit == prestige) return 10 + c * 2;
-        if (bit == prestige + T5_Stats_SecondaryCamoBits) return 10 + c * 2 + 1;
+        if (bit == custom) {
+            return c * 2;
+        }
+        if (bit == custom + T5_Stats_SecondaryCamoBits) {
+            return c * 2 + 1;
+        }
+        if (bit == prestige) {
+            return 10 + c * 2;
+        }
+        if (bit == prestige + T5_Stats_SecondaryCamoBits) {
+            return 10 + c * 2 + 1;
+        }
     }
     return -1;
 }
@@ -145,9 +171,10 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
         strcmp(value, "0") == 0) {
         int field = prestige_unlock_field(*(int*)state);
         if (field >= 0) {
-            if (!(logged & (1 << field)))
+            if (!(logged & (1 << field))) {
                 printf(T5INFO "Prestige Unlocks: kept DDL bit 0x%X (statWriteDDL 0).",
                        *(int*)state);
+            }
             logged |= 1 << field;
             return 1;
         }
@@ -160,7 +187,9 @@ static char gameMessage[128];
 static volatile bool gameMessagePending;
 
 void host_menu_game_message(const char* format, ...) {
-    if (gameMessagePending) return;
+    if (gameMessagePending) {
+        return;
+    }
     va_list args;
     va_start(args, format);
     vsnprintf(gameMessage, sizeof(gameMessage), format, args);
@@ -175,11 +204,13 @@ void host_menu_game_message(const char* format, ...) {
 // message is dropped instead of patching the check out for every caller.
 static void show_game_message() {
     static bool warned;
-    if (!gameMessagePending) return;
+    if (!gameMessagePending) {
+        return;
+    }
     __lwsync();
-    if (Sys_IsMainThread())
+    if (Sys_IsMainThread()) {
         CG_GameMessage(0, gameMessage);
-    else if (!warned) {
+    } else if (!warned) {
         warned = true;
         printf(T5WARNING
                "Menu_PaintAll is not on the main thread, dropped kill feed message.");
@@ -201,13 +232,15 @@ static unsigned int keyboardInputString;
 
 bool host_menu_request_keyboard(const char* title, int clientNum) {
     if (keyboardState != KEYBOARD_IDLE || clientNum < 0 ||
-        clientNum >= HOST_MENU_MAX_CLIENTS)
+        clientNum >= HOST_MENU_MAX_CLIENTS) {
         return false;
+    }
 
     int i;
     for (i = 0; i < (int)(sizeof(keyboardTitle) / sizeof(*keyboardTitle)) - 1 && title[i];
-         i++)
+         i++) {
         keyboardTitle[i] = (unsigned char)title[i];
+    }
     keyboardTitle[i] = 0;
     keyboardClient = clientNum;
     // Title and client have to be visible before the state that marks them ready.
@@ -217,11 +250,14 @@ bool host_menu_request_keyboard(const char* title, int clientNum) {
 }
 
 static void keyboard_input_callback(int localClientNum, const char16* text, int length) {
-    if (keyboardState != KEYBOARD_OPEN) return;
+    if (keyboardState != KEYBOARD_OPEN) {
+        return;
+    }
 
     int i;
-    for (i = 0; i < length && i < (int)sizeof(keyboardText) - 1 && text[i]; i++)
+    for (i = 0; i < length && i < (int)sizeof(keyboardText) - 1 && text[i]; i++) {
         keyboardText[i] = text[i] > 0x7F ? '?' : (char)text[i];
+    }
     keyboardText[i] = 0;
     __lwsync();
     keyboardState = KEYBOARD_ENTERED;
@@ -230,7 +266,9 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
 static void open_requested_keyboard() {
     static const char16 preset[] = {0};
     // The menu hides the pad from the game, so the keyboard waits until it's closed.
-    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open) return;
+    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open) {
+        return;
+    }
     __lwsync();
     keyboardState = KEYBOARD_OPEN;
     UI_OpenKeyboard(0, keyboardTitle, preset, sizeof(keyboardText) - 1,
@@ -241,8 +279,9 @@ static void open_requested_keyboard() {
 // still that player's.
 static void send_keyboard_input(void* ent) {
     if (keyboardState != KEYBOARD_ENTERED || ent != G_ENTITY(keyboardClient) ||
-        !keyboardInputString)
+        !keyboardInputString) {
         return;
+    }
     __lwsync();
     Scr_AddString(keyboardText, SCRIPTINSTANCE_SERVER);
     Scr_Notify(ent, keyboardInputString, 1);
@@ -251,7 +290,9 @@ static void send_keyboard_input(void* ent) {
 
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     Menu_PaintAll_Trampoline(a1, uiContext);
-    if (!uiContext) return;
+    if (!uiContext) {
+        return;
+    }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
@@ -300,7 +341,9 @@ static unsigned int spawnedPlayerString;
 
 void host_menu_on_server_scripts_loaded() {
     // Only resolved by host_menu_init, which doesn't run in ZM.
-    if (!SL_GetString) return;
+    if (!SL_GetString) {
+        return;
+    }
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
     keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }
@@ -313,9 +356,12 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
         stringValue == spawnedPlayerString) {
         // The scorelimit follows the max players set with the menu, only in team
         // deathmatch.
-        if (hostMenu.maxPlayersSet && is_gametype_tdm())
+        if (hostMenu.maxPlayersSet && is_gametype_tdm()) {
             hostMenu.scorelimitPending = true;
-        if (hostMenu.depatchBounces) host_menu_set_bounce_dvars(true);
+        }
+        if (hostMenu.depatchBounces) {
+            host_menu_set_bounce_dvars(true);
+        }
     }
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
 }
@@ -397,11 +443,14 @@ static void host_menu_thread(uint64_t arg) {
         }
 
         // The game resets the party dvars in the pregame lobby, keep them applied.
-        if (hostMenu.forceHost && !inGame)
+        if (hostMenu.forceHost && !inGame) {
             host_menu_set_party_dvars(false, hostMenu.playersToStart, 1, 1, 9);
+        }
         // The game can set the DLC dvars again (lobby reload), keep them cleared while in
         // the lobby.
-        if (hostMenu.disableDlc && !inGame) host_menu_hide_dlc_maps();
+        if (hostMenu.disableDlc && !inGame) {
+            host_menu_hide_dlc_maps();
+        }
         sys_timer_usleep(10000);
     }
 }
@@ -439,13 +488,27 @@ static int init_host_menu_hooks() {
     t5nmhi(ClanName_Sanitize);
 
     int res;
-    if ((res = cs_hook_install(PadGetData, CS_HOOK_TYPE_IMPORT)) < 0) return res;
-    if ((res = cs_hook_install(VM_Notify, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(Menu_PaintAll, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(ClientEndFrame, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(DDL_SetFromString, CS_HOOK_TYPE_CTR)) < 0) return res;
-    if ((res = cs_hook_install(ClanName_Sanitize, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(PadGetData, CS_HOOK_TYPE_IMPORT)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(VM_Notify, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(Menu_PaintAll, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(ClientEndFrame, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(DDL_SetFromString, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(ClanName_Sanitize, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
 
     return 0;
 }
@@ -455,12 +518,17 @@ static int init_host_menu_hooks() {
 // specifier wherever they print it with a printf-style function.
 void ClanName_Sanitize_Hook() {
     const char* clanName = Dvar_GetString("clanName");
-    if (!clanName || !strchr(clanName, '%')) return;
+    if (!clanName || !strchr(clanName, '%')) {
+        return;
+    }
 
     char sanitized[32];
     int length = 0;
-    for (const char* c = clanName; *c && length < sizeof(sanitized) - 1; c++)
-        if (*c != '%') sanitized[length++] = *c;
+    for (const char* c = clanName; *c && length < sizeof(sanitized) - 1; c++) {
+        if (*c != '%') {
+            sanitized[length++] = *c;
+        }
+    }
     sanitized[length] = 0;
     Dvar_SetStringByName("clanName", sanitized);
 }
@@ -479,8 +547,9 @@ static void unfilter_names() {
         {T5_KeyboardInvalidChars_Patch, 0x40860048,
          PPC_B(T5_KeyboardInvalidChars_Patch, T5_KeyboardInvalidChars_Target)},
     };
-    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++)
+    for (int i = 0; i < sizeof(patches) / sizeof(*patches); i++) {
         apply_instruction_patch(&patches[i], true);
+    }
 }
 
 static bool ready;
@@ -494,12 +563,15 @@ int host_menu_init() {
     unfilter_names();
 
     int res;
-    if ((res = init_host_menu_hooks()) < 0) return res;
+    if ((res = init_host_menu_hooks()) < 0) {
+        return res;
+    }
 
     sys_ppu_thread_t id;
     if ((res = sys_ppu_thread_create(&id, host_menu_thread, 0, 1000, 0x4000, 0,
-                                     "[Silinium] host menu")) != CELL_OK)
+                                     "[Silinium] host menu")) != CELL_OK) {
         return res;
+    }
 
     ready = true;
     return 0;

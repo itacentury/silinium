@@ -362,8 +362,9 @@ const ChecksumEntry* checksum_lookup(bool multiplayer, const char* mapname,
     int gametypeHash = jenkins_hash(gametype);
 
     for (unsigned int i = 0; i < count; i++) {
-        if (table[i].mapHash == mapHash && table[i].gametypeHash == gametypeHash)
+        if (table[i].mapHash == mapHash && table[i].gametypeHash == gametypeHash) {
             return &table[i];
+        }
     }
     return NULL;
 }

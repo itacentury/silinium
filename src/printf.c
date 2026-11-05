@@ -266,10 +266,11 @@
 #define ISDIGIT(ch) ('0' <= (unsigned char)ch && (unsigned char)ch <= '9')
 #endif /* !defined(ISDIGIT) */
 
-#define OUTCHAR(str, len, size, ch)        \
-    do {                                   \
-        if (len + 1 < size) str[len] = ch; \
-        (len)++;                           \
+#define OUTCHAR(str, len, size, ch) \
+    do {                            \
+        if (len + 1 < size)         \
+            str[len] = ch;          \
+        (len)++;                    \
     } while (/* CONSTCOND */ 0)
 
 static void fmtstr(char*, size_t*, size_t, const char*, int, int, int);
@@ -281,7 +282,9 @@ static int convert(UINTMAX_T, char*, size_t, int, int);
 int ttyWrite(int channel, const char* message, int length, int* written);
 
 int vsnprintf(char* str, size_t size, const char* format, va_list args) {
-    if (!format) return 0;
+    if (!format) {
+        return 0;
+    }
 
     INTMAX_T value;
     unsigned char cvalue;
@@ -312,14 +315,18 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
      * (Though some of these versions will write to a non-NULL buffer even
      * if a size of zero was specified, which violates the standard.)
      */
-    if (str == NULL && size != 0) size = 0;
+    if (str == NULL && size != 0) {
+        size = 0;
+    }
 
-    while (ch != '\0') switch (state) {
+    while (ch != '\0') {
+        switch (state) {
             case PRINT_S_DEFAULT:
-                if (ch == '%')
+                if (ch == '%') {
                     state = PRINT_S_FLAGS;
-                else
+                } else {
                     OUTCHAR(str, len, size, ch);
+                }
                 ch = *format++;
                 break;
             case PRINT_S_FLAGS:
@@ -374,18 +381,22 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                     }
                     ch = *format++;
                     state = PRINT_S_DOT;
-                } else
+                } else {
                     state = PRINT_S_DOT;
+                }
                 break;
             case PRINT_S_DOT:
                 if (ch == '.') {
                     state = PRINT_S_PRECISION;
                     ch = *format++;
-                } else
+                } else {
                     state = PRINT_S_MOD;
+                }
                 break;
             case PRINT_S_PRECISION:
-                if (precision == -1) precision = 0;
+                if (precision == -1) {
+                    precision = 0;
+                }
                 if (ISDIGIT(ch)) {
                     ch = CHARTOINT(ch);
                     if (precision > (INT_MAX - ch) / 10) {
@@ -400,11 +411,14 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                      * taken as if the precision were omitted."
                      * (7.19.6.1, 5)
                      */
-                    if ((precision = va_arg(args, int)) < 0) precision = -1;
+                    if ((precision = va_arg(args, int)) < 0) {
+                        precision = -1;
+                    }
                     ch = *format++;
                     state = PRINT_S_MOD;
-                } else
+                } else {
                     state = PRINT_S_MOD;
+                }
                 break;
             case PRINT_S_MOD:
                 switch (ch) {
@@ -413,16 +427,18 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                         if (ch == 'h') { /* It's a char. */
                             ch = *format++;
                             cflags = PRINT_C_CHAR;
-                        } else
+                        } else {
                             cflags = PRINT_C_SHORT;
+                        }
                         break;
                     case 'l':
                         ch = *format++;
                         if (ch == 'l') { /* It's a long long. */
                             ch = *format++;
                             cflags = PRINT_C_LLONG;
-                        } else
+                        } else {
                             cflags = PRINT_C_LONG;
+                        }
                         break;
                     case 'j':
                         cflags = PRINT_C_INTMAX;
@@ -479,10 +495,14 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                         base = 16;
                         /* FALLTHROUGH */
                     case 'o':
-                        if (base == 0) base = 8;
+                        if (base == 0) {
+                            base = 8;
+                        }
                         /* FALLTHROUGH */
                     case 'u':
-                        if (base == 0) base = 10;
+                        if (base == 0) {
+                            base = 10;
+                        }
                         flags |= PRINT_F_UNSIGNED;
                         switch (cflags) {
                             case PRINT_C_CHAR:
@@ -527,13 +547,13 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                          * characters, in an implementation-defined
                          * manner." (C99: 7.19.6.1, 8)
                          */
-                        if ((strvalue = (const char*)va_arg(args, void*)) == NULL)
+                        if ((strvalue = (const char*)va_arg(args, void*)) == NULL) {
                             /*
                              * We use the glibc format.  BSD prints
                              * "0x0", SysV "0".
                              */
                             fmtstr(str, &len, size, "(nil)", width, -1, flags);
-                        else {
+                        } else {
                             /*
                              * We use the BSD/glibc format.  SysV
                              * omits the "0x" prefix (which we emit
@@ -600,11 +620,13 @@ int vsnprintf(char* str, size_t size, const char* format, va_list args) {
                 precision = -1;
                 break;
         }
+    }
 out:
-    if (len < size)
+    if (len < size) {
         str[len] = '\0';
-    else if (size > 0)
+    } else if (size > 0) {
         str[size - 1] = '\0';
+    }
 
     if (overflow || len >= INT_MAX) {
         return -1;
@@ -617,16 +639,21 @@ static void fmtstr(char* str, size_t* len, size_t size, const char* value, int w
     int padlen, strln; /* Amount to pad. */
     int noprecision = (precision == -1);
 
-    if (value == NULL) /* We're forgiving. */
+    if (value == NULL) { /* We're forgiving. */
         value = "(null)";
+    }
 
     /* If a precision was specified, don't read the string past it. */
-    for (strln = 0; value[strln] != '\0' && (noprecision || strln < precision); strln++)
+    for (strln = 0; value[strln] != '\0' && (noprecision || strln < precision); strln++) {
         continue;
+    }
 
-    if ((padlen = width - strln) < 0) padlen = 0;
-    if (flags & PRINT_F_MINUS) /* Left justify. */
+    if ((padlen = width - strln) < 0) {
+        padlen = 0;
+    }
+    if (flags & PRINT_F_MINUS) { /* Left justify. */
         padlen = -padlen;
+    }
 
     while (padlen > 0) { /* Leading spaces. */
         OUTCHAR(str, *len, size, ' ');
@@ -654,16 +681,17 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
     int separators = (flags & PRINT_F_QUOTE);
     int noprecision = (precision == -1);
 
-    if (flags & PRINT_F_UNSIGNED)
+    if (flags & PRINT_F_UNSIGNED) {
         uvalue = value;
-    else {
+    } else {
         uvalue = (value >= 0) ? value : -value;
-        if (value < 0)
+        if (value < 0) {
             sign = '-';
-        else if (flags & PRINT_F_PLUS) /* Do a sign. */
+        } else if (flags & PRINT_F_PLUS) { /* Do a sign. */
             sign = '+';
-        else if (flags & PRINT_F_SPACE)
+        } else if (flags & PRINT_F_SPACE) {
             sign = ' ';
+        }
     }
 
     pos = convert(uvalue, iconvert, sizeof(iconvert), base, flags & PRINT_F_UP);
@@ -679,7 +707,9 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
          */
         switch (base) {
             case 8:
-                if (precision <= pos) precision = pos + 1;
+                if (precision <= pos) {
+                    precision = pos + 1;
+                }
                 break;
             case 16:
                 hexprefix = (flags & PRINT_F_UP) ? 'X' : 'x';
@@ -687,8 +717,9 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
         }
     }
 
-    if (separators) /* Get the number of group separators we'll print. */
+    if (separators) { /* Get the number of group separators we'll print. */
         separators = getnumsep(pos);
+    }
 
     zpadlen = precision - pos - separators;
     spadlen = width                         /* Minimum field width. */
@@ -697,17 +728,21 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
               - ((sign != 0) ? 1 : 0)       /* Will we print a sign? */
               - ((hexprefix != 0) ? 2 : 0); /* Will we print a prefix? */
 
-    if (zpadlen < 0) zpadlen = 0;
-    if (spadlen < 0) spadlen = 0;
+    if (zpadlen < 0) {
+        zpadlen = 0;
+    }
+    if (spadlen < 0) {
+        spadlen = 0;
+    }
 
     /*
      * C99 says: "If the `0' and `-' flags both appear, the `0' flag is
      * ignored.  For `d', `i', `o', `u', `x', and `X' conversions, if a
      * precision is specified, the `0' flag is ignored." (7.19.6.1, 6)
      */
-    if (flags & PRINT_F_MINUS) /* Left justify. */
+    if (flags & PRINT_F_MINUS) { /* Left justify. */
         spadlen = -spadlen;
-    else if (flags & PRINT_F_ZERO && noprecision) {
+    } else if (flags & PRINT_F_ZERO && noprecision) {
         zpadlen += spadlen;
         spadlen = 0;
     }
@@ -715,8 +750,9 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
         OUTCHAR(str, *len, size, ' ');
         spadlen--;
     }
-    if (sign != 0) /* Sign. */
+    if (sign != 0) { /* Sign. */
         OUTCHAR(str, *len, size, sign);
+    }
     if (hexprefix != 0) { /* A "0x" or "0X" prefix. */
         OUTCHAR(str, *len, size, '0');
         OUTCHAR(str, *len, size, hexprefix);
@@ -728,7 +764,9 @@ static void fmtint(char* str, size_t* len, size_t size, INTMAX_T value, int base
     while (pos > 0) { /* The actual digits. */
         pos--;
         OUTCHAR(str, *len, size, iconvert[pos]);
-        if (separators > 0 && pos > 0 && pos % 3 == 0) printsep(str, len, size);
+        if (separators > 0 && pos > 0 && pos % 3 == 0) {
+            printsep(str, len, size);
+        }
     }
     while (spadlen < 0) { /* Trailing spaces. */
         OUTCHAR(str, *len, size, ' ');
