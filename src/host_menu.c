@@ -8,6 +8,7 @@
 #include <sys/sys_time.h>
 #include <sys/timer.h>
 
+#include "anti_class.h"
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
@@ -758,6 +759,9 @@ int host_menu_init() {
 
     int res;
     if ((res = init_host_menu_hooks()) < 0) {
+        return res;
+    }
+    if ((res = anti_class_init()) < 0) {
         return res;
     }
 

@@ -260,6 +260,27 @@
 #define T5_XAssetEntryHeaderOffset 0x4
 #define T5_XAssetEntryNextHashOffset 0xA
 #define T5_AssetTypeMaterial 6
+// Client stats on the host (MP only, see docs/mp/05-network.md in bo1-re). SV_ReceiveStats handles the OOB "stats"
+// packets: chunk i of 0x4C6 bytes goes to client + T5_ClientStatsOffset + i * 0x4C6 and sets bit i of the mask.
+// getdstat reads the buffer only once the mask is complete.
+#define T5_SV_ReceiveStats 0x3E2828
+#define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C
+#define T5_SvMaxClients 0x14B4A88 // dvar_t *, SV_FindClientByAddress (0x3EEAF8) loops the clients up to it (name unverified)
+#define T5_ClientSize 0x651C8
+#define T5_ClientStatsOffset 0x5A4F8 // 0x9968 bytes, same layout as T5_Stats_Base, no checksum over the data
+#define T5_ClientStatsMaskOffset 0x651B8 // uint64_t, received chunks
+#define T5_ClientStatsMaskComplete 0x1FFFFFFFFull // 33 chunks, what SV_GetClientStatInt (0x3E2700) compares with
+#define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
+// Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
+// range, so level.tbl_armor[body] is undefined and the armor/model code breaks (inferred from _class.gsc). The
+// head field is not checked: custom classes get the default head, and Sakura's primary writes leave it at 0x01.
+#define T5_Stats_CustomClassBodyBit 0x164C // cacloadouts.customclass1.body (0x2C9 bit 4)
+#define T5_Stats_PrestigeClassBodyBit 0x1BE5 // cacloadouts.prestigeclass1.body (0x37C bit 5)
+#define T5_Stats_BodyItemBits 8
+// Body item ids: what the tool's "Character" box writes, the only bodies seen. The statsTable rows are unverified.
+#define T5_BodyItemFirst 0x62
+#define T5_BodyItemLast 0x66
+#define T5_BodyItemDefault 0x62 // the body of every class in the 11 dumps
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

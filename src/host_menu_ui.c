@@ -527,6 +527,7 @@ void host_menu_ui_init() {
     hostMenu.kickClient = -1;
     hostMenu.lobbyKickMember = -1;
     hostMenu.showControls = true;
+    hostMenu.antiGodmodeClasses = true;
     hostMenu.playersToStart = 4;
     hostMenu.maxPlayers = 12;
 
@@ -549,6 +550,8 @@ void host_menu_ui_init() {
                &hostMenu.depatchBounces, 0, 0, depatch_bounces);
     add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
                0, 0, disable_dlc);
+    add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
+               &hostMenu.antiGodmodeClasses, 0, 0, nothing);
     add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;

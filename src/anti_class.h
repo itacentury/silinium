@@ -1,0 +1,17 @@
+#ifndef ANTI_CLASS_H
+#define ANTI_CLASS_H
+
+#include <stdint.h>
+
+#include "defines.h"
+#include "offsets.h"
+
+// The game passes netadr_t by value in r3-r5. The hook takes the three register words as
+// they are instead of depending on how the compiler would pass a 20-byte struct.
+t5nhd(void, SV_ReceiveStats, (uint64_t from0, uint64_t from1, uint64_t from2, void* msg));
+
+// Installs the stats hook that fixes godmode/invisible custom classes of clients (MP
+// only, needs the host menu state).
+int anti_class_init();
+
+#endif /* ANTI_CLASS_H */
