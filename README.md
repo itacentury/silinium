@@ -75,7 +75,7 @@ Quick Recovery and Prestige write to your online stats, only in the lobby. Quick
 ## Development
 VS Code is used for this project, you can also use Visual Studio if you prefer but you'll need to created a new solution using the VSIX from the SDK and make sure to don't forget to include the required libraries `libc.a libfs_stub.a`.
 
-[docs/stats_ddl.txt](docs/stats_ddl.txt) is a dump of the MP stats DDL, the layout the stats offsets come from. Its byte and bit offsets count from `T5_Stats_Base + 0x28`, bits from the lowest one. Arrays with an enum are indexed by the position in that enum, listed at the end of the file.
+[`data/mp/stats_ddl.txt`](https://github.com/itacentury/bo1-re/blob/main/data/mp/stats_ddl.txt) in bo1-re is a dump of the MP stats DDL, the layout the stats offsets come from (bo1-re generates `include/bo1_mp/stats.h` from it). Its byte and bit offsets count from `T5_Stats_Base + 0x28`, bits from the lowest one. Arrays with an enum are indexed by the position in that enum, listed at the end of the file.
 
 For a better experience with VS Code and use the tasks:
 
