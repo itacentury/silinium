@@ -54,8 +54,14 @@
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0
-                                  // (memset at 0x1F9A48) for either party
-#define T5_Party_IsBanned 0x1E7830 // (name), nonzero if the name is in the ban list Party_BanName fills
+                                  // (memset at 0x1F9A48) for either party. Takes the first entry with an empty
+                                  // name, in a full list the one with the smallest time, I_strncpyz(.., 0x20)
+#define T5_Party_IsBanned 0x1E7830 // (name), 1 if the name is in the ban list Party_BanName fills, 0 for a null or
+                                   // empty name. r3 at the join check 0x2134CC is a 0x20 copy of the joining name,
+                                   // compared case-sensitively (0x4DCF50)
+#define T5_PartyBanListOffset 0x53CC // on LobbyParty, 16 entries: +0x00 name (0x20), +0x20 int from 0x169528C
+                                     // (a time, unverified)
+#define T5_PartyBanEntrySize 0x24
 // (feature, clan, name, plain, out): for the "tagcolor" feature writes "[^%i%s^7]%s" to out, for "tagrot" the same with a
 // color that changes over time, otherwise leaves out as it is. The caller fills out with the plain text first, the lobby
 // list (0x222A90) passes name "" and plain "[clan]", out is 0x80 bytes.

@@ -36,6 +36,8 @@
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberRankOffset))
 #define PARTY_MEMBER_PRESTIGE(party, i) \
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
+#define PARTY_BAN_NAME(i) \
+    ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
 

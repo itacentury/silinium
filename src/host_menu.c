@@ -118,18 +118,31 @@ static void remember_ban(const char* name) {
 }
 
 // Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
-// checked every frame while we host a party. With all 16 slots used here, putting names
-// back can push banClient entries out of the game's full list.
+// checked every frame while we host a party. A full game list replaces its oldest entry,
+// so names only go into free entries: otherwise each restored name would push out the
+// next one (or a banClient entry), every frame.
+static int free_ban_entries() {
+    int count = 0;
+    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+        if (!PARTY_BAN_NAME(i)[0]) {
+            count++;
+        }
+    }
+    return count;
+}
+
 static void restore_bans() {
     static bool logged;
     if (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty)) {
         return;
     }
-    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+    int freeEntries = free_ban_entries();
+    for (int i = 0; i < HOST_MENU_MAX_BANS && freeEntries > 0; i++) {
         if (!bannedNames[i][0] || Party_IsBanned(bannedNames[i])) {
             continue;
         }
         Party_BanName(bannedNames[i]);
+        freeEntries--;
         if (!logged) {
             logged = true;
             printf(T5INFO "Ban list was reset, restored the host menu bans.");
