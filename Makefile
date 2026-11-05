@@ -41,7 +41,7 @@ release:
 
 .PHONY: format
 format:
-	clang-format -i $(SOURCES_DIR)/*.c $(SOURCES_DIR)/*.h
+	bash ./build.sh format
 
 
 		

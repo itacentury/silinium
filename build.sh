@@ -11,6 +11,8 @@
 #   SCETOOL           scetool command for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored).
 #                     Not run through PS3_TOOL_WRAPPER; include a wrapper yourself, e.g. "wine scetool.exe".
 #                     Split on whitespace like PS3_TOOL_WRAPPER, so a path with spaces needs scetool on PATH instead.
+#   CLANG_FORMAT      clang-format command for the format mode, default: clang-format. Must be version 20,
+#                     e.g. CLANG_FORMAT=clang-format-20 or the path to an LLVM 20 install.
 
 set -euo pipefail
 
@@ -20,6 +22,8 @@ NAME="Silinium"
 SRC_DIR="src"
 OBJ_DIR="objs/$CONFIG"
 OUT_DIR="bin/$CONFIG"
+# Must match clang-format-version in .github/workflows/build.yml, other versions format differently.
+CLANG_FORMAT_VERSION="20"
 
 cd "$(dirname "$0")"
 
@@ -40,8 +44,25 @@ if [ "$CONFIG" = "clean" ]; then
     exit 0
 fi
 
+check_clang_format() {
+    if ! command -v "$CLANG_FORMAT" >/dev/null; then
+        echo "error: clang-format not found ($CLANG_FORMAT), set CLANG_FORMAT" >&2
+        exit 1
+    fi
+    local versionLine major
+    versionLine="$("$CLANG_FORMAT" --version | head -n 1)"
+    major="$(echo "$versionLine" | sed -n 's/.*clang-format version \([0-9]*\)\..*/\1/p')"
+    if [ "$major" != "$CLANG_FORMAT_VERSION" ]; then
+        echo "error: clang-format $CLANG_FORMAT_VERSION required (CI checks with it), found: $versionLine" >&2
+        echo "       install it and point CLANG_FORMAT at it" >&2
+        exit 1
+    fi
+}
+
 if [ "$CONFIG" = "format" ]; then
-    clang-format -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
+    CLANG_FORMAT="${CLANG_FORMAT:-clang-format}"
+    check_clang_format
+    "$CLANG_FORMAT" -i "$SRC_DIR"/*.c "$SRC_DIR"/*.h
     echo "# formatted $SRC_DIR/"
     exit 0
 fi

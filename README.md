@@ -30,7 +30,7 @@ python3 tools/hen_eboot.py path/to/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx 
 Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/tmp/Silinium.sprx`).
 
 ### Formatting
-The sources are formatted with clang-format (`.clang-format`, checked by CI with version 20). Run `./build.sh format` or `make format` before committing. To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+The sources are formatted with clang-format 20 (`.clang-format`, checked by CI with that version; other versions format differently). Run `./build.sh format` or `make format` before committing; both refuse to run with another clang-format version. Set `CLANG_FORMAT` if version 20 is not the first `clang-format` on `PATH` (e.g. `CLANG_FORMAT=clang-format-20`). To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
 CI (`.github/workflows/build.yml`) checks the formatting and builds debug and release; the `.sprx` files are attached to each run as artifacts.
 
@@ -82,7 +82,7 @@ For a better experience with VS Code and use the tasks:
 
 * Install C/C++ Extension.
 * Git Bash or MSYS2 (unix tools, `bash`) on Windows.
-* clang-format for the `Format All` task.
+* clang-format 20 for the `Format All` task, e.g. from the [LLVM 20 release](https://github.com/llvm/llvm-project/releases) or `pip install "clang-format==20.*"`. Set `CLANG_FORMAT` to its path if another version comes first on `PATH`.
 
 You can now open `Silinium.code-workspace` in VS Code and press `Ctrl+Shift+B` to pick a task: `Build Debug/Release`, `Build Debug/Release (HEN)`, `Clean` or `Format All` (formats all sources in `src/` with clang-format).
 

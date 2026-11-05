@@ -22,7 +22,7 @@ See @docs/code-style.md for code style and convention rules (applies on every ma
 ```bash
 ./build.sh [debug|release|clean]   # build; output bin/<config>/Silinium.sprx
 ./build.sh release hen             # additionally sign Silinium_hen.sprx with scetool
-./build.sh format                  # clang-format -i over src/
+./build.sh format                  # clang-format -i over src/ (requires version 20, CLANG_FORMAT overrides the command)
 make release / make format         # same via the SDK makefiles, if available
 ```
 
