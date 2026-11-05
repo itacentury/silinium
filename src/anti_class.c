@@ -91,6 +91,11 @@ static void format_client_name(char* out, int size, int clientNum) {
     snprintf(out, size, "Client %d", clientNum);
 }
 
+// A free slot keeps the stats of its last client.
+static bool client_in_use(int clientNum) {
+    return CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(clientNum);
+}
+
 static void check_client_classes(int clientNum, int client) {
     if (!fix_classes(CLIENT_STATS(client))) {
         return;
@@ -103,7 +108,9 @@ static void check_client_classes(int clientNum, int client) {
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
-// them.
+// them, and again after every later packet: a client might re-send a chunk after the fix
+// (unverified whether the game accepts it once the mask is complete). All class bodies
+// are in chunk 0 and a clean class is silent, so the re-check is cheap.
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
     if (!hostMenu.antiGodmodeClasses || !*(int*)T5_SvsClients) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
@@ -119,7 +126,9 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
 
     for (int i = 0; i < count; i++) {
-        if (!complete[i] && CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete) {
+        // The name can still be empty when the mask just became complete.
+        bool isComplete = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
+        if (isComplete && (!complete[i] || client_in_use(i))) {
             check_client_classes(i, CLIENT(i));
         }
     }
@@ -134,9 +143,8 @@ void anti_class_check_clients() {
 
     int count = max_clients();
     for (int i = 0; i < count; i++) {
-        // A free slot keeps the stats of its last client.
-        bool inUse = CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(i);
-        if (inUse && CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete) {
+        bool isComplete = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
+        if (isComplete && client_in_use(i)) {
             check_client_classes(i, CLIENT(i));
         }
     }
