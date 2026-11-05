@@ -445,8 +445,8 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // banClient included, because server commands wait for the server frame (0x3F0650)
     // and then run on the main thread at 0x39C258 (traced over direct calls only).
     // Menu_PaintAll is expected to run there too (see show_game_message), so the flag
-    // stays set until it does. Before restore_bans, so nothing comes back in the same
-    // frame.
+    // stays set until it does. Only needed in a match: the lobby callers below rely on
+    // the UI-thread rule. Before restore_bans, so nothing comes back in the same frame.
     static bool unbanAllWarned;
     if (hostMenu.unbanAllPending) {
         if (Sys_IsMainThread()) {
