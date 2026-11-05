@@ -447,9 +447,16 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // Menu_PaintAll is expected to run there too (see show_game_message), so the flag
     // stays set until it does. Before restore_bans, so nothing comes back in the same
     // frame.
-    if (hostMenu.unbanAllPending && Sys_IsMainThread()) {
-        hostMenu.unbanAllPending = false;
-        unban_all();
+    static bool unbanAllWarned;
+    if (hostMenu.unbanAllPending) {
+        if (Sys_IsMainThread()) {
+            hostMenu.unbanAllPending = false;
+            unban_all();
+        } else if (!unbanAllWarned) {
+            unbanAllWarned = true;
+            printf(T5WARNING
+                   "Menu_PaintAll is not on the main thread, Unban All is waiting.");
+        }
     }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
