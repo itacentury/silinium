@@ -15,6 +15,7 @@ t5nhd(void, SV_ReceiveStats, (uint64_t from0, uint64_t from1, uint64_t from2, vo
 int anti_class_init();
 
 // Checks the clients whose stats are already in, for turning the option on in game.
+// Server thread only, the toggle queues it for ClientEndFrame.
 void anti_class_check_clients();
 
 #endif /* ANTI_CLASS_H */

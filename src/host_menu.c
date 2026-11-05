@@ -589,7 +589,7 @@ bool host_menu_client_command_ok(int clientNum, const char* cmd) {
     return true;
 }
 
-// Server frame: runs the queued kick, scorelimit and keyboard requests.
+// Server frame: runs the queued kick, scorelimit, class check and keyboard requests.
 void ClientEndFrame_Hook(void* ent, void* a2) {
     char buffer[64];
 
@@ -606,6 +606,10 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         sprintf(buffer, "set scr_tdm_scorelimit %i\n", host_menu_get_scorelimit());
         Cbuf_AddText(0, buffer);
     }
+    if (hostMenu.antiClassCheckPending) {
+        hostMenu.antiClassCheckPending = false;
+        anti_class_check_clients();
+    }
     send_keyboard_input(ent);
     ClientEndFrame_Trampoline(ent, a2);
 }
@@ -620,6 +624,7 @@ static void host_menu_thread(uint64_t arg) {
         if (!inGame) {
             hostMenu.kickClient = -1;
             hostMenu.scorelimitPending = false;
+            hostMenu.antiClassCheckPending = false;
             hostMenu.endGamePending = false;
             keyboardState = KEYBOARD_IDLE;
             gameMessagePending = false;

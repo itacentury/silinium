@@ -5,7 +5,6 @@
 #include <string.h>
 #include <sys/timer.h>
 
-#include "anti_class.h"
 #include "host_menu.h"
 #include "t5.h"
 #include "utils.h"
@@ -342,6 +341,11 @@ static void disable_dlc() {
     }
 }
 
+// The check writes the clients' stats, so it runs on the server thread.
+static void anti_godmode_classes() {
+    hostMenu.antiClassCheckPending = hostMenu.antiGodmodeClasses;
+}
+
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
 
 static void change_name() {
@@ -552,7 +556,7 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
                0, 0, disable_dlc);
     add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
-               &hostMenu.antiGodmodeClasses, 0, 0, anti_class_check_clients);
+               &hostMenu.antiGodmodeClasses, 0, 0, anti_godmode_classes);
     add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;
