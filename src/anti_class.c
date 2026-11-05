@@ -46,17 +46,17 @@ static int class_body_bit(int slot) {
            (slot - CLASS_COUNT) * T5_Stats_ClassBits;
 }
 
-// The custom classes are set in every dump, the prestige classes of a player who never
-// prestiged may still be zero (unverified), so 0 only counts there as unset.
-// Returns whether the body was invalid and has been reset.
+// The prestige classes of a player who never prestiged may still be zero (unverified).
+// Zero is reset as well, since Prestige Unlocks lets such a player pick these classes,
+// but it doesn't count as a godmode class. Returns whether a godmode body was fixed.
 static bool fix_class_body(uint8_t* stats, int slot) {
     int bit = class_body_bit(slot);
     int body = read_bits(stats, bit, T5_Stats_BodyItemBits);
-    if (is_body_item(body) || (slot >= CLASS_COUNT && body == 0)) {
+    if (is_body_item(body)) {
         return false;
     }
     write_bits(stats, bit, T5_Stats_BodyItemBits, T5_BodyItemDefault);
-    return true;
+    return slot < CLASS_COUNT || body != 0;
 }
 
 // Fixes every class, returns whether any was fixed.
