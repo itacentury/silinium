@@ -64,31 +64,40 @@ int host_menu_lobby_party() {
 
 #define PARTY_REMOVE_COOLDOWN_US (1000 * 1000)
 
-static struct {
-    int party;
-    int member;
+typedef struct {
     char name[sizeof(hostMenu.lobbyKickName)];
     system_time_t time;
-} lastRemoval;
+} PartyRemoval;
+
+// Indexed by party (0 LobbyParty, 1 GameParty) and member slot.
+static PartyRemoval lastRemovals[2][HOST_MENU_MAX_CLIENTS];
+
+static PartyRemoval* party_removal(int party, int member) {
+    if (member < 0 || member >= HOST_MENU_MAX_CLIENTS) {
+        return 0;
+    }
+    return &lastRemovals[party == T5_GameParty][member];
+}
 
 // Whether Party_RemoveMember frees the slot right away is unverified. If it doesn't, the
 // banned member would be removed (and sent "endparty") every frame, so a slot just
-// removed is skipped for a second. The name is compared so another player taking the slot
-// in that second is still removed.
+// removed is skipped for a second. The cooldown is kept per slot, so several members
+// waiting to be freed don't reset each other's. The name is compared so another player
+// taking the slot in that second is still removed.
 static void remove_party_member(int party, int member, const char* reason) {
     static bool logged;
-    const char* name = PARTY_MEMBER_NAME(party, member);
-    system_time_t now = sys_time_get_system_time();
-    if (lastRemoval.party == party && lastRemoval.member == member &&
-        strncmp(lastRemoval.name, name, sizeof(lastRemoval.name) - 1) == 0 &&
-        now - lastRemoval.time < PARTY_REMOVE_COOLDOWN_US) {
-        return;
+    PartyRemoval* removal = party_removal(party, member);
+    if (removal) {
+        const char* name = PARTY_MEMBER_NAME(party, member);
+        system_time_t now = sys_time_get_system_time();
+        if (strncmp(removal->name, name, sizeof(removal->name) - 1) == 0 &&
+            now - removal->time < PARTY_REMOVE_COOLDOWN_US) {
+            return;
+        }
+        strncpy(removal->name, name, sizeof(removal->name) - 1);
+        removal->name[sizeof(removal->name) - 1] = 0;
+        removal->time = now;
     }
-    lastRemoval.party = party;
-    lastRemoval.member = member;
-    strncpy(lastRemoval.name, name, sizeof(lastRemoval.name) - 1);
-    lastRemoval.name[sizeof(lastRemoval.name) - 1] = 0;
-    lastRemoval.time = now;
     Party_RemoveMember(party, member, 1, reason);
     if (!logged) {
         logged = true;
