@@ -17,12 +17,27 @@
 #define CG_CLIENTINFO_BASE (*(int*)T5_CgClientInfoBase)
 #define CG_CLIENTNUM (*(int*)(CG_CLIENTINFO_BASE + T5_CgClientNumOffset))
 #define CG_CLIENT_NAME(i) ((const char*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + 0x5DB04))
+#define CG_CLIENT_CLAN(i) ((const char*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + 0x5DB50))
+#define CG_CLIENT_RANK(i) \
+    (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientRankOffset))
+#define CG_CLIENT_PRESTIGE(i) \
+    (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientPrestigeOffset))
 #define PLAYLIST_ENTRY(i) (T5_PlaylistEntries + (i) * 0x98)
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
 #define PARTY_MEMBER_USED(party, i) (*(unsigned char*)PARTY_MEMBER(party, i) > 2)
 #define PARTY_MEMBER_NAME(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
+#define PARTY_MEMBER_CLAN(party, i) \
+    ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanOffset))
+#define PARTY_MEMBER_CLAN_FEATURE(party, i) \
+    (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanFeatureOffset))
+#define PARTY_MEMBER_RANK(party, i) \
+    (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberRankOffset))
+#define PARTY_MEMBER_PRESTIGE(party, i) \
+    (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
+#define PARTY_BAN_NAME(i) \
+    ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
 
@@ -53,6 +68,10 @@ t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
 t5nd(void, Party_RemoveMember,
      (int party, int memberIndex, int notify, const char* reason));
 t5nd(void, Party_BanName, (const char* name));
+t5nd(int, Party_IsBanned, (const char* name));
+t5nd(void, ClanTag_Format,
+     (int feature, const char* clan, const char* name, const char* plain, char* out));
+t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
 t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));
@@ -72,8 +91,16 @@ t5nhd(void, ClanName_Sanitize, ());
 int host_menu_init();
 // The host menu hooks are installed.
 bool host_menu_ready();
-// The active party the local player hosts, 0 if there is none.
+// The party struct is active.
+bool host_menu_party_active(int party);
+// Both party structs are active, so the player list can switch between them.
+bool host_menu_lobby_parties_both_active();
+// The party of the pregame lobby the player list shows, 0 outside a lobby.
+int host_menu_lobby_view_party();
+// That party if the local player hosts it, else 0.
 int host_menu_lobby_party();
+// Names in the game's ban list (menu and banClient bans).
+int host_menu_ban_count();
 // Called once per server script load, after the scripts are compiled.
 void host_menu_on_server_scripts_loaded();
 // Write into the local stats.

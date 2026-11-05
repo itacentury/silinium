@@ -52,7 +52,24 @@
 #define T5_Material_RegisterHandle 0x7458D8
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
-                                  // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty)
+                                  // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
+                                  // list for both parties, cleared by the party reset 0x1F98B0
+                                  // (memset at 0x1F9A48) for either party. Takes the first entry with an empty
+                                  // name, in a full list the one with the smallest time, I_strncpyz(.., 0x20)
+#define T5_Party_IsBanned 0x1E7830 // (name), 1 if the name is in the ban list Party_BanName fills, 0 for a null or
+                                   // empty name. r3 at the join check 0x2134CC is a 0x20 copy of the joining name,
+                                   // compared case-sensitively (0x4DCF50)
+#define T5_PartyBanListOffset 0x53CC // on LobbyParty, 16 entries: +0x00 name (0x20), +0x20 int from 0x169528C
+                                     // (a time, unverified)
+#define T5_PartyBanEntrySize 0x24
+// (feature, clan, name, plain, out): for the "tagcolor" feature writes "[^%i%s^7]%s" to out, for "tagrot" the same with a
+// color that changes over time, otherwise leaves out as it is. The caller fills out with the plain text first, the lobby
+// list (0x222A90) passes name "" and plain "[clan]", out is 0x80 bytes.
+#define T5_ClanTag_Format 0x21B560
+// (rankId, prestige, Material** out): looks up mp/rankIconTable.csv (row rankId, column prestige + 1) and registers the
+// material, out is 0 for the default material. Called by cgame with clientinfo + 0x38/0x3C (0x16ABA0) and by the lobby
+// with the party member's rank and prestige (0x143240).
+#define T5_RankIcon_Lookup 0x1DAB40
 
 // Both are tail calls of CL_ConsolePrint (0x1AF228) with channel 2 / 3
 #define T5_CG_GameMessage 0x113550 // (localClientNum, msg)
@@ -116,17 +133,32 @@
 #define T5_PrestigeUnlock_EmblemIconLockedUi 0x6F8E0 // icon lock shown in the UI (0x6F808), original: bgt cr6 (0x4199FFC4)
 
 #define T5_PartyData 0x2023500
-#define T5_CgClientInfoBase 0xC3DFB8 // pointer, + i * 0x5D0 + 0x5DB04 = client name
+#define T5_CgClientInfoBase 0xC3DFB8 // pointer, + i * 0x5D0 + 0x5DB04 = client name, + 0x5DB50 = clan tag (team message
+                                     // popup at 0x1727CC)
+#define T5_CgClientClanSize 8 // clan tag at clientinfo + 0x5DB50: filled from the snapshot by I_strncpyz(.., 8) at
+                              // 0x1698B0, copied to the scoreboard with size 8 at 0x13C738, another field at + 0x5DB58
+#define T5_CgClientRankOffset 0x5DB30 // int, rankId (level - 1) at clientinfo + 0x38, copied from clientState + 0x64 at
+                                      // 0x16982C, the server's gclient + 0x282C that setRank writes
+#define T5_CgClientPrestigeOffset 0x5DB34 // int, clientinfo + 0x3C, from clientState + 0x68 (gclient + 0x2830)
 #define T5_CgClientNumOffset 0x0 // cg_t.clientNum, the local player's server client slot. 0x116D30 compares it in each of the
                                  // 4 local cg_t (stride 0x6B100), 0x155F7C indexes the 0x5D0 client info array with it
-#define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified)
-#define T5_GameParty 0xD5A090 // second party struct Party_IsHost checks (id 1), set up at 0x1E8B38
+#define T5_LobbyParty 0xD53910 // party struct (id 0 at +0x57B8), checked by Party_IsHost (0x698490) (static, unverified),
+                               // the pregame lobby (verified in game)
+#define T5_GameParty 0xD5A090 // second party struct Party_IsHost checks (id 1), set up at 0x1E8B38, the private party
+                              // (verified in game)
 #define T5_PartyHostIndexOffset 0x5668
 #define T5_PartyActiveOffset 0x5714
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
 #define T5_PartyMemberSize 0x220
 #define T5_PartyMemberNameOffset 0x18
+#define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. T5_PartyMemberClanSize
+                                      // bytes, the COD points follow at +0x64
+#define T5_PartyMemberClanSize 8
+#define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
+// Set from the party message "rank <rankId> <prestige> <codpoints>" (sent at 0x1FB768, handled at 0x2122F0)
+#define T5_PartyMemberRankOffset 0xC8 // int, rankId (level - 1)
+#define T5_PartyMemberPrestigeOffset 0xCC // int
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int

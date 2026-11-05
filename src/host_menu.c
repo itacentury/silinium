@@ -13,10 +13,10 @@
 #include "t5.h"
 #include "utils.h"
 
-static bool party_is_active(int party) { return *(int*)(party + T5_PartyActiveOffset); }
+bool host_menu_party_active(int party) { return *(int*)(party + T5_PartyActiveOffset); }
 
 static bool party_is_host(int party, int clientNum) {
-    return party_is_active(party) &&
+    return host_menu_party_active(party) &&
            *(int*)(party + T5_PartyHostIndexOffset) == clientNum;
 }
 
@@ -30,29 +30,23 @@ static bool is_host(int clientNum) {
 }
 
 static bool party_is_local_host(int party) {
-    return party_is_active(party) && *(int*)(party + T5_PartyIsHostOffset);
+    return host_menu_party_active(party) && *(int*)(party + T5_PartyIsHostOffset);
 }
 
-static int party_used_count(int party) {
-    int count = 0;
-    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        if (PARTY_MEMBER_USED(party, i)) {
-            count++;
-        }
-    }
-    return count;
+bool host_menu_lobby_parties_both_active() {
+    return host_menu_party_active(T5_LobbyParty) && host_menu_party_active(T5_GameParty);
 }
 
-// It's unverified which of the two structs is the pregame party, so take whichever one we
-// host. When we host both (a private party taken into a public lobby), take the bigger
-// one: the lobby also holds the party's members.
-int host_menu_lobby_party() {
-    bool lobby = party_is_local_host(T5_LobbyParty);
-    bool game = party_is_local_host(T5_GameParty);
+// With both parties active LobbyParty ("Lobby") is shown unless the player switched to
+// GameParty ("Party") with Triangle (labels verified in game). The choice names a struct,
+// not the larger party, so the list doesn't change when members join one party before the
+// other. In matchmaking we can host the private party while being a client of the lobby,
+// so the shown party may not be one we host.
+int host_menu_lobby_view_party() {
+    bool lobby = host_menu_party_active(T5_LobbyParty);
+    bool game = host_menu_party_active(T5_GameParty);
     if (lobby && game) {
-        return party_used_count(T5_GameParty) > party_used_count(T5_LobbyParty)
-                   ? T5_GameParty
-                   : T5_LobbyParty;
+        return hostMenu.lobbyShowGameParty ? T5_GameParty : T5_LobbyParty;
     }
     if (lobby) {
         return T5_LobbyParty;
@@ -63,13 +57,145 @@ int host_menu_lobby_party() {
     return 0;
 }
 
+int host_menu_lobby_party() {
+    int party = host_menu_lobby_view_party();
+    return party && party_is_local_host(party) ? party : 0;
+}
+
+#define PARTY_REMOVE_COOLDOWN_US (1000 * 1000)
+
+typedef struct {
+    char name[sizeof(hostMenu.lobbyKickName)];
+    system_time_t time;
+} PartyRemoval;
+
+// Indexed by party (0 LobbyParty, 1 GameParty) and member slot.
+static PartyRemoval lastRemovals[2][HOST_MENU_MAX_CLIENTS];
+
+static PartyRemoval* party_removal(int party, int member) {
+    if (member < 0 || member >= HOST_MENU_MAX_CLIENTS) {
+        return 0;
+    }
+    return &lastRemovals[party == T5_GameParty][member];
+}
+
+// Whether Party_RemoveMember frees the slot right away is unverified. If it doesn't, the
+// banned member would be removed (and sent "endparty") every frame, so a slot just
+// removed is skipped for a second. The cooldown is kept per slot, so several members
+// waiting to be freed don't reset each other's. The name is compared so another player
+// taking the slot in that second is still removed.
+static void remove_party_member(int party, int member, const char* reason) {
+    static bool logged;
+    PartyRemoval* removal = party_removal(party, member);
+    if (removal) {
+        const char* name = PARTY_MEMBER_NAME(party, member);
+        system_time_t now = sys_time_get_system_time();
+        if (strncmp(removal->name, name, sizeof(removal->name) - 1) == 0 &&
+            now - removal->time < PARTY_REMOVE_COOLDOWN_US) {
+            return;
+        }
+        strncpy(removal->name, name, sizeof(removal->name) - 1);
+        removal->name[sizeof(removal->name) - 1] = 0;
+        removal->time = now;
+    }
+    Party_RemoveMember(party, member, 1, reason);
+    if (!logged) {
+        logged = true;
+        printf(T5INFO "Party_RemoveMember: slot %d still used afterwards: %d.", member,
+               PARTY_MEMBER_USED(party, member));
+    }
+}
+
+// Same size as the game's ban list, so a full list here fits in it.
+#define HOST_MENU_MAX_BANS 16
+
+// Names banned through the menu, kept for the whole session. The game's list is shared by
+// both parties and cleared by the party reset at 0x1F98B0, so restore_bans puts these
+// back.
+static char bannedNames[HOST_MENU_MAX_BANS][sizeof(hostMenu.lobbyKickName)];
+static int bannedNext;
+// Set when Party_BanName did not add a name, cleared by Unban All.
+static bool banRestoreDisabled;
+
+static void remember_ban(const char* name) {
+    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+        if (strncmp(bannedNames[i], name, sizeof(bannedNames[i]) - 1) == 0) {
+            return;
+        }
+    }
+    strncpy(bannedNames[bannedNext], name, sizeof(bannedNames[bannedNext]) - 1);
+    bannedNames[bannedNext][sizeof(bannedNames[bannedNext]) - 1] = 0;
+    bannedNext = (bannedNext + 1) % HOST_MENU_MAX_BANS;
+}
+
+int host_menu_ban_count() {
+    int count = 0;
+    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+        if (PARTY_BAN_NAME(i)[0]) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static int free_ban_entries() { return HOST_MENU_MAX_BANS - host_menu_ban_count(); }
+
+// Clears the menu's remembered bans first, so restore_bans has nothing to put back, then
+// the game's list (menu and banClient bans), zeroed like the party reset's memset does,
+// and lets restoring start again after it stopped.
+static void unban_all() {
+    memset(bannedNames, 0, sizeof(bannedNames));
+    bannedNext = 0;
+    banRestoreDisabled = false;
+    memset((void*)(T5_LobbyParty + T5_PartyBanListOffset), 0,
+           HOST_MENU_MAX_BANS * T5_PartyBanEntrySize);
+    printf(T5INFO "Unban All: cleared the ban list.");
+}
+
+// Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
+// checked every frame while we host a party. What Party_BanName does with a full list is
+// only read from its disassembly (replace the oldest entry), not seen in game. Names only
+// go into free entries, so if it replaces, a restored name never pushes out the next one
+// (or a banClient entry) every frame; if it adds nothing, the check after the call
+// catches it.
+static void restore_bans() {
+    if (banRestoreDisabled ||
+        (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty))) {
+        return;
+    }
+    int freeEntries = free_ban_entries();
+    int restored = 0;
+    for (int i = 0; i < HOST_MENU_MAX_BANS && freeEntries > 0; i++) {
+        if (!bannedNames[i][0] || Party_IsBanned(bannedNames[i])) {
+            continue;
+        }
+        Party_BanName(bannedNames[i]);
+        if (!Party_IsBanned(bannedNames[i])) {
+            // Retrying every frame would not change anything.
+            banRestoreDisabled = true;
+            printf(T5WARNING
+                   "Party_BanName did not add %s to the ban list, stopped restoring "
+                   "the host menu bans.",
+                   bannedNames[i]);
+            return;
+        }
+        freeEntries--;
+        restored++;
+    }
+    if (restored > 0) {
+        printf(T5INFO "Ban list was reset, restored %d host menu ban(s).", restored);
+    }
+}
+
 // Server commands don't reach the pregame lobby, so the member is removed through the
 // party code. The party and name were taken when the kick was chosen; if either changed
-// since, the slot holds someone else. A ban adds the name to the list party joins are
-// checked against, the same one banClient fills in game. queue_kick only asks for one in
-// LobbyParty, the only party whose joins are checked against it.
+// since, the slot holds someone else. The party only has to still be hosted by us, not
+// shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
+// list party joins are checked against, which banClient fills too and both parties share.
+// Only LobbyParty joins are checked against it, so enforce_game_party_bans covers
+// GameParty.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
-    if (party != host_menu_lobby_party() ||
+    if (!party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
         !PARTY_MEMBER_USED(party, member)) {
         return;
@@ -79,10 +205,31 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
         return;
     }
     if (ban) {
-        Party_BanName(memberName);
+        if (!Party_IsBanned(memberName)) {
+            Party_BanName(memberName);
+        }
+        remember_ban(memberName);
     }
-    Party_RemoveMember(party, member, 1,
-                       ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
+    remove_party_member(party, member,
+                        ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
+}
+
+// The join handler skips the ban check for party id 1 (GameParty, beq at 0x21348C), so a
+// banned player can rejoin it. Remove them again as soon as they show up.
+static void enforce_game_party_bans() {
+    int party = T5_GameParty;
+    if (!party_is_local_host(party)) {
+        return;
+    }
+    int host = *(int*)(party + T5_PartyHostIndexOffset);
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (i == host || !PARTY_MEMBER_USED(party, i)) {
+            continue;
+        }
+        if (Party_IsBanned(PARTY_MEMBER_NAME(party, i))) {
+            remove_party_member(party, i, "@EXE_PLAYERKICKED_BAN");
+        }
+    }
 }
 
 static void write_stat_u8(int addr, uint8_t value) { *(uint8_t*)addr = value; }
@@ -289,9 +436,28 @@ static void send_keyboard_input(void* ent) {
 }
 
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
+    static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
     if (!uiContext) {
         return;
+    }
+
+    // Also safe in a match: the game only touches the ban list from the main thread,
+    // banClient included, because server commands wait for the server frame (0x3F0650)
+    // and then run on the main thread at 0x39C258 (traced over direct calls only).
+    // Menu_PaintAll is expected to run there too (see show_game_message), so the flag
+    // stays set until it does. The guard is only needed in a match: the lobby callers
+    // below rely on the UI-thread rule. Before restore_bans, so nothing comes back in the
+    // same frame.
+    if (hostMenu.unbanAllPending) {
+        if (Sys_IsMainThread()) {
+            hostMenu.unbanAllPending = false;
+            unban_all();
+        } else if (!unbanAllWarned) {
+            unbanAllWarned = true;
+            printf(T5WARNING
+                   "Menu_PaintAll is not on the main thread, Unban All is waiting.");
+        }
     }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
@@ -307,6 +473,8 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             __lwsync();
             hostMenu.lobbyKickMember = -1;
         }
+        restore_bans();
+        enforce_game_party_bans();
         if (hostMenu.selectMapPending) {
             hostMenu.selectMapPending = false;
             Menus_OpenByName(0, uiContext, "select_map");
@@ -441,6 +609,11 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.changeNamePending = false;
             hostMenu.lobbyKickMember = -1;
         }
+        // The list choice only applies while both parties are up; each lobby (and the one
+        // after a match) starts on the Lobby list.
+        if (inGame || !host_menu_lobby_parties_both_active()) {
+            hostMenu.lobbyShowGameParty = false;
+        }
 
         // The game resets the party dvars in the pregame lobby, keep them applied.
         if (hostMenu.forceHost && !inGame) {
@@ -471,6 +644,9 @@ static void init_host_menu_offsets() {
     t5nmi(Material_RegisterHandle);
     t5nmi(Party_RemoveMember);
     t5nmi(Party_BanName);
+    t5nmi(Party_IsBanned);
+    t5nmi(ClanTag_Format);
+    t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
     t5nmi(CG_GameMessage);

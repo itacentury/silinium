@@ -140,32 +140,6 @@ static const char* lookup_name(const DisplayName* names, int count,
     return internal;
 }
 
-// Host, map and gametype, one box each below the controls box.
-static void draw_session_info(bool inGame) {
-    const char* map = inGame ? "" : dvar_string("ui_mapname");
-    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
-    if (!*map) {
-        map = dvar_string("mapname");
-    }
-    if (!*gametype) {
-        gametype = dvar_string("g_gametype");
-    }
-
-    const char* host = dvar_string("party_hostname");
-    char lines[3][64];
-    snprintf(lines[0], sizeof(lines[0]), "Host: %s", *host ? host : "-");
-    snprintf(lines[1], sizeof(lines[1]), "Map: %s",
-             lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
-    snprintf(lines[2], sizeof(lines[2]), "Gametype: %s",
-             lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
-                         gametype));
-
-    float step = R_TextHeight(font) * 0.5f + 10;
-    for (int i = 0; i < 3; i++) {
-        draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Option callbacks
 // ---------------------------------------------------------------------------
@@ -386,21 +360,32 @@ static void reset_name() {
 
 static void open_player_menu() { hostMenu.current = HOST_MENU_KICK; }
 
+// Only the host can act on players: in game the host runs the listen server, in the lobby
+// it hosts the lobby's party.
+static bool can_manage_players(bool inGame) {
+    return inGame ? Dvar_GetBool("sv_running") : host_menu_lobby_party() != 0;
+}
+
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
     bool inGame = Dvar_GetBool("cl_ingame");
+    if (!can_manage_players(inGame)) {
+        return;
+    }
     if (inGame) {
         if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) {
             return;
         }
         printf(T5INFO "Player menu: slot %i (%s), local client %i (%s).", member,
                CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
+        hostMenu.playerModalParty = 0;
     } else {
         int party = host_menu_lobby_party();
         if (!party || !PARTY_MEMBER_USED(party, member)) {
             return;
         }
+        hostMenu.playerModalParty = party;
     }
     hostMenu.cursor[HOST_MENU_PLAYER] = 0;
     hostMenu.playerModalInGame = inGame;
@@ -408,23 +393,26 @@ static void open_player_modal() {
 }
 
 // The modal's slot is a member index in the lobby and a client num in game, so it can't
-// survive the switch.
+// survive the switch. The same slot in the other party is someone else, so it also closes
+// when the shown party changes (one of the two went away), and when host rights are lost.
 static void close_stale_player_modal() {
-    if (hostMenu.current == HOST_MENU_PLAYER &&
-        Dvar_GetBool("cl_ingame") != hostMenu.playerModalInGame) {
+    if (hostMenu.current != HOST_MENU_PLAYER) {
+        return;
+    }
+    bool inGame = Dvar_GetBool("cl_ingame");
+    if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame) ||
+        (!inGame && host_menu_lobby_view_party() != hostMenu.playerModalParty)) {
         hostMenu.current = HOST_MENU_KICK;
     }
 }
 
-// The join handler (0x212FE8) skips the ban check for party id 1 (GameParty), so a ban
-// there would only kick.
-static bool ban_allowed(bool inGame) {
-    return inGame || host_menu_lobby_party() == T5_LobbyParty;
-}
-
 static void queue_kick(bool ban) {
     int member = hostMenu.cursor[HOST_MENU_KICK];
-    if (Dvar_GetBool("cl_ingame")) {
+    bool inGame = Dvar_GetBool("cl_ingame");
+    if (!can_manage_players(inGame)) {
+        return;
+    }
+    if (inGame) {
         if (!CG_CLIENTINFO_BASE || member == CG_CLIENTNUM) {
             return;
         }
@@ -436,11 +424,9 @@ static void queue_kick(bool ban) {
 
     // Remember who was picked, so the kick doesn't hit whoever is in the slot by the time
     // it runs.
-    int party = host_menu_lobby_party();
-    if (!party || hostMenu.lobbyKickMember != -1 || !PARTY_MEMBER_USED(party, member)) {
-        return;
-    }
-    if (ban && !ban_allowed(false)) {
+    int party = hostMenu.playerModalParty;
+    if (!party || host_menu_lobby_party() != party || hostMenu.lobbyKickMember != -1 ||
+        !PARTY_MEMBER_USED(party, member)) {
         return;
     }
     hostMenu.lobbyKickParty = party;
@@ -590,13 +576,25 @@ void host_menu_ui_init() {
         "Player";  // the modal shows the player's name instead
     hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_KICK;
     add_option(HOST_MENU_PLAYER, "Kick", HOST_MENU_TYPE_ACTION, 0, 0, 0, kick_selected);
-    add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected)
-        ->visible = ban_allowed;
+    add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
 }
 
 // ---------------------------------------------------------------------------
 // Input (runs in the menu thread)
 // ---------------------------------------------------------------------------
+
+// Triangle switches between the lobby's two parties, only in the list itself (the modal
+// acts on a member of the shown one).
+static bool can_switch_lists(int m, bool inGame) {
+    return m == HOST_MENU_KICK && !inGame && host_menu_lobby_parties_both_active();
+}
+
+// Square clears the ban list, only in the list itself and only while it holds a name. Not
+// limited to the host: in game the list is still the one the lobby checks afterwards.
+static bool can_unban_all(int m, bool inGame) {
+    return m == HOST_MENU_KICK && (inGame || host_menu_lobby_view_party()) &&
+           host_menu_ban_count() > 0;
+}
 
 void host_menu_ui_handle_input() {
     uint16_t digital1 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL1];
@@ -644,6 +642,16 @@ void host_menu_ui_handle_input() {
             hostMenu.current = hostMenu.parent[m];
             sys_timer_usleep(150000);
         }
+    } else if (digital2 & CELL_PAD_CTRL_TRIANGLE) {
+        if (can_switch_lists(m, inGame)) {
+            hostMenu.lobbyShowGameParty ^= 1;
+        }
+        sys_timer_usleep(200000);
+    } else if (digital2 & CELL_PAD_CTRL_SQUARE) {
+        if (can_unban_all(m, inGame)) {
+            hostMenu.unbanAllPending = true;
+        }
+        sys_timer_usleep(200000);
     } else if (digital1 & CELL_PAD_CTRL_LEFT) {
         if (option->type == HOST_MENU_TYPE_INT) {
             signed char* value = (signed char*)option->value;
@@ -675,6 +683,216 @@ static const char* player_name(int party, bool inGame, int i) {
         name = PARTY_MEMBER_USED(party, i) ? PARTY_MEMBER_NAME(party, i) : "";
     }
     return *name ? name : "No Client Connected";
+}
+
+// Size of the buffer ClanTag_Format writes to, like the lobby list's.
+#define CLAN_TAG_MAX 0x80
+
+// The player list's tags and their widths (scaled to 0.5), built once per frame by
+// build_player_rows.
+static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
+static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
+// Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
+static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
+static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
+// Width of the icon and level column (scaled to 0.5). Rows with a player are indented by
+// it, so the tags and names all start at one x; empty slots start at the left edge.
+static float playerRankColumn;
+// The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
+// first lookup, so the rank icon table is only searched when they change. Reset to 0 by
+// build_player_rows when cl_ingame or mapname changes.
+static int playerIconRanks[HOST_MENU_MAX_CLIENTS];
+static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
+// cl_ingame and mapname the cached icons were looked up under. The lobby and the match
+// may load the icons from different zones and the UI zone can be unloaded on map load,
+// so the cache is dropped when either changes.
+static bool playerIconsInGame;
+static char playerIconsMap[64];
+// The player list box's widest width since the list was entered or its party changed,
+// 0 outside the list. Only the draw code touches these.
+static int playerListWidth;
+// The party the list showed last frame (0 in game), so the width is refit on a change.
+static int playerListParty;
+
+// Rank icon size and the gap after the icon and after the level.
+#define RANK_ICON_SIZE 15.0f
+#define RANK_GAP 4.0f
+// Range of mp/rankIconTable.csv: rankId rows 0-49, prestige columns 0-15.
+#define RANK_ICON_MAX_RANK 49
+#define RANK_ICON_MAX_PRESTIGE 15
+
+// "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
+// feature of the party member), in game without any color like on the scoreboard, so the
+// player's own color codes are dropped too. out must hold CLAN_TAG_MAX bytes.
+static void player_clan_tag(int party, bool inGame, int i, char* out) {
+    out[0] = 0;
+    if (inGame) {
+        // An empty slot may still hold the tag of whoever left.
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) {
+            return;
+        }
+        // Reads stay within the tag field. The field is 8 bytes like the lobby's, so in
+        // game the tag only loses its color codes and icons, not visible characters.
+        const char* tag = CG_CLIENT_CLAN(i);
+        const int size = T5_CgClientClanSize;
+        char clan[T5_CgClientClanSize];
+        int length = 0;
+        for (int c = 0; c < size && tag[c] && length < (int)sizeof(clan) - 1; c++) {
+            bool caret = tag[c] == '^' && c + 1 < size;
+            if (caret && tag[c + 1] >= '0' && tag[c + 1] <= '9') {
+                c++;
+                continue;
+            }
+            // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
+            // as a whole.
+            if (caret && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
+                if (c + 4 >= size) {
+                    break;
+                }
+                c += 4 + (unsigned char)tag[c + 4];
+                continue;
+            }
+            clan[length++] = tag[c];
+        }
+        clan[length] = 0;
+        if (*clan) {
+            sprintf(out, "[%s]", clan);
+        }
+        return;
+    }
+
+    if (!party || !PARTY_MEMBER_USED(party, i)) {
+        return;
+    }
+    const char* clan = PARTY_MEMBER_CLAN(party, i);
+    if (!*clan) {
+        return;
+    }
+    // The clan field is 8 bytes, so at most 7 characters are read: the read stays within
+    // the field even if a peer left no NUL in it. "[^%i" + cut + "^7]" + NUL fit in out.
+    char cut[T5_PartyMemberClanSize];
+    snprintf(cut, sizeof(cut), "%.*s", (int)sizeof(cut) - 1, clan);
+    char plain[CLAN_TAG_MAX];
+    snprintf(plain, sizeof(plain), "[%s]", cut);
+    strcpy(out, plain);
+    ClanTag_Format(PARTY_MEMBER_CLAN_FEATURE(party, i), cut, "", plain, out);
+}
+
+// The host's tag like player_clan_tag builds it, "" if the host isn't found. The host is
+// found by name, the party host index is unverified. In the lobby both parties are
+// searched, also when the local player isn't the host. out must hold CLAN_TAG_MAX bytes.
+static void host_clan_tag(bool inGame, const char* host, char* out) {
+    out[0] = 0;
+    if (inGame) {
+        if (!CG_CLIENTINFO_BASE) {
+            return;
+        }
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+            if (!strcmp(CG_CLIENT_NAME(i), host)) {
+                player_clan_tag(0, true, i, out);
+                return;
+            }
+        }
+        return;
+    }
+    static const int parties[] = {T5_LobbyParty, T5_GameParty};
+    for (int p = 0; p < 2; p++) {
+        int party = parties[p];
+        if (!host_menu_party_active(party)) {
+            continue;
+        }
+        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+            if (PARTY_MEMBER_USED(party, i) &&
+                !strcmp(PARTY_MEMBER_NAME(party, i), host)) {
+                player_clan_tag(party, false, i, out);
+                return;
+            }
+        }
+    }
+}
+
+// Host, map and gametype, one box each below the controls box.
+static void draw_session_info(bool inGame) {
+    const char* map = inGame ? "" : dvar_string("ui_mapname");
+    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
+    if (!*map) {
+        map = dvar_string("mapname");
+    }
+    if (!*gametype) {
+        gametype = dvar_string("g_gametype");
+    }
+
+    const char* host = dvar_string("party_hostname");
+    char tag[CLAN_TAG_MAX] = "";
+    if (*host) {
+        host_clan_tag(inGame, host, tag);
+    }
+    char hostLine[CLAN_TAG_MAX + 64];
+    snprintf(hostLine, sizeof(hostLine), "Host: %s%s", tag, *host ? host : "-");
+    char lines[2][64];
+    snprintf(lines[0], sizeof(lines[0]), "Map: %s",
+             lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
+    snprintf(lines[1], sizeof(lines[1]), "Gametype: %s",
+             lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
+                         gametype));
+
+    float step = R_TextHeight(font) * 0.5f + 10;
+    draw_text_box(hostLine, 10, 20 + step, 0.5f);
+    for (int i = 0; i < 2; i++) {
+        draw_text_box(lines[i], 10, 20 + (i + 2) * step, 0.5f);
+    }
+}
+
+// The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
+// false for an empty slot. Both are clamped, a modded peer can send any value. The clamp
+// keeps the level in 3 digits; the rank icon lookup clamps further to the table's range.
+static bool player_rank(int party, bool inGame, int i, int* rank, int* prestige) {
+    if (inGame) {
+        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(i)) {
+            return false;
+        }
+        *rank = CG_CLIENT_RANK(i);
+        *prestige = CG_CLIENT_PRESTIGE(i);
+    } else {
+        if (!party || !PARTY_MEMBER_USED(party, i)) {
+            return false;
+        }
+        *rank = PARTY_MEMBER_RANK(party, i);
+        *prestige = PARTY_MEMBER_PRESTIGE(party, i);
+    }
+    if (*rank < 0) {
+        *rank = 0;
+    }
+    if (*rank > 254) {
+        *rank = 254;  // level fits in 3 digits
+    }
+    if (*prestige < 0) {
+        *prestige = 0;
+    }
+    if (*prestige > 255) {
+        *prestige = 255;
+    }
+    return true;
+}
+
+// Fills row i's rank icon and level text.
+static void build_player_rank(int party, bool inGame, int i) {
+    int rank, prestige;
+    if (!player_rank(party, inGame, i, &rank, &prestige)) {
+        playerLevels[i][0] = 0;
+        return;
+    }
+    // Whether the game's lookup handles values outside the table is unverified.
+    int iconRank = rank > RANK_ICON_MAX_RANK ? RANK_ICON_MAX_RANK : rank;
+    int iconPrestige =
+        prestige > RANK_ICON_MAX_PRESTIGE ? RANK_ICON_MAX_PRESTIGE : prestige;
+    if (iconRank + 1 != playerIconRanks[i] || iconPrestige != playerIconPrestiges[i]) {
+        playerRankIcons[i] = 0;
+        RankIcon_Lookup(iconRank, iconPrestige, &playerRankIcons[i]);
+        playerIconRanks[i] = iconRank + 1;
+        playerIconPrestiges[i] = iconPrestige;
+    }
+    sprintf(playerLevels[i], "%i", rank + 1);
 }
 
 // The visible options of menu m, rows starting at y, values right aligned at right.
@@ -738,6 +956,61 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     draw_options(HOST_MENU_PLAYER, inGame, 570, 730, y + 38);
 }
 
+// Builds every row's rank, tag and their widths for the draw loop and returns the list
+// box width: wide enough for the longest "icon level [tag]name" row plus 10 padding each
+// side, at least the default 300 and at most 600, so a long tag from a modded peer can't
+// push the box off screen (its row overflows instead). The width is an even whole number
+// so the box centered at 650 stays pixel-aligned.
+static int build_player_rows(int party, bool inGame) {
+    // Compared with the last build, so a switch while the menu was closed is caught too.
+    char map[sizeof(playerIconsMap)];
+    snprintf(map, sizeof(map), "%s", dvar_string("mapname"));
+    if (inGame != playerIconsInGame || strcmp(map, playerIconsMap)) {
+        memset(playerIconRanks, 0, sizeof(playerIconRanks));
+        playerIconsInGame = inGame;
+        strcpy(playerIconsMap, map);
+    }
+    // The level column fits at least "50" (the highest level), so it doesn't shrink when
+    // the last player with a two digit level leaves.
+    float levelWidth = R_TextWidth("50", 0x7FFFFFFF, font) * 0.5f;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        char* tag = playerTags[i];
+        player_clan_tag(party, inGame, i, tag);
+        playerTagWidths[i] = *tag ? R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f : 0;
+        build_player_rank(party, inGame, i);
+        if (*playerLevels[i]) {
+            float w = R_TextWidth(playerLevels[i], 0x7FFFFFFF, font) * 0.5f;
+            if (w > levelWidth) {
+                levelWidth = w;
+            }
+        }
+    }
+    playerRankColumn = RANK_ICON_SIZE + RANK_GAP + levelWidth + RANK_GAP;
+
+    float widest = 0;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        float w = (*playerLevels[i] ? playerRankColumn : 0) + playerTagWidths[i] +
+                  R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
+        if (w > widest) {
+            widest = w;
+        }
+    }
+    // Round up to an even whole number so left = 650 - width / 2 and the accent
+    // borders land on whole pixels.
+    int width = (int)widest + 20;
+    if (width < widest + 20) {
+        width++;  // ceil (widest >= 0)
+    }
+    width = (width + 1) & ~1;  // round up to even
+    if (width < 300) {
+        width = 300;
+    }
+    if (width > 600) {
+        width = 600;
+    }
+    return width;
+}
+
 void host_menu_ui_draw() {
     if (!font) {
         font = R_RegisterFont(FONT, 0);
@@ -750,6 +1023,7 @@ void host_menu_ui_draw() {
     }
 
     if (!hostMenu.open) {
+        playerListWidth = 0;
         if (hostMenu.showControls) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
         }
@@ -762,38 +1036,95 @@ void host_menu_ui_draw() {
     // The player modal is drawn over the player list, so the box keeps showing the list.
     bool players = m == HOST_MENU_KICK || m == HOST_MENU_PLAYER;
     int boxMenu = players ? HOST_MENU_KICK : m;
-    int party = (players && !inGame) ? host_menu_lobby_party() : 0;
-    bool notHost = players && !inGame && !party;
+    // Clients see the list too, only the host can open the player modal.
+    int party = (players && !inGame) ? host_menu_lobby_view_party() : 0;
+    bool notHost = players && !inGame && !party;  // not in a lobby
+    bool viewOnly = players && !notHost && !can_manage_players(inGame);
 
     float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
-    draw_shader(498, 200, 2, height, accent, whiteMaterial);
-    draw_shader(799, 200, 2, height, accent, whiteMaterial);
-    draw_shader(500, 200, 300, height, background, whiteMaterial);
+    // The player list grows around the center at 650, so titles and the modal stay
+    // centered. It keeps its widest width until the list is left, so names don't shift
+    // sideways when a long-named player leaves.
+    float width = 300;
+    if (players && !notHost) {
+        if (party != playerListParty) {
+            playerListParty = party;
+            playerListWidth = 0;  // fit the box to the new list
+        }
+        int w = build_player_rows(party, inGame);
+        if (w > playerListWidth) {
+            playerListWidth = w;
+        }
+        width = playerListWidth;
+    } else {
+        playerListWidth = 0;
+    }
+    float left = 650 - width / 2;
+    draw_shader(left - 2, 200, 2, height, accent, whiteMaterial);
+    draw_shader(left + width - 1, 200, 2, height, accent, whiteMaterial);
+    draw_shader(left, 200, width, height, background, whiteMaterial);
 
     draw_text("Silinium", get_aligned_x(650, 0.6f, "Silinium", ALIGN_CENTER), 220, 0.6f,
               white);
-    draw_text(hostMenu.title[boxMenu],
-              get_aligned_x(650, 0.45f, hostMenu.title[boxMenu], ALIGN_CENTER), 238,
-              0.45f, accent);
+    // With both parties active the title names the list shown.
+    bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
+    const char* title = hostMenu.title[boxMenu];
+    if (bothLists) {
+        title = hostMenu.lobbyShowGameParty ? "Players (Party)" : "Players (Lobby)";
+    }
+    draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), 238, 0.45f, accent);
     if (players) {
-        if (notHost) {
-            draw_text_box("\x02 - Back", 10, 20, 0.5f);
-        } else if (m == HOST_MENU_PLAYER) {
-            draw_text_box(
-                "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back", 10, 20,
-                0.5f);
-        } else {
-            draw_text_box("\x14\x15 - Scroll | \x01 - Select | \x02 - Back", 10, 20,
-                          0.5f);
+        const char* switchHint =
+            can_switch_lists(m, inGame) ? " | \x04 - Switch List" : "";
+        // \x03 as the Square glyph is inferred from \x01 Cross, \x02 Circle and \x04
+        // Triangle (unverified).
+        char unbanHint[32] = "";
+        if (can_unban_all(m, inGame)) {
+            snprintf(unbanHint, sizeof(unbanHint), " | \x03 - Unban All (%i)",
+                     host_menu_ban_count());
         }
+        char controls[128];
+        if (notHost) {
+            snprintf(controls, sizeof(controls), "\x02 - Back");
+        } else if (viewOnly) {
+            snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s%s | \x02 - Back",
+                     switchHint, unbanHint);
+        } else if (m == HOST_MENU_PLAYER) {
+            snprintf(controls, sizeof(controls),
+                     "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back");
+        } else {
+            snprintf(controls, sizeof(controls),
+                     "\x14\x15 - Scroll | \x01 - Select%s%s | \x02 - Back", switchHint,
+                     unbanHint);
+        }
+        draw_text_box(controls, 10, 20, 0.5f);
         draw_session_info(inGame);
         if (notHost) {
-            draw_text("Only the party host can manage players", 510, 258, 0.5f, white);
+            draw_text("Not in a lobby", 510, 258, 0.5f, white);
             return;
         }
+        // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn
+        // the selected name white.
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-            draw_text(player_name(party, inGame, i), 510, i * 16.5f + 258, 0.5f,
-                      hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white);
+            const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
+            float y = i * 16.5f + 258;
+            float x = left + 10;
+            // On player rows icon, level and tag/name each start at a fixed x, also
+            // without an icon, so the names form one straight column. Empty slots have no
+            // level and start at the left edge.
+            if (*playerLevels[i]) {
+                if (playerRankIcons[i]) {
+                    draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,
+                                white, playerRankIcons[i]);
+                }
+                draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, 0.5f, color);
+                x += playerRankColumn;
+            }
+            if (*playerTags[i]) {
+                draw_text(playerTags[i], x, y, 0.5f, color);
+                x += playerTagWidths[i];
+            }
+            draw_text(player_name(party, inGame, i), x, y, 0.5f, color);
         }
         if (m == HOST_MENU_PLAYER) {
             draw_player_modal(party, inGame, 200 + height);

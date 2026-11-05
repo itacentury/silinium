@@ -67,6 +67,7 @@ typedef struct HostMenu {
     signed char prestige;
     bool playerModalInGame;  // cl_ingame when the player modal was opened, the slot means
                              // something else once it changes
+    int playerModalParty;    // party the modal was opened in the lobby for, 0 in game
     signed char
         kickClient;  // -1 = none, otherwise client num | HOST_MENU_KICK_BAN when banning
     signed char lobbyKickMember;  // -1 = none, otherwise party member index |
@@ -74,6 +75,9 @@ typedef struct HostMenu {
     int lobbyKickParty;           // party the queued lobby kick was chosen in
     char lobbyKickName[32];       // name of the member it was chosen for, as long as
                                   // Party_BanName copies
+    bool unbanAllPending;     // set by Square in the player list, run by Menu_PaintAll
+    bool lobbyShowGameParty;  // with both parties active, the player list shows GameParty
+                              // ("Party") instead of LobbyParty ("Lobby")
 } HostMenu;
 
 extern HostMenu hostMenu;
