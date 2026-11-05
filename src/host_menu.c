@@ -128,12 +128,6 @@ static void remember_ban(const char* name) {
     bannedNext = (bannedNext + 1) % HOST_MENU_MAX_BANS;
 }
 
-// Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
-// checked every frame while we host a party. What Party_BanName does with a full list is
-// only read from its disassembly (replace the oldest entry), not seen in game. Names only
-// go into free entries, so if it replaces, a restored name never pushes out the next one
-// (or a banClient entry) every frame; if it adds nothing, the check after the call
-// catches it.
 int host_menu_ban_count() {
     int count = 0;
     for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
@@ -158,6 +152,12 @@ static void unban_all() {
     printf(T5INFO "Unban All: cleared the ban list.");
 }
 
+// Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
+// checked every frame while we host a party. What Party_BanName does with a full list is
+// only read from its disassembly (replace the oldest entry), not seen in game. Names only
+// go into free entries, so if it replaces, a restored name never pushes out the next one
+// (or a banClient entry) every frame; if it adds nothing, the check after the call
+// catches it.
 static void restore_bans() {
     static bool logged;
     if (banRestoreDisabled ||
