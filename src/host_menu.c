@@ -127,9 +127,11 @@ static void remember_ban(const char* name) {
 }
 
 // Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
-// checked every frame while we host a party. A full game list replaces its oldest entry,
-// so names only go into free entries: otherwise each restored name would push out the
-// next one (or a banClient entry), every frame.
+// checked every frame while we host a party. What Party_BanName does with a full list is
+// only read from its disassembly (replace the oldest entry), not seen in game. Names only
+// go into free entries, so if it replaces, a restored name never pushes out the next one
+// (or a banClient entry) every frame; if it adds nothing, the check after the call
+// catches it.
 static int free_ban_entries() {
     int count = 0;
     for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
@@ -142,7 +144,9 @@ static int free_ban_entries() {
 
 static void restore_bans() {
     static bool logged;
-    if (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty)) {
+    static bool disabled;
+    if (disabled ||
+        (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty))) {
         return;
     }
     int freeEntries = free_ban_entries();
@@ -151,6 +155,15 @@ static void restore_bans() {
             continue;
         }
         Party_BanName(bannedNames[i]);
+        if (!Party_IsBanned(bannedNames[i])) {
+            // Retrying every frame would not change anything.
+            disabled = true;
+            printf(T5WARNING
+                   "Party_BanName did not add %s to the ban list, stopped restoring "
+                   "the host menu bans.",
+                   bannedNames[i]);
+            return;
+        }
         freeEntries--;
         if (!logged) {
             logged = true;
