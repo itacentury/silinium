@@ -8,7 +8,7 @@
 #   PS3_HOST_DIR      toolchain dir, default: $SCE_PS3_ROOT/host-win32 (Windows) or host-linux
 #   PS3_EXE_SUFFIX    tool suffix, default: .exe on Windows / when using host-win32
 #   PS3_TOOL_WRAPPER  prefix for every tool call, e.g. "wine" to run host-win32 tools on Linux
-#   SCETOOL           scetool binary for the hen build, default: scetool (keys in ./data or $PS3)
+#   SCETOOL           scetool binary for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored)
 
 set -euo pipefail
 
