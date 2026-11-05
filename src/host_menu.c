@@ -97,12 +97,53 @@ static void remove_party_member(int party, int member, const char* reason) {
     }
 }
 
+// Same size as the game's ban list, so a full list here fits in it.
+#define HOST_MENU_MAX_BANS 16
+
+// Names banned through the menu, kept for the whole session. The game's list is shared by
+// both parties and cleared by the party reset at 0x1F98B0, so restore_bans puts these
+// back.
+static char bannedNames[HOST_MENU_MAX_BANS][sizeof(hostMenu.lobbyKickName)];
+static int bannedNext;
+
+static void remember_ban(const char* name) {
+    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+        if (strncmp(bannedNames[i], name, sizeof(bannedNames[i]) - 1) == 0) {
+            return;
+        }
+    }
+    strncpy(bannedNames[bannedNext], name, sizeof(bannedNames[bannedNext]) - 1);
+    bannedNames[bannedNext][sizeof(bannedNames[bannedNext]) - 1] = 0;
+    bannedNext = (bannedNext + 1) % HOST_MENU_MAX_BANS;
+}
+
+// Which transitions call the reset at 0x1F98B0 (7 callers) is unverified, so the list is
+// checked every frame while we host a party. With all 16 slots used here, putting names
+// back can push banClient entries out of the game's full list.
+static void restore_bans() {
+    static bool logged;
+    if (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty)) {
+        return;
+    }
+    for (int i = 0; i < HOST_MENU_MAX_BANS; i++) {
+        if (!bannedNames[i][0] || Party_IsBanned(bannedNames[i])) {
+            continue;
+        }
+        Party_BanName(bannedNames[i]);
+        if (!logged) {
+            logged = true;
+            printf(T5INFO "Ban list was reset, restored the host menu bans.");
+        }
+    }
+}
+
 // Server commands don't reach the pregame lobby, so the member is removed through the
 // party code. The party and name were taken when the kick was chosen; if either changed
 // since, the slot holds someone else. The party only has to still be hosted by us, not
 // shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
-// list party joins are checked against, the same one banClient fills in game. Only
-// LobbyParty joins are checked against it, so enforce_game_party_bans covers GameParty.
+// list party joins are checked against, which banClient fills too and both parties share.
+// Only LobbyParty joins are checked against it, so enforce_game_party_bans covers
+// GameParty.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (!party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
@@ -115,6 +156,7 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
     }
     if (ban) {
         Party_BanName(memberName);
+        remember_ban(memberName);
     }
     remove_party_member(party, member,
                         ban ? "@EXE_PLAYERKICKED_BAN" : "@EXE_PLAYERKICKED");
@@ -360,6 +402,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             __lwsync();
             hostMenu.lobbyKickMember = -1;
         }
+        restore_bans();
         enforce_game_party_bans();
         if (hostMenu.selectMapPending) {
             hostMenu.selectMapPending = false;

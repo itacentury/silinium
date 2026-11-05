@@ -52,7 +52,9 @@
 #define T5_Material_RegisterHandle 0x7458D8
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
-                                  // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty)
+                                  // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
+                                  // list for both parties, cleared by the party reset 0x1F98B0
+                                  // (memset at 0x1F9A48) for either party
 #define T5_Party_IsBanned 0x1E7830 // (name), nonzero if the name is in the ban list Party_BanName fills
 // (feature, clan, name, plain, out): for the "tagcolor" feature writes "[^%i%s^7]%s" to out, for "tagrot" the same with a
 // color that changes over time, otherwise leaves out as it is. The caller fills out with the plain text first, the lobby
