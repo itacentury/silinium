@@ -93,7 +93,7 @@
  * 	2.5 printf(3S) man page.
  */
 
-// Third-party code: kept as taken over, not restyled by clang-format.
+// Third-party code: frozen in its current form, not restyled by clang-format.
 // clang-format off
 
 #include <limits.h>

@@ -52,7 +52,7 @@ Formatting is owned by `clang-format` (`.clang-format`, checked in CI with versi
 - Header guards are `#ifndef <FILE>_H` / `#define <FILE>_H`.
 - A function declaration in a header gets a one-line `//` comment when its purpose or return value is not obvious from the name (`// The active party the local player hosts, 0 if there is none.`).
 - `// clang-format off` only for tables where manual alignment carries meaning, such as the offset list, and for third-party code.
-- Third-party code (`src/printf.c`) stays as it was taken over: it is excluded from clang-format with a `// clang-format off` after its license header, so neither formatting nor `InsertBraces` restyles it.
+- Third-party code (`src/printf.c`) stays in its current form (formatted once with the old rules, otherwise as taken over): it is excluded from clang-format with a `// clang-format off` after its license header, so neither formatting nor `InsertBraces` restyles it.
 
 ## GSC
 
