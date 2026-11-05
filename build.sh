@@ -7,8 +7,10 @@
 #   SCE_PS3_ROOT      PS3 SDK root (required)
 #   PS3_HOST_DIR      toolchain dir, default: $SCE_PS3_ROOT/host-win32 (Windows) or host-linux
 #   PS3_EXE_SUFFIX    tool suffix, default: .exe on Windows / when using host-win32
-#   PS3_TOOL_WRAPPER  prefix for every tool call, e.g. "wine" to run host-win32 tools on Linux
-#   SCETOOL           scetool binary for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored)
+#   PS3_TOOL_WRAPPER  prefix for every SDK tool call, e.g. "wine" to run host-win32 tools on Linux
+#   SCETOOL           scetool command for the hen build, default: scetool (keys in $PS3, or ./data, which is gitignored).
+#                     Not run through PS3_TOOL_WRAPPER; include a wrapper yourself, e.g. "wine scetool.exe".
+#                     Split on whitespace like PS3_TOOL_WRAPPER, so a path with spaces needs scetool on PATH instead.
 
 set -euo pipefail
 
@@ -44,9 +46,9 @@ if [ "$CONFIG" = "format" ]; then
     exit 0
 fi
 
-SCETOOL="${SCETOOL:-scetool}"
-if [ "$TARGET" = "hen" ] && ! command -v "$SCETOOL" >/dev/null; then
-    echo "error: scetool not found ($SCETOOL), set SCETOOL" >&2
+read -r -a SCETOOL_CMD <<< "${SCETOOL:-scetool}"
+if [ "$TARGET" = "hen" ] && ! command -v "${SCETOOL_CMD[0]}" >/dev/null; then
+    echo "error: scetool not found (${SCETOOL_CMD[*]}), set SCETOOL" >&2
     exit 1
 fi
 
@@ -116,7 +118,7 @@ if [ "$TARGET" = "hen" ]; then
     echo "# signing $HEN_SPRX"
     rm -f "$HEN_SPRX"
     # Same container as the HEN build of InfinityOps.sprx: retail APP SELF, key revision 4.
-    "$SCETOOL" --sce-type=SELF --compress-data=TRUE --skip-sections=FALSE --self-add-shdrs=TRUE \
+    "${SCETOOL_CMD[@]}" --sce-type=SELF --compress-data=TRUE --skip-sections=FALSE --self-add-shdrs=TRUE \
         --key-revision=04 --self-auth-id=1010000001000003 --self-vendor-id=01000002 --self-type=APP \
         --self-app-version=0001000000000000 --encrypt "$PRX" "$HEN_SPRX"
     # scetool can exit 0 without writing anything, e.g. when its keys are missing.
