@@ -42,6 +42,7 @@
 #define T5_R_AddCmdDrawStretchPic 0x751940
 #define T5_R_AddCmdDrawText 0x754410
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
+#define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it
 #define T5_UI_OpenKeyboard 0x56A118
 #define T5_Dvar_GetBool 0x4C7BF0
 #define T5_R_TextHeight 0x734340

@@ -40,6 +40,7 @@ t5nd(void, R_AddCmdDrawText,
      (const char* text, int maxChars, void* font, float x, float y, float xScale,
       float yScale, float rotation, const float* color, int style));
 t5nd(void, SV_Cmd_ArgvBuffer, (int arg, char* buffer, int bufferLength));
+t5nd(int, I_stricmp, (const char* s0, const char* s1));
 t5nd(void, UI_OpenKeyboard,
      (int localClientNum, const char16* title, const char16* preset, int maxLength,
       KeyboardCallback_t callback));

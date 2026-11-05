@@ -325,14 +325,18 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
 #define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
 static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
 
-// Blocks "mr <n> <menu> endround" from everyone except the host.
+// Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
+// matched with the game's I_stricmp like ClientCommand does, so "MR" can't slip past. The
+// response is compared case-sensitively by the script, so other casings of "endround" are
+// harmless.
 void ClientCommand_Hook(int clientNum) {
     char cmd[37] = {0};
     char arg3[37] = {0};
     SV_Cmd_ArgvBuffer(0, cmd, sizeof(cmd));
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
-    if (strcmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
+    if (I_stricmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 &&
+        !is_host(clientNum)) {
         if (CG_CLIENTINFO_BASE && clientNum >= 0 && clientNum < HOST_MENU_MAX_CLIENTS) {
             system_time_t now = sys_time_get_system_time();
             system_time_t* last = &endroundMessageTime[clientNum];
@@ -408,6 +412,7 @@ static void init_host_menu_offsets() {
     t5nmi(R_AddCmdDrawStretchPic);
     t5nmi(R_AddCmdDrawText);
     t5nmi(SV_Cmd_ArgvBuffer);
+    t5nmi(I_stricmp);
     t5nmi(UI_OpenKeyboard);
     t5nmi(Dvar_GetBool);
     t5nmi(R_TextHeight);
