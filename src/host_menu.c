@@ -205,7 +205,9 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
         return;
     }
     if (ban) {
-        Party_BanName(memberName);
+        if (!Party_IsBanned(memberName)) {
+            Party_BanName(memberName);
+        }
         remember_ban(memberName);
     }
     remove_party_member(party, member,
