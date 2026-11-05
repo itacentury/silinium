@@ -12,8 +12,9 @@ void ClientCommand_Hook(int clientNum) {
     SV_Cmd_ArgvBuffer(0, cmd, sizeof(cmd));
 
     if (!anti_freeze_client_command_ok(clientNum, cmd) ||
-        !host_menu_client_command_ok(clientNum, cmd))
+        !host_menu_client_command_ok(clientNum, cmd)) {
         return;
+    }
 
     ClientCommand_Trampoline(clientNum);
 }
@@ -21,12 +22,16 @@ void ClientCommand_Hook(int clientNum) {
 static bool installed;
 
 int client_command_init() {
-    if (installed) return 0;
+    if (installed) {
+        return 0;
+    }
 
     t5nmhi(ClientCommand);
 
     int res;
-    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) return res;
+    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
 
     installed = true;
     return 0;
