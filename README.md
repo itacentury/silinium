@@ -36,7 +36,7 @@ The loader also removes the dvar protections (read only, write protected, cheat)
 ## Host menu
 In multiplayer the loader also contains a host menu, a port of "The Shake Package" mod menu from a reconstruction of `TheShakeBO1.sprx` ([src/host_menu.c](src/host_menu.c), [src/host_menu_ui.c](src/host_menu_ui.c)). It is not available in zombies.
 
-Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects and ○ goes back or closes. While the menu is open the game doesn't receive any button presses except Select (the sticks still work).
+Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects and ○ goes back or closes. While the menu is open the game doesn't receive any button presses except Select (the sticks still work). The boxes at the top left show the host, map, gametype and the loaded mod (`None` if no `.mod` file was found at the last load).
 
 | Option | Effect |
 |---|---|

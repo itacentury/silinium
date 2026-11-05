@@ -132,7 +132,7 @@ static const char* lookup_name(const DisplayName* names, int count,
     return internal;
 }
 
-// Host, map and gametype, one box each below the controls box.
+// Host, map, gametype and mod, one box each below the controls box.
 static void draw_session_info(bool inGame) {
     const char* map = inGame ? "" : dvar_string("ui_mapname");
     const char* gametype = inGame ? "" : dvar_string("ui_gametype");
@@ -140,7 +140,7 @@ static void draw_session_info(bool inGame) {
     if (!*gametype) gametype = dvar_string("g_gametype");
 
     const char* host = dvar_string("party_hostname");
-    char lines[3][64];
+    char lines[4][64];
     snprintf(lines[0], sizeof(lines[0]), "Host: %s", *host ? host : "-");
     snprintf(lines[1], sizeof(lines[1]), "Map: %s",
              lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
@@ -148,8 +148,15 @@ static void draw_session_info(bool inGame) {
              lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
                          gametype));
 
+    // The mod resolved at the last load, shown without the ".mod" extension.
+    char mod[64];
+    snprintf(mod, sizeof(mod), "%s", loader.currentModName);
+    size_t len = strlen(mod);
+    if (len > 4) mod[len - 4] = 0;
+    snprintf(lines[3], sizeof(lines[3]), "Mod: %s", *mod ? mod : "None");
+
     float step = R_TextHeight(font) * 0.5f + 10;
-    for (int i = 0; i < 3; i++) draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
+    for (int i = 0; i < 4; i++) draw_text_box(lines[i], 10, 20 + (i + 1) * step, 0.5f);
 }
 
 // ---------------------------------------------------------------------------
