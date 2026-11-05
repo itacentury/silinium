@@ -268,7 +268,7 @@
 // packets: chunk i of 0x4C6 bytes goes to client + T5_ClientStatsOffset + i * 0x4C6 and sets bit i of the mask.
 // getdstat reads the buffer only once the mask is complete.
 #define T5_SV_ReceiveStats 0x3E2828
-#define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C
+#define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C, 0 while no server runs (zeroed at 0x3EAA0C on shutdown)
 #define T5_SvMaxClients 0x14B4A88 // dvar_t *, SV_FindClientByAddress (0x3EEAF8) loops the clients up to it (name unverified)
 #define T5_ClientSize 0x651C8
 #define T5_ClientStatsOffset 0x5A4F8 // 0x9968 bytes, same layout as T5_Stats_Base, no checksum over the data

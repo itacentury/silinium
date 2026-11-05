@@ -91,7 +91,8 @@ static void format_client_name(char* out, int size, int clientNum) {
     snprintf(out, size, "Client %d", clientNum);
 }
 
-// A free slot keeps the stats of its last client.
+// A free slot keeps the stats and mask of its last client until SV_DirectConnect clears
+// the whole client_t (memset at 0x3E66D4).
 static bool client_in_use(int clientNum) {
     return CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(clientNum);
 }
@@ -108,9 +109,11 @@ static void check_client_classes(int clientNum, int client) {
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
-// them, and again after every later packet: a client might re-send a chunk after the fix
-// (unverified whether the game accepts it once the mask is complete). All class bodies
-// are in chunk 0 and a clean class is silent, so the re-check is cheap.
+// them, and again after every later packet: the game only skips a packet when the mask
+// bits below the client's chunk count are set, so a count above 33 still overwrites a
+// chunk after the fix. All class bodies are in chunk 0 and a clean class is silent, so
+// the re-check is cheap. The transition catches every new client, the connect clears the
+// mask of the slot (memset at 0x3E66D4).
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
     if (!hostMenu.antiGodmodeClasses || !*(int*)T5_SvsClients) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
