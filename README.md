@@ -23,7 +23,7 @@ The code is the same for CFW and PS3HEN, only the signature differs: HEN does no
 HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with `tools/hen_eboot.py` from bo1-re, for example:
 
 ```
-python3 tools/hen_eboot.py eboots/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx -o EBOOT_MP.BIN
+python3 tools/hen_eboot.py path/to/cfw/EBOOT_MP.BIN /dev_hdd0/tmp/Silinium.sprx -o EBOOT_MP.BIN
 ```
 
 Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/tmp/Silinium.sprx`).
