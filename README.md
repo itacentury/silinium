@@ -19,7 +19,7 @@ If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which 
 On Linux the SDK needs a `host-linux` toolchain, or run the Windows tools through Wine: `PS3_HOST_DIR=$SCE_PS3_ROOT/host-win32 PS3_TOOL_WRAPPER=wine ./build.sh release`.
 
 ### HEN
-The code is the same for CFW and PS3HEN, only the signature differs: HEN does not load fake-signed SELFs. `./build.sh release hen` additionally signs `bin/release/Silinium_hen.sprx` with [scetool](https://github.com/naehrwert/scetool) (retail APP SELF, key revision 4, like the HEN build of InfinityOps). scetool and its keys are not part of the repo. Keep the keys outside the repo and point `PS3` at their folder; `data/` in the repo root (scetool's default) is gitignored as a fallback. Set `SCETOOL` to the binary if it is not on `PATH`. It is not run through `PS3_TOOL_WRAPPER`; for a Windows scetool under Wine use e.g. `SCETOOL="wine scetool.exe"`. Use absolute paths for `SCETOOL` and `PS3`; `build.sh` runs scetool from the repo root. CI only builds the CFW `.sprx`.
+The code is the same for CFW and PS3HEN, only the signature differs: HEN does not load fake-signed SELFs. `./build.sh release hen` additionally signs `bin/release/Silinium_hen.sprx` with [scetool](https://github.com/naehrwert/scetool) (retail APP SELF, key revision 4, like the HEN build of InfinityOps). scetool and its keys are not part of the repo. Keep the keys outside the repo and point `PS3` at their folder; `data/` in the repo root (scetool's default) is gitignored as a fallback. Set `SCETOOL` to the binary if it is not on `PATH`. It is not run through `PS3_TOOL_WRAPPER`; for a Windows scetool under Wine use e.g. `SCETOOL="wine scetool.exe"`. Use absolute paths for `SCETOOL` and `PS3`; `build.sh` runs scetool from the repo root.
 
 HEN also needs a signed EBOOT that loads the SPRX. Create one from the CFW SPRX loader EBOOT with [`tools/hen_eboot.py`](https://github.com/itacentury/bo1-re/blob/main/tools/hen_eboot.py) from [bo1-re](https://github.com/itacentury/bo1-re). Run it from a bo1-re clone, because it imports other scripts from the same `tools/` folder. It also signs with scetool and uses the same `SCETOOL` / `PS3` setup as `./build.sh release hen`. In Git Bash set `MSYS_NO_PATHCONV=1`, otherwise the `/dev_hdd0/...` path gets rewritten. For example:
 
@@ -32,7 +32,7 @@ Then copy `Silinium_hen.sprx` to the path baked into the EBOOT (here `/dev_hdd0/
 ### Formatting
 The sources are formatted with clang-format 20 (`.clang-format`, checked by CI with that version; other versions format differently). Run `./build.sh format` or `make format` before committing; both refuse to run with another clang-format version. Set `CLANG_FORMAT` if version 20 is not the first `clang-format` on `PATH` (e.g. `CLANG_FORMAT=clang-format-20`). To hide the commit that reformatted everything from `git blame`, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
-CI (`.github/workflows/build.yml`) checks the formatting and builds debug and release; the `.sprx` files are attached to each run as artifacts.
+CI (`.github/workflows/format.yml`) only checks the formatting. It does not build, because the PS3 SDK cannot be redistributed, so build locally before pushing.
 
 ## Usage
 Create a folder in `/dev_hdd0/tmp/Silinium/mp` or `/dev_hdd0/tmp/Silinium/zm`. Beside your created folder create a .mod file that has the same name as your mod to enable it.
