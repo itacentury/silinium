@@ -11,7 +11,8 @@ Silinium by Century is a PS3 module for Black Ops 1 that allows you to load cust
 If `make` or `$SCE_PS3_ROOT/samples/mk` is not available, use `build.sh`, which calls the toolchain directly (Git Bash on Windows, bash on Linux):
 
 ```
-./build.sh release   # or: debug (default), clean
+./build.sh release       # or: debug (default), clean, format
+./build.sh release hen   # also sign Silinium_hen.sprx for PS3HEN
 ```
 
 `SCE_PS3_ROOT` must point to the SDK. Outputs are `bin/<config>/Silinium.prx` and `.sprx`.
