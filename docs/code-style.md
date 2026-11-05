@@ -40,7 +40,7 @@ Formatting is owned by `clang-format` (`.clang-format`, checked in CI with versi
 
 **Runtime environment**
 
-- The module links with `-nodefaultlibs`; only what is linked (`-lc -lfs_stub`) and `src/printf.c` are available. Check before using a libc function that is not used elsewhere yet.
+- The module links with `-nodefaultlibs`; only what is linked (`-lc -lfs_stub -llv2_stub`) and `src/printf.c` are available. Check before using a libc function that is not used elsewhere yet.
 - Log output uses the `T5INFO` / `T5WARNING` / `T5ERROR` prefixes.
 
 ## C
