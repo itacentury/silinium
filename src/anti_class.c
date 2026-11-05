@@ -14,9 +14,6 @@
 // Custom classes, then the same number of prestige classes.
 #define CLASS_COUNT 5
 
-// Ordered by severity, so the result of several fields is the highest one.
-typedef enum ClassCheck { CLASS_CLEAN, CLASS_FIXED, CLASS_UNFIXABLE } ClassCheck;
-
 // DDL fields are packed from the lowest bit of each byte up.
 static int read_bits(const uint8_t* buffer, int bit, int count) {
     int value = 0;
@@ -51,26 +48,26 @@ static int class_body_bit(int slot) {
 
 // The custom classes are set in every dump, the prestige classes of a player who never
 // prestiged may still be zero (unverified), so 0 only counts there as unset.
-static ClassCheck fix_class_body(uint8_t* stats, int slot) {
+// Returns whether the body was invalid and has been reset.
+static bool fix_class_body(uint8_t* stats, int slot) {
     int bit = class_body_bit(slot);
     int body = read_bits(stats, bit, T5_Stats_BodyItemBits);
     if (is_body_item(body) || (slot >= CLASS_COUNT && body == 0)) {
-        return CLASS_CLEAN;
+        return false;
     }
     write_bits(stats, bit, T5_Stats_BodyItemBits, T5_BodyItemDefault);
-    return is_body_item(read_bits(stats, bit, T5_Stats_BodyItemBits)) ? CLASS_FIXED
-                                                                      : CLASS_UNFIXABLE;
+    return true;
 }
 
-static ClassCheck fix_classes(uint8_t* stats) {
-    ClassCheck result = CLASS_CLEAN;
+// Fixes every class, returns whether any was fixed.
+static bool fix_classes(uint8_t* stats) {
+    bool fixed = false;
     for (int slot = 0; slot < 2 * CLASS_COUNT; slot++) {
-        ClassCheck check = fix_class_body(stats, slot);
-        if (check > result) {
-            result = check;
+        if (fix_class_body(stats, slot)) {
+            fixed = true;
         }
     }
-    return result;
+    return fixed;
 }
 
 static int max_clients() {
@@ -95,25 +92,14 @@ static void format_client_name(char* out, int size, int clientNum) {
 }
 
 static void check_client_classes(int clientNum, int client) {
-    ClassCheck result = fix_classes(CLIENT_STATS(client));
-    if (result == CLASS_CLEAN) {
+    if (!fix_classes(CLIENT_STATS(client))) {
         return;
     }
 
     char name[40];
     format_client_name(name, sizeof(name), clientNum);
-    if (result == CLASS_FIXED) {
-        printf(T5INFO "Fixed a godmode class of %s (client %d).", name, clientNum);
-        host_menu_game_message("^1%s^7: godmode class fixed", name);
-        return;
-    }
-
-    printf(T5WARNING "Could not fix the godmode class of %s (client %d), kicking.", name,
-           clientNum);
-    host_menu_game_message("^1%s^7: godmode class, kicked", name);
-    char command[32];
-    snprintf(command, sizeof(command), "clientkick %i\n", clientNum);
-    Cbuf_AddText(0, command);
+    printf(T5INFO "Fixed a godmode class of %s (client %d).", name, clientNum);
+    host_menu_game_message("^1%s^7: godmode class fixed", name);
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
