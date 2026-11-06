@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/synchronization.h>
+#include <sys/sys_time.h>
 
 #include "client_command.h"
 #include "cshook.h"
@@ -78,9 +79,17 @@ static sys_lwmutex_t cacheMutex;
 static int loadingDepth = 0;    // DB_LoadXAssets calls running, under cacheMutex
 static uint32_t loadCount = 0;  // DB_LoadXAssets calls started, under cacheMutex
 
-// Result of af_lookup_works, under cacheMutex.
+// A miss can be a race with the DB thread, which still links entries after a sync == 0
+// load returned. The filter only turns off after this many misses, each at least
+// AF_LOOKUP_RETRY_US apart (more than a frame).
+#define AF_LOOKUP_MAX_MISSES 3
+#define AF_LOOKUP_RETRY_US 100000
+
+// Result of af_lookup_works, reset on every load, under cacheMutex.
 typedef enum { AF_LOOKUP_UNTESTED, AF_LOOKUP_WORKS, AF_LOOKUP_BROKEN } LookupState;
 static LookupState lookupState = AF_LOOKUP_UNTESTED;
+static int lookupMisses = 0;
+static system_time_t lookupLastMiss = 0;
 
 static void af_report(const char* what) {
     // A tool can send thousands, keep the log readable. Called from the server and the
@@ -128,10 +137,11 @@ static uint32_t af_asset_hash(uint32_t type, const char* name) {
     return hash;
 }
 
-// Whether a material entry in the bucket of name holds this pointer. Read-only, unlike
-// Material_RegisterHandle, whose miss waits for zone loads and takes an entry from the
-// pool. Without the game's lock: a race with the DB thread can only miss a material.
-static bool af_material_registered(const char* name, uint32_t material) {
+// Position in the chain of the bucket of name of the material entry that holds this
+// pointer, -1 if there is none. Read-only, unlike Material_RegisterHandle, whose miss
+// waits for zone loads and takes an entry from the pool. Without the game's lock: a race
+// with the DB thread can only miss a material.
+static int af_material_chain_position(const char* name, uint32_t material) {
     const uint16_t* hashTable = (const uint16_t*)T5_XAssetHashTable;
     uint16_t index =
         hashTable[af_asset_hash(T5_AssetTypeMaterial, name) % T5_XAssetHashTableSize];
@@ -140,49 +150,88 @@ static bool af_material_registered(const char* name, uint32_t material) {
         uint32_t entry = XASSET_ENTRY(index);
         if (XASSET_ENTRY_TYPE(entry) == T5_AssetTypeMaterial &&
             XASSET_ENTRY_HEADER(entry) == material) {
-            return true;
+            return i;
         }
         index = XASSET_ENTRY_NEXT_HASH(entry);
     }
-    return false;
+    return -1;
+}
+
+static bool af_material_registered(const char* name, uint32_t material) {
+    return af_material_chain_position(name, material) >= 0;
+}
+
+// Materials the lookup test lists. "white" is registered by UI_AssetCache,
+// "ui_arrow_right" by the host menu, "black" is a common name (unverified). A missing one
+// works too: Material_RegisterHandle links a default entry under its name.
+static const char* const AF_LOOKUP_PROBES[] = {"white", "black", "ui_arrow_right"};
+
+// Whether every probe is found. followedChain: one was found past the head of its bucket,
+// which also proves nextHash.
+static bool af_lookup_test(bool* followedChain) {
+    *followedChain = false;
+    for (size_t i = 0; i < sizeof(AF_LOOKUP_PROBES) / sizeof(*AF_LOOKUP_PROBES); i++) {
+        uint32_t material = (uint32_t)Material_RegisterHandle(AF_LOOKUP_PROBES[i], 0);
+        int position =
+            material ? af_material_chain_position(AF_LOOKUP_PROBES[i], material) : -1;
+        if (position < 0) {
+            return false;
+        }
+        if (position > 0) {
+            *followedChain = true;
+        }
+    }
+    return true;
 }
 
 // The hash table layout is inferred (offsets.h). Were the lookup wrong, every real icon
 // would miss and every button prompt be stripped, so the filter turns itself off then.
-// "white" is always loaded and proves the hash, the table size and the type and header
-// fields; nextHash only if "white" is not the head of its bucket. Decided once, on a draw
-// outside of a load, until then the filter runs.
+// The probes prove the hash, the table size and the type and header fields; nextHash only
+// if one is not the head of its bucket. Tested again after every load, on a draw outside
+// of one. Off after AF_LOOKUP_MAX_MISSES misses, until then the filter runs.
 static bool af_lookup_works() {
     sys_lwmutex_lock(&cacheMutex, 0);
     LookupState state = lookupState;
     bool loading = loadingDepth > 0;
     uint32_t loads = loadCount;
+    bool waiting = lookupMisses > 0 &&
+                   sys_time_get_system_time() - lookupLastMiss < AF_LOOKUP_RETRY_US;
     sys_lwmutex_unlock(&cacheMutex);
     if (state != AF_LOOKUP_UNTESTED) {
         return state == AF_LOOKUP_WORKS;
     }
-    if (loading) {
+    if (loading || waiting) {
         return true;
     }
 
     // Not under cacheMutex: a miss waits for zone loads, and DB_LoadXAssets_Hook takes
-    // the lock. A miss also links a default entry under the name, so it is found either
-    // way.
-    uint32_t white = (uint32_t)Material_RegisterHandle("white", 0);
-    bool works = white && af_material_registered("white", white);
+    // the lock.
+    bool followedChain;
+    bool works = af_lookup_test(&followedChain);
 
     sys_lwmutex_lock(&cacheMutex, 0);
     // A load in between can relink the chain and make the lookup miss, test again later.
     if (lookupState == AF_LOOKUP_UNTESTED && loadingDepth == 0 && loadCount == loads) {
-        lookupState = works ? AF_LOOKUP_WORKS : AF_LOOKUP_BROKEN;
-        if (!works) {
+        if (works) {
+            lookupState = AF_LOOKUP_WORKS;
+        } else if (++lookupMisses >= AF_LOOKUP_MAX_MISSES) {
+            lookupState = AF_LOOKUP_BROKEN;
             printf(T5ERROR
-                   "Anti-Freeze: the material lookup missed \"white\", text icons "
-                   "are not filtered.");
+                   "Anti-Freeze: the material lookup missed, text icons are not "
+                   "filtered until the next load.");
+        } else {
+            lookupLastMiss = sys_time_get_system_time();
         }
     }
     state = lookupState;
     sys_lwmutex_unlock(&cacheMutex);
+
+    // Once per session, so a console run shows that nextHash was tested.
+    static bool chainReported = false;
+    if (works && followedChain && !chainReported) {
+        chainReported = true;
+        printf(T5INFO "Anti-Freeze: the material lookup followed a hash chain.");
+    }
     return state != AF_LOOKUP_BROKEN;
 }
 
@@ -283,6 +332,9 @@ void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
     loadingDepth++;
     loadCount++;
     af_clear_materials();
+    // A miss may have been a race, the next map tests again.
+    lookupState = AF_LOOKUP_UNTESTED;
+    lookupMisses = 0;
     sys_lwmutex_unlock(&cacheMutex);
 
     DB_LoadXAssets_Trampoline(zoneInfo, zoneCount, sync);
