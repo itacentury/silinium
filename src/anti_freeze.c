@@ -36,7 +36,12 @@
 
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
 #define AF_MAX_TEXT 1024
-#define AF_MATERIAL_CACHE 16
+// Distinct icon materials on screen at once (button hints, HUD icons in text).
+#define AF_KNOWN_MATERIAL_CACHE 128
+// Small, bad texts are cached as a whole in badTexts.
+#define AF_BAD_MATERIAL_CACHE 16
+// Smallest PS3 page size, a name read is split there.
+#define AF_PAGE_SIZE 0x1000
 // Every icon takes 8 bytes, only the last one can be cut off by the end of the text.
 #define AF_MAX_ICONS (AF_MAX_TEXT / AF_ICON_SIZE + 1)
 // More than the bad texts on screen at once (chat feed, scoreboard names).
@@ -45,12 +50,12 @@
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
 // most checks are a cache hit. All caches are cleared when zones load or unload and are
 // only used under cacheMutex.
-static uint32_t knownMaterials[AF_MATERIAL_CACHE];
+static uint32_t knownMaterials[AF_KNOWN_MATERIAL_CACHE];
 static int knownMaterialsNext = 0;
 
 // Materials that failed af_material_ok. A bad text stays on screen for seconds (chat
 // feed, scoreboard) and is drawn every frame.
-static uint32_t badMaterials[AF_MATERIAL_CACHE];
+static uint32_t badMaterials[AF_BAD_MATERIAL_CACHE];
 static int badMaterialsNext = 0;
 
 // Bad texts with the verdict of each of their icons. A few texts can carry more distinct
@@ -135,6 +140,20 @@ static bool af_material_registered(const char* name, uint32_t material) {
     return false;
 }
 
+// Length of the name in buffer, -1 if it holds a non-printable character, size if it has
+// no terminator.
+static int af_name_length(const char* name, int size) {
+    for (int i = 0; i < size; i++) {
+        if (!name[i]) {
+            return i;
+        }
+        if (name[i] <= ' ' || name[i] > '~') {
+            return -1;
+        }
+    }
+    return size;
+}
+
 // A real icon points to a loaded material, which is registered under its own name. The
 // memory is read with sys_dbg_process_read, a garbage pointer must not crash here either.
 static bool af_material_check(uint32_t material) {
@@ -143,21 +162,26 @@ static bool af_material_check(uint32_t material) {
         return false;
     }
 
-    // Byte by byte, a name near the end of a page is still readable.
+    // The first read stops at the page end: a name that ends there is still readable when
+    // the next page is not mapped.
     char name[64];
-    int len = 0;
-    for (; len < (int)sizeof(name); len++) {
-        if (sys_dbg_process_read(namePtr + len, &name[len], 1) != 0) {
-            return false;
-        }
-        if (!name[len]) {
-            break;
-        }
-        if (name[len] <= ' ' || name[len] > '~') {
-            return false;
-        }
+    int size = (int)sizeof(name);
+    int firstChunk = AF_PAGE_SIZE - (int)(namePtr & (AF_PAGE_SIZE - 1));
+    if (firstChunk > size) {
+        firstChunk = size;
     }
-    if (len == 0 || len == (int)sizeof(name)) {
+    if (sys_dbg_process_read(namePtr, name, firstChunk) != 0) {
+        return false;
+    }
+    int len = af_name_length(name, firstChunk);
+    if (len == firstChunk && firstChunk < size) {
+        if (sys_dbg_process_read(namePtr + firstChunk, name + firstChunk,
+                                 size - firstChunk) != 0) {
+            return false;
+        }
+        len = af_name_length(name, size);
+    }
+    if (len <= 0 || len == size) {
         return false;
     }
 
@@ -173,10 +197,12 @@ static bool af_material_ok(uint32_t material, bool cached) {
         return af_material_check(material);
     }
 
-    for (int i = 0; i < AF_MATERIAL_CACHE; i++) {
+    for (int i = 0; i < AF_KNOWN_MATERIAL_CACHE; i++) {
         if (knownMaterials[i] == material) {
             return true;
         }
+    }
+    for (int i = 0; i < AF_BAD_MATERIAL_CACHE; i++) {
         if (badMaterials[i] == material) {
             return false;
         }
@@ -184,12 +210,12 @@ static bool af_material_ok(uint32_t material, bool cached) {
 
     if (!af_material_check(material)) {
         badMaterials[badMaterialsNext] = material;
-        badMaterialsNext = (badMaterialsNext + 1) % AF_MATERIAL_CACHE;
+        badMaterialsNext = (badMaterialsNext + 1) % AF_BAD_MATERIAL_CACHE;
         return false;
     }
 
     knownMaterials[knownMaterialsNext] = material;
-    knownMaterialsNext = (knownMaterialsNext + 1) % AF_MATERIAL_CACHE;
+    knownMaterialsNext = (knownMaterialsNext + 1) % AF_KNOWN_MATERIAL_CACHE;
     return true;
 }
 
