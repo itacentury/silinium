@@ -479,7 +479,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // while a server runs, so the ones queued during the host's loading screen survive.
     // The spawn flag is reset too, it would otherwise carry over until the next server
     // script load. Nothing sets it while no server runs.
-    if (!*(int*)T5_SvClients) {
+    if (!SV_CLIENTS) {
         gameMessageTail = gameMessageHead;
         hostSpawned = false;
     }

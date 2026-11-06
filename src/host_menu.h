@@ -40,6 +40,9 @@
     ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
+#define SV_CLIENTS (*(int*)T5_SvClients)  // 0 while no server runs
+#define SV_CLIENT(i) (SV_CLIENTS + (i) * T5_ClientSize)
+#define SV_CLIENT_NUM(client) (((int)(client) - SV_CLIENTS) / T5_ClientSize)
 
 #define HOST_MENU_MAX_CLIENTS 18
 

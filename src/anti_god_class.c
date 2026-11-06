@@ -8,7 +8,6 @@
 #include "t5.h"
 #include "utils.h"
 
-#define CLIENT(i) (*(int*)T5_SvClients + (i) * T5_ClientSize)
 #define CLIENT_STATE(client) (*(int*)((client) + T5_ClientStateOffset))
 #define CLIENT_STATS(client) ((uint8_t*)((client) + T5_ClientStatsOffset))
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
@@ -78,7 +77,7 @@ static void format_client_name(char* out, int size, int clientNum, int client) {
 // SV_DirectConnect clears the whole client_t (memset at 0x3E66D4), so only the server
 // state tells whether a player is still there. It is the same gate getdstat uses.
 static bool client_in_use(int clientNum) {
-    return CLIENT_STATE(CLIENT(clientNum)) >= T5_ClientStateConnected;
+    return CLIENT_STATE(SV_CLIENT(clientNum)) >= T5_ClientStateConnected;
 }
 
 static void check_client_classes(int clientNum, int client) {
@@ -102,7 +101,7 @@ static void check_client_classes(int clientNum, int client) {
 // (memset at 0x3E66D4). The count only bypasses the skip, the chunk index stays at 32 or
 // below, so the mask can't grow past complete.
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
-    if (!hostMenu.antiGodClasses || !*(int*)T5_SvClients) {
+    if (!hostMenu.antiGodClasses || !SV_CLIENTS) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
         return;
     }
@@ -110,7 +109,7 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     int count = max_clients();
     bool complete[HOST_MENU_MAX_CLIENTS];
     for (int i = 0; i < count; i++) {
-        complete[i] = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
+        complete[i] = CLIENT_STATS_MASK(SV_CLIENT(i)) == T5_ClientStatsMaskComplete;
     }
 
     SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
@@ -118,9 +117,9 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     for (int i = 0; i < count; i++) {
         // When the state is set relative to the first stats packet is unverified, but a
         // mask that just became complete belongs to a live sender found by its address.
-        bool isComplete = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
+        bool isComplete = CLIENT_STATS_MASK(SV_CLIENT(i)) == T5_ClientStatsMaskComplete;
         if (isComplete && (!complete[i] || client_in_use(i))) {
-            check_client_classes(i, CLIENT(i));
+            check_client_classes(i, SV_CLIENT(i));
         }
     }
 }
@@ -128,15 +127,15 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
 // The fixed body only reaches later getdstat reads, a player who already spawned with the
 // class probably keeps it until the next spawn or class change (unverified).
 void anti_god_class_check_clients() {
-    if (!hostMenu.antiGodClasses || !*(int*)T5_SvClients) {
+    if (!hostMenu.antiGodClasses || !SV_CLIENTS) {
         return;
     }
 
     int count = max_clients();
     for (int i = 0; i < count; i++) {
-        bool isComplete = CLIENT_STATS_MASK(CLIENT(i)) == T5_ClientStatsMaskComplete;
+        bool isComplete = CLIENT_STATS_MASK(SV_CLIENT(i)) == T5_ClientStatsMaskComplete;
         if (isComplete && client_in_use(i)) {
-            check_client_classes(i, CLIENT(i));
+            check_client_classes(i, SV_CLIENT(i));
         }
     }
 }

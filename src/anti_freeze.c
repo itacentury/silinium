@@ -806,7 +806,7 @@ static void af_report_name(int clientNum, const char* userinfo) {
 void SV_UserinfoChanged_Hook(void* cl) {
     char* userinfo = (char*)cl + T5_ClientUserinfoOffset;
     if (af_strip_icons(userinfo)) {
-        af_report_name(((int)cl - *(int*)T5_SvClients) / T5_ClientSize, userinfo);
+        af_report_name(SV_CLIENT_NUM(cl), userinfo);
     }
     SV_UserinfoChanged_Trampoline(cl);
 }
