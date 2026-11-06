@@ -243,7 +243,9 @@
 // 0x3E5EF8 calls ClientUserinfoChanged before SV_UserinfoChanged.
 #define T5_SV_GetUserinfo 0x3EAB20
 #define T5_ClientUserinfoOffset 0x720 // char[], userinfo string in client_t
-#define T5_SvClients 0x169529C // pointer to the client_t array (svs.clients), stride T5_ClientSize
+// client_t *, the client array (svs.clients, svs 0x1695280 + 0x1C) with stride T5_ClientSize. 0 while no server runs
+// (zeroed at 0x3EAA0C on shutdown).
+#define T5_SvClients 0x169529C
 #define T5_ClientSize 0x651C8
 // (XZoneInfo* zones, count, sync), XZoneInfo = {name, allocFlags, freeFlags}. Every zone load and unload goes through it:
 // Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}). The
@@ -265,12 +267,11 @@
 #define T5_XAssetEntryHeaderOffset 0x4
 #define T5_XAssetEntryNextHashOffset 0xA
 #define T5_AssetTypeMaterial 6
+
 // Client stats on the host (MP only, see docs/mp/05-network.md in bo1-re). SV_ReceiveStats handles the OOB "stats"
-// packets: chunk i of 0x4C6 bytes goes to client + T5_ClientStatsOffset + i * 0x4C6 and sets bit i of the mask.
-// getdstat reads the buffer only once the mask is complete.
+// packets: chunk i of 0x4C6 bytes goes to client + T5_ClientStatsOffset + i * 0x4C6 (client_t at T5_SvClients) and
+// sets bit i of the mask. getdstat reads the buffer only once the mask is complete.
 #define T5_SV_ReceiveStats 0x3E2828
-#define T5_SvsClients 0x169529C // client_t *, svs (0x1695280) + 0x1C, 0 while no server runs (zeroed at 0x3EAA0C on shutdown)
-#define T5_ClientSize 0x651C8
 // int at client_t + 0: SV_DropClient stores 1 (0x3E4224) or 0 (0x3E45C4), SV_GetClientStatInt reads stats only
 // above 1. The names of the individual states above 1 are unverified.
 #define T5_ClientStateOffset 0x0

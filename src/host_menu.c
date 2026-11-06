@@ -337,7 +337,10 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
 // another thread could lose a slot or show half-written text. All producers run on the
 // server thread: ClientEndFrame in the game frame, ClientCommand and SV_ReceiveStats
 // from its packet dispatcher (0x3EF7E8, direct call graph in bo1-re, indirect calls not
-// covered). Dropped while no server runs, so nothing carries over to the next match.
+// covered). The Anti-Freeze reports come from ClientCommand and from the userinfo hooks
+// (SV_UserinfoChanged, SV_GetUserinfo), which are assumed to run on the server thread
+// too (unverified). Dropped while no server runs, so nothing carries over to the next
+// match.
 #define GAME_MESSAGE_COUNT 8
 static char gameMessages[GAME_MESSAGE_COUNT][128];
 static volatile uint32_t gameMessageHead;
@@ -479,7 +482,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
 
     // Messages left over from a match the host never spawned in name its players. Kept
     // while a server runs, so the ones queued during the host's loading screen survive.
-    if (!*(int*)T5_SvsClients) {
+    if (!*(int*)T5_SvClients) {
         gameMessageTail = gameMessageHead;
     }
 

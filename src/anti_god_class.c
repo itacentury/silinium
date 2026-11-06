@@ -7,7 +7,7 @@
 #include "host_menu_ui.h"
 #include "t5.h"
 
-#define CLIENT(i) (*(int*)T5_SvsClients + (i) * T5_ClientSize)
+#define CLIENT(i) (*(int*)T5_SvClients + (i) * T5_ClientSize)
 #define CLIENT_STATE(client) (*(int*)((client) + T5_ClientStateOffset))
 #define CLIENT_STATS(client) ((uint8_t*)((client) + T5_ClientStatsOffset))
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
@@ -118,7 +118,7 @@ static void check_client_classes(int clientNum, int client) {
 // mask of the slot (memset at 0x3E66D4). The count only bypasses the skip, the chunk
 // index stays at 32 or below, so the mask can't grow past complete.
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
-    if (!hostMenu.antiGodClasses || !*(int*)T5_SvsClients) {
+    if (!hostMenu.antiGodClasses || !*(int*)T5_SvClients) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
         return;
     }
@@ -144,7 +144,7 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
 // The fixed body only reaches later getdstat reads, a player who already spawned with the
 // class probably keeps it until the next spawn or class change (unverified).
 void anti_god_class_check_clients() {
-    if (!hostMenu.antiGodClasses || !*(int*)T5_SvsClients) {
+    if (!hostMenu.antiGodClasses || !*(int*)T5_SvClients) {
         return;
     }
 
