@@ -3,6 +3,7 @@
 #include <cell/atomic.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/synchronization.h>
 
 #include "client_command.h"
 #include "cshook.h"
@@ -36,7 +37,8 @@
 #define AF_BAD_TEXT_CACHE 32
 
 // Materials that passed af_material_ok. Icons are drawn every frame (button hints), so
-// most checks are a cache hit. All caches are cleared when zones load or unload.
+// most checks are a cache hit. All caches are cleared when zones load or unload and are
+// only used under cacheMutex.
 static uint32_t knownMaterials[AF_MATERIAL_CACHE];
 static int knownMaterialsNext = 0;
 
@@ -57,6 +59,12 @@ static af_bad_text badTexts[AF_BAD_TEXT_CACHE];  // text[0] == 0 if unused
 static int badTextsNext = 0;
 
 static uint32_t droppedCount = 0;
+
+// The loading screen is drawn while DB_LoadXAssets runs, likely from another thread (the
+// remote screen update, unverified). Draws during a load don't use the caches: a pointer
+// cached then could be trusted after its zone was freed.
+static sys_lwmutex_t cacheMutex;
+static int loadingDepth = 0;  // DB_LoadXAssets calls running, under cacheMutex
 
 static void af_report(const char* what) {
     // A tool can send thousands, keep the log readable. Called from the server and the
@@ -150,9 +158,13 @@ static bool af_material_check(uint32_t material) {
     return af_material_registered(name, material);
 }
 
-static bool af_material_ok(uint32_t material) {
+// cached: under cacheMutex and outside of a load.
+static bool af_material_ok(uint32_t material, bool cached) {
     if (!material || (material & 3)) {
         return false;
+    }
+    if (!cached) {
+        return af_material_check(material);
     }
 
     for (int i = 0; i < AF_MATERIAL_CACHE; i++) {
@@ -183,11 +195,19 @@ static void af_clear_materials() {
     memset(badTexts, 0, sizeof(badTexts));
 }
 
+// The lock is not held over the load, the loading screen keeps drawing meanwhile.
 void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
+    sys_lwmutex_lock(&cacheMutex, 0);
+    loadingDepth++;
     af_clear_materials();
+    sys_lwmutex_unlock(&cacheMutex);
+
     DB_LoadXAssets_Trampoline(zoneInfo, zoneCount, sync);
-    // Text drawn while it ran (loading screen) may have cached the old pointers again.
+
+    sys_lwmutex_lock(&cacheMutex, 0);
+    loadingDepth--;
     af_clear_materials();
+    sys_lwmutex_unlock(&cacheMutex);
 }
 
 // FNV-1a
@@ -223,7 +243,7 @@ static af_bad_text* af_add_bad_text(const char* text, uint32_t hash) {
     return entry;
 }
 
-static bool af_icon_ok(const char* p) {
+static bool af_icon_ok(const char* p, bool cached) {
     // The game copies the text with strlen, a NUL inside the icon cuts it off and the
     // renderer reads past the end.
     for (int i = 1; i < AF_ICON_SIZE; i++) {
@@ -233,8 +253,9 @@ static bool af_icon_ok(const char* p) {
     }
 
     const unsigned char* ptr = (const unsigned char*)p + 4;
-    return af_material_ok((uint32_t)ptr[0] << 24 | (uint32_t)ptr[1] << 16 |
-                          (uint32_t)ptr[2] << 8 | ptr[3]);
+    return af_material_ok(
+        (uint32_t)ptr[0] << 24 | (uint32_t)ptr[1] << 16 | (uint32_t)ptr[2] << 8 | ptr[3],
+        cached);
 }
 
 // Removes every icon in place, valid or not: no string from the network needs one. Only
@@ -271,15 +292,12 @@ static bool af_is_color_code(const char* p) {
 
 // Returns text if it has no bad icon, else a copy in buffer without them. maxChars and
 // cursorPos count the steps of the game's draw loop, where an icon is one step. Each
-// removed icon that was drawn before them lowers them by one.
+// removed icon that was drawn before them lowers them by one. cached as for
+// af_material_ok, without it every icon is checked.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
-                                    int* cursorPos, int* maxChars) {
-    if (!af_has_icon(text)) {
-        return text;
-    }
-
+                                    int* cursorPos, int* maxChars, bool cached) {
     uint32_t hash = af_hash(text);
-    af_bad_text* entry = af_find_bad_text(text, hash);
+    af_bad_text* entry = cached ? af_find_bad_text(text, hash) : NULL;
     // Known bad texts skip the icons they found bad, new ones record them.
     bool replay = entry != NULL;
     if (!replay) {
@@ -291,7 +309,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                 p++;
                 continue;
             }
-            if (!af_icon_ok(p)) {
+            if (!af_icon_ok(p, cached)) {
                 break;
             }
             p += AF_ICON_SIZE;
@@ -301,7 +319,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
         }
 
         af_report("a text icon with an invalid material");
-        entry = af_add_bad_text(text, hash);
+        entry = cached ? af_add_bad_text(text, hash) : NULL;
     }
 
     // Counted over the original text and compared with the original values.
@@ -330,8 +348,8 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             continue;
         }
         // Only the bad bits are trusted, a cleared or reused entry reads as all good.
-        bool ok =
-            !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) && af_icon_ok(p);
+        bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) &&
+                  af_icon_ok(p, cached);
         if (!ok && !replay && entry) {
             entry->bad[icon / 8] |= 1 << (icon % 8);
         }
@@ -470,8 +488,18 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
                               int cursorPos, char cursor) {
     // The game copies the text into the render command, a copy on the stack is enough.
     char buffer[AF_MAX_TEXT];
-    if (text) {
-        text = af_sanitize_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars);
+    // Most texts have no icon and never take the lock.
+    if (text && af_has_icon(text)) {
+        sys_lwmutex_lock(&cacheMutex, 0);
+        bool cached = loadingDepth == 0;
+        if (!cached) {
+            sys_lwmutex_unlock(&cacheMutex);
+        }
+        text =
+            af_sanitize_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars, cached);
+        if (cached) {
+            sys_lwmutex_unlock(&cacheMutex);
+        }
     }
     return AddBaseDrawTextCmd_Trampoline(text, maxChars, font, x, y, w, xScale, yScale,
                                          rotation, color, style, cursorPos, cursor);
@@ -613,7 +641,13 @@ int anti_freeze_init() {
     t5nmhi(Party_WriteMembers);
     t5nmhi(DB_LoadXAssets);
 
+    sys_lwmutex_attribute_t attr;
+    sys_lwmutex_attribute_initialize(attr);
+    sys_lwmutex_attribute_name_set(attr.name, "afCache");
     int res;
+    if ((res = sys_lwmutex_create(&cacheMutex, &attr)) != 0) {
+        return res;
+    }
     // Before the text filter, so its caches are always cleared once it runs.
     if ((res = cs_hook_install(DB_LoadXAssets, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
