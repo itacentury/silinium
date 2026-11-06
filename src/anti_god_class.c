@@ -17,26 +17,6 @@
 // Custom classes, then the same number of prestige classes.
 #define CLASS_COUNT 5
 
-// DDL fields are packed from the lowest bit of each byte up.
-static int read_bits(const uint8_t* buffer, int bit, int count) {
-    int value = 0;
-    for (int i = 0; i < count; i++, bit++) {
-        value |= ((buffer[bit >> 3] >> (bit & 7)) & 1) << i;
-    }
-    return value;
-}
-
-static void write_bits(uint8_t* buffer, int bit, int count, int value) {
-    for (int i = 0; i < count; i++, bit++) {
-        uint8_t mask = 1 << (bit & 7);
-        if ((value >> i) & 1) {
-            buffer[bit >> 3] |= mask;
-        } else {
-            buffer[bit >> 3] &= ~mask;
-        }
-    }
-}
-
 static bool is_body_item(int item) {
     return item >= T5_BodyItemFirst && item <= T5_BodyItemLast;
 }
@@ -54,11 +34,11 @@ static int class_body_bit(int slot) {
 // but it doesn't count as a godmode class. Returns whether a godmode body was fixed.
 static bool fix_class_body(uint8_t* stats, int slot) {
     int bit = class_body_bit(slot);
-    int body = read_bits(stats, bit, T5_Stats_BodyItemBits);
+    int body = ddl_read_bits(stats, bit, T5_Stats_BodyItemBits);
     if (is_body_item(body)) {
         return false;
     }
-    write_bits(stats, bit, T5_Stats_BodyItemBits, T5_BodyItemDefault);
+    ddl_write_bits(stats, bit, T5_Stats_BodyItemBits, T5_BodyItemDefault);
     return slot < CLASS_COUNT || body != 0;
 }
 

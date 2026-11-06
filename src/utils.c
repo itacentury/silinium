@@ -148,3 +148,22 @@ void userinfo_name(const char* info, char* out, size_t size) {
         }
     }
 }
+
+int ddl_read_bits(const uint8_t* buffer, int bit, int count) {
+    int value = 0;
+    for (int i = 0; i < count; i++, bit++) {
+        value |= ((buffer[bit >> 3] >> (bit & 7)) & 1) << i;
+    }
+    return value;
+}
+
+void ddl_write_bits(uint8_t* buffer, int bit, int count, int value) {
+    for (int i = 0; i < count; i++, bit++) {
+        uint8_t mask = 1 << (bit & 7);
+        if ((value >> i) & 1) {
+            buffer[bit >> 3] |= mask;
+        } else {
+            buffer[bit >> 3] &= ~mask;
+        }
+    }
+}

@@ -238,10 +238,6 @@ static void write_stat_u8(int addr, uint8_t value) { *(uint8_t*)addr = value; }
 
 static void write_stat_u32(int addr, uint32_t value) { *(uint32_t*)addr = value; }
 
-static void set_stat_bit(int addr, int bit) {
-    *(uint8_t*)(addr + (bit >> 3)) |= 1 << (bit & 7);
-}
-
 // Level 50, COD points and pro perks.
 void host_menu_write_recovery() {
     write_stat_u32(T5_Stats_CodPoints, 0x00E1F505);  // 100000000
@@ -251,9 +247,7 @@ void host_menu_write_recovery() {
     // Which items are perks is only in the stats table, so every item gets the pro bits.
     for (int i = 0; i < T5_Stats_ItemStatsCount; i++) {
         int bit = T5_Stats_ItemStatsBit + i * T5_Stats_ItemStatsBits;
-        for (int b = bit; b < bit + 3; b++) {
-            set_stat_bit(T5_Stats_ItemStats, b);
-        }
+        ddl_write_bits((uint8_t*)T5_Stats_ItemStats, bit, 3, 0x7);  // the three pro bits
     }
 }
 
