@@ -30,7 +30,8 @@ static int class_body_bit(int slot) {
 
 // The prestige classes of a player who never prestiged may still be zero (unverified).
 // Zero is reset as well, since Prestige Unlocks lets such a player pick these classes,
-// but it doesn't count as a godmode class. Returns whether a godmode body was fixed.
+// but there it doesn't count as a godmode class; in a custom class it does.
+// Returns whether a godmode body was fixed.
 static bool fix_class_body(uint8_t* stats, int slot) {
     int bit = class_body_bit(slot);
     int body = ddl_read_bits(stats, bit, T5_Stats_BodyItemBits);
