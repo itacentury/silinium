@@ -241,8 +241,10 @@
 #define T5_ClientSize 0x651C8
 // (XZoneInfo* zones, count, sync), XZoneInfo = {name, allocFlags, freeFlags}. Every zone load and unload goes through it:
 // Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}). The
-// unload is inlined here, its free helpers (0x7384A8, 0x3D4410, 0x3D3FD8, 0x3D6388) have no other caller; quit
-// exits the process.
+// unload runs on the calling thread, before the load is handed off: a loop over the loaded zones calls the zone free
+// 0x25E2C8 (no other caller) for each zone matching freeFlags, under critical section 68. Only then are the names
+// queued and the DB thread signaled (0x3D4410, 0x3D3FD8, 0x3D6388, no other caller). sync only selects the wait at
+// the end, the DB thread only loads. Names inferred from the code; quit exits the process.
 #define T5_DB_LoadXAssets 0x2615C0
 // DB_FindXAssetHeader (0x2601A0, not called): a miss waits while a zone loads, then links a default entry under the
 // name (0x25E918), Com_Error once the entry pool is full. The anti-freeze reads the hash table itself instead.

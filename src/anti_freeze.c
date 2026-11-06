@@ -272,6 +272,10 @@ static void af_clear_materials() {
 }
 
 // The lock is not held over the load, the loading screen keeps drawing meanwhile.
+// With sync == 0 the trampoline returns while the DB thread still loads, but every
+// unload has already run on this thread (offsets.h), so knownMaterials stays safe. A
+// pointer rejected during that load is no real icon yet: Material_RegisterHandle waits
+// for loads (unverified). Were it one, it is stripped until the ring evicts it.
 void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
     sys_lwmutex_lock(&cacheMutex, 0);
     loadingDepth++;
