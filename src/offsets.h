@@ -200,6 +200,28 @@
 // (state, value string, buffer), *(int*)state = bit offset in the DDL. statWriteDDL (handler 0x6A36B8) writes with it, a
 // menu script runs "statWriteDDL ... 0" for prestige camos and the clan tag color when joining a lobby.
 #define T5_DDL_SetFromString 0x5E74E8
+// Save/Load Stats: DDL_SetInt marks the buffer dirty with buffer[8] |= 1 (bo1-re re-journal 33). That the game saves a
+// buffer marked like this is unverified.
+#define T5_StatsHeaderSize 0x28 // the DDL data follows
+#define T5_StatsDirtyOffset 0x8
+#define T5_StatsDirtyFlag 0x1
+// Fields of the account and the console, kept when stats are loaded (DDL bits from data/mp/stats_ddl.txt in bo1-re)
+#define T5_Stats_ConnectionIdBit 0x3B1C // connectionid (0x763 bit 4), 64 bits
+#define T5_Stats_ConsoleInfoBit 0x3B5C // consoleinfo (0x76B bit 4), 10 x 296 bits
+#define T5_Stats_ConsoleInfoBits 2960
+#define T5_Stats_FriendsListFingerprintBit 0xDBD8 // friendslistfingerprint (0x1B7B bit 0), 64 bits
+#define T5_Stats_PlayerXuidBit 0x489E8 // playerxuid (0x913D bit 0), 64 bits
+#define T5_Stats_StatResetNotificationBit 0x49B3C // statresetnotification (0x9367 bit 4), 64 bits
+#define T5_Stats_WebTokenBit 0x4BF5E // webtoken (0x97EB bit 6), 128 bits
+
+// Import stubs of the game's sys_net functions (data/mp/imports.csv in bo1-re), for the webMAN notification. Called
+// like T5_PadGetData, so the plugin doesn't import sys_net itself.
+#define T5_Net_socket 0x8C62B8
+#define T5_Net_connect 0x8C6130
+#define T5_Net_send 0x8C63D0
+#define T5_Net_recv 0x8C7D68
+#define T5_Net_setsockopt 0x8C6210
+#define T5_Net_socketclose 0x8C6168
 
 // Anti-Freeze (MP only)
 // (localClientNum, serverCommandNumber), tokenizes the reliable server command and returns 0 if CG_ServerCommand
