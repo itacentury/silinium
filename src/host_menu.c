@@ -333,7 +333,8 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
 
 // Kill feed messages, queued on the server thread and shown on the UI thread once the
 // host has spawned, so they don't scroll by behind the loading screen or the class menu.
-// Only the server thread moves the head and only the UI thread the tail.
+// Only the server thread moves the head and only the UI thread the tail. Dropped while
+// not in a match, so nothing carries over to the next one.
 #define GAME_MESSAGE_COUNT 8
 static char gameMessages[GAME_MESSAGE_COUNT][128];
 static volatile uint32_t gameMessageHead;
@@ -476,6 +477,8 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
     if (!Dvar_GetBool("cl_ingame")) {
+        // Messages left over from a match the host never spawned in name its players.
+        gameMessageTail = gameMessageHead;
         int kick = hostMenu.lobbyKickMember;
         if (kick != -1) {
             // Pairs with the one in queue_kick: party and name are read only after the
