@@ -337,7 +337,7 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
 // another thread could lose a slot or show half-written text. All producers run on the
 // server thread: ClientEndFrame in the game frame, ClientCommand and SV_ReceiveStats
 // from its packet dispatcher (0x3EF7E8, direct call graph in bo1-re, indirect calls not
-// covered). Dropped while not in a match, so nothing carries over to the next one.
+// covered). Dropped while no server runs, so nothing carries over to the next match.
 #define GAME_MESSAGE_COUNT 8
 static char gameMessages[GAME_MESSAGE_COUNT][128];
 static volatile uint32_t gameMessageHead;
@@ -477,11 +477,15 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         }
     }
 
+    // Messages left over from a match the host never spawned in name its players. Kept
+    // while a server runs, so the ones queued during the host's loading screen survive.
+    if (!*(int*)T5_SvsClients) {
+        gameMessageTail = gameMessageHead;
+    }
+
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
     if (!Dvar_GetBool("cl_ingame")) {
-        // Messages left over from a match the host never spawned in name its players.
-        gameMessageTail = gameMessageHead;
         int kick = hostMenu.lobbyKickMember;
         if (kick != -1) {
             // Pairs with the one in queue_kick: party and name are read only after the
