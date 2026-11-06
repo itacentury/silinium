@@ -75,7 +75,12 @@ static uint32_t droppedCount = 0;
 // remote screen update, unverified). Draws during a load don't use the caches: a pointer
 // cached then could be trusted after its zone was freed.
 static sys_lwmutex_t cacheMutex;
-static int loadingDepth = 0;  // DB_LoadXAssets calls running, under cacheMutex
+static int loadingDepth = 0;    // DB_LoadXAssets calls running, under cacheMutex
+static uint32_t loadCount = 0;  // DB_LoadXAssets calls started, under cacheMutex
+
+// Result of af_lookup_works, under cacheMutex.
+typedef enum { AF_LOOKUP_UNTESTED, AF_LOOKUP_WORKS, AF_LOOKUP_BROKEN } LookupState;
+static LookupState lookupState = AF_LOOKUP_UNTESTED;
 
 static void af_report(const char* what) {
     // A tool can send thousands, keep the log readable. Called from the server and the
@@ -138,6 +143,45 @@ static bool af_material_registered(const char* name, uint32_t material) {
         index = XASSET_ENTRY_NEXT_HASH(entry);
     }
     return false;
+}
+
+// The hash table layout is inferred (offsets.h). Were the lookup wrong, every real icon
+// would miss and every button prompt be stripped, so the filter turns itself off then.
+// "white" is always loaded and proves the hash, the table size and the type and header
+// fields; nextHash only if "white" is not the head of its bucket. Decided once, on a draw
+// outside of a load, until then the filter runs.
+static bool af_lookup_works() {
+    sys_lwmutex_lock(&cacheMutex, 0);
+    LookupState state = lookupState;
+    bool loading = loadingDepth > 0;
+    uint32_t loads = loadCount;
+    sys_lwmutex_unlock(&cacheMutex);
+    if (state != AF_LOOKUP_UNTESTED) {
+        return state == AF_LOOKUP_WORKS;
+    }
+    if (loading) {
+        return true;
+    }
+
+    // Not under cacheMutex: a miss waits for zone loads, and DB_LoadXAssets_Hook takes
+    // the lock. A miss also links a default entry under the name, so it is found either
+    // way.
+    uint32_t white = (uint32_t)Material_RegisterHandle("white", 0);
+    bool works = white && af_material_registered("white", white);
+
+    sys_lwmutex_lock(&cacheMutex, 0);
+    // A load in between can relink the chain and make the lookup miss, test again later.
+    if (lookupState == AF_LOOKUP_UNTESTED && loadingDepth == 0 && loadCount == loads) {
+        lookupState = works ? AF_LOOKUP_WORKS : AF_LOOKUP_BROKEN;
+        if (!works) {
+            printf(T5ERROR
+                   "Anti-Freeze: the material lookup missed \"white\", text icons "
+                   "are not filtered.");
+        }
+    }
+    state = lookupState;
+    sys_lwmutex_unlock(&cacheMutex);
+    return state != AF_LOOKUP_BROKEN;
 }
 
 // Length of the name in buffer, -1 if it holds a non-printable character, size if it has
@@ -231,6 +275,7 @@ static void af_clear_materials() {
 void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
     sys_lwmutex_lock(&cacheMutex, 0);
     loadingDepth++;
+    loadCount++;
     af_clear_materials();
     sys_lwmutex_unlock(&cacheMutex);
 
@@ -529,9 +574,14 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
     return res;
 }
 
-// af_sanitize_text with the caches when no zone is loading.
+// af_sanitize_text with the caches when no zone is loading, text as is if the material
+// lookup is broken.
 static const char* af_filter_text(const char* text, char* buffer, size_t size,
                                   int* cursorPos, int* maxChars) {
+    if (!af_lookup_works()) {
+        return text;
+    }
+
     sys_lwmutex_lock(&cacheMutex, 0);
     bool cached = loadingDepth == 0;
     if (!cached) {
