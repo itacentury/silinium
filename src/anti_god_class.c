@@ -21,8 +21,9 @@
 #define GCLIENT_HEALTH(gclient) (*(int*)((gclient) + T5_GClientHealthOffset))
 
 // Only for the server instance, the child offset differs for the client one.
-#define SERVER_VARIABLE(id) \
-    (*(uint32_t*)T5_ScrVarGlob + (T5_VariableChildBegin + (id)) * T5_VariableSize)
+#define SERVER_VARIABLE(id)                                                      \
+    (*(uint32_t*)(T5_ScrVarGlob + SCRIPTINSTANCE_SERVER * T5_ScrVarGlobStride) + \
+     (T5_VariableChildBegin + (id)) * T5_VariableSize)
 #define SERVER_VARIABLE_VALUE(id) \
     (*(uint32_t*)(SERVER_VARIABLE(id) + T5_VariableValueOffset))
 #define SERVER_VARIABLE_TYPE(id) \
