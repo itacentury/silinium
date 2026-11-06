@@ -147,33 +147,58 @@ static bool copy_model(int clientNum, void* ent, int count) {
 // are keyed by canonical strings, which can't be looked up by name after the load, so
 // the id is taken from the compile. Scr_BeginLoadScripts clears the canonical strings, so
 // the id is only valid for the load that compiled it.
-static unsigned int cacInitializedName;
-static bool cacInitializedSeen;
+typedef struct {
+    const char* string;
+    unsigned int name;
+    bool seen;
+} ScriptField;
+
+enum { FIELD_CAC_INITIALIZED, FIELD_CAC_BODY_TYPE, FIELD_COUNT };
+
+static ScriptField scriptFields[FIELD_COUNT] = {
+    [FIELD_CAC_INITIALIZED] = {"cac_initialized"},
+    [FIELD_CAC_BODY_TYPE] = {"cac_body_type"},
+};
+
+static ScriptField* find_script_field(unsigned int inst, const char* str) {
+    if (inst != SCRIPTINSTANCE_SERVER || !str) {
+        return NULL;
+    }
+    for (int i = 0; i < FIELD_COUNT; i++) {
+        if (strcmp(str, scriptFields[i].string) == 0) {
+            return &scriptFields[i];
+        }
+    }
+    return NULL;
+}
 
 unsigned int SL_TransferToCanonicalString_Hook(unsigned int inst,
                                                unsigned int stringValue) {
     // Before the trampoline, while the compiler still holds its ref.
-    const char* str = SL_ConvertToString(stringValue, inst);
-    bool isCacInitialized =
-        inst == SCRIPTINSTANCE_SERVER && str && strcmp(str, "cac_initialized") == 0;
+    ScriptField* field = find_script_field(inst, SL_ConvertToString(stringValue, inst));
     unsigned int name = SL_TransferToCanonicalString_Trampoline(inst, stringValue);
-    if (isCacInitialized) {
-        cacInitializedName = name;
-        cacInitializedSeen = true;
+    if (field) {
+        field->name = name;
+        field->seen = true;
     }
     return name;
 }
 
+// The player's script object, 0 before the first spawn.
+static unsigned int client_object(int clientNum) {
+    return FindEntityId(SCRIPTINSTANCE_SERVER, clientNum, CLASS_NUM_ENTITY, 0);
+}
+
 static void reset_class_cache(int clientNum) {
-    if (!cacInitializedName) {
+    unsigned int name = scriptFields[FIELD_CAC_INITIALIZED].name;
+    if (!name) {
         printf(T5WARNING "cac_initialized wasn't compiled in this script load.");
         return;
     }
-    unsigned int id = FindEntityId(SCRIPTINSTANCE_SERVER, clientNum, CLASS_NUM_ENTITY, 0);
+    unsigned int id = client_object(clientNum);
     if (!id) {
         return;
     }
-    unsigned int name = cacInitializedName;
     if (!FindVariable(SCRIPTINSTANCE_SERVER, id, name)) {
         printf(T5WARNING "Client %d has no class cache to reset.", clientNum);
         return;
@@ -182,17 +207,34 @@ static void reset_class_cache(int clientNum) {
     printf(T5INFO "Reset the class cache of client %d.", clientNum);
 }
 
+// The loadout sets self.cac_body_type = level.tbl_armor[body], which is undefined for a
+// godmode body, and assigning undefined removes the field. So a living player without
+// the field plays a godmode class right now (inferred from the scripts, unverified). A
+// DObj doesn't tell: a half god mode player is visible. Without the field id every fixed
+// player counts as godmode, so nobody who needs the kill is skipped.
+static bool active_class_godmode(int clientNum) {
+    unsigned int name = scriptFields[FIELD_CAC_BODY_TYPE].name;
+    if (!name) {
+        printf(T5WARNING "cac_body_type wasn't compiled in this script load.");
+        return true;
+    }
+    unsigned int id = client_object(clientNum);
+    return !id || !FindVariable(SCRIPTINSTANCE_SERVER, id, name);
+}
+
 // Server frames a queued kill waits for the DObj, about a second at sv_fps 20.
 #define KILL_WAIT_FRAMES 20
 static int killWait[HOST_MENU_MAX_CLIENTS];
 
 void anti_god_class_reset() {
     memset(killWait, 0, sizeof(killWait));
-    // A load that didn't compile the field leaves an id that may name another string now.
-    if (!cacInitializedSeen) {
-        cacInitializedName = 0;
+    // A load that didn't compile a field leaves an id that may name another string now.
+    for (int i = 0; i < FIELD_COUNT; i++) {
+        if (!scriptFields[i].seen) {
+            scriptFields[i].name = 0;
+        }
+        scriptFields[i].seen = false;
     }
-    cacInitializedSeen = false;
 }
 
 void anti_god_class_client_frame(void* ent) {
@@ -258,8 +300,9 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
 
 // The fixed body only reaches later getdstat reads: the loadout is read on spawn, so a
 // player who already spawned with the class keeps it until the next spawn. Such a player
-// is killed to respawn with the fixed class. Only here, the stats hook fixes before the
-// spawn. Calling player_die from ClientEndFrame of another client is assumed to be as
+// is killed to respawn with the fixed class; one who plays a clean class and only had a
+// godmode class in another slot is left alive. Only here, the stats hook fixes before
+// the spawn. Calling player_die from ClientEndFrame of another client is assumed to be as
 // safe as the script's suicide() in the same game frame (unverified).
 void anti_god_class_check_clients() {
     if (!hostMenu.antiGodClasses || !SV_CLIENTS) {
@@ -276,6 +319,10 @@ void anti_god_class_check_clients() {
         reset_class_cache(i);
         void* ent = G_ENTITY(i);
         if (!client_alive(ent)) {
+            continue;
+        }
+        if (!active_class_godmode(i)) {
+            printf(T5INFO "Client %d plays a clean class, fixed for the next spawn.", i);
             continue;
         }
         if (Com_GetServerDObj(i)) {
