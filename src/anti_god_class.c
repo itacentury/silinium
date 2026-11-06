@@ -145,8 +145,10 @@ static bool copy_model(int clientNum, void* ent, int count) {
 // respawn keeps the undefined body, so get_default_head stops the loadout before the
 // model is set and get_armor_damage fails on body shots (half god mode). Object fields
 // are keyed by canonical strings, which can't be looked up by name after the load, so
-// the id is taken from the compile.
+// the id is taken from the compile. Scr_BeginLoadScripts clears the canonical strings, so
+// the id is only valid for the load that compiled it.
 static unsigned int cacInitializedName;
+static bool cacInitializedSeen;
 
 unsigned int SL_TransferToCanonicalString_Hook(unsigned int inst,
                                                unsigned int stringValue) {
@@ -155,13 +157,14 @@ unsigned int SL_TransferToCanonicalString_Hook(unsigned int inst,
     unsigned int name = SL_TransferToCanonicalString_Trampoline(inst, stringValue);
     if (inst == SCRIPTINSTANCE_SERVER && str && strcmp(str, "cac_initialized") == 0) {
         cacInitializedName = name;
+        cacInitializedSeen = true;
     }
     return name;
 }
 
 static void reset_class_cache(int clientNum) {
     if (!cacInitializedName) {
-        printf(T5WARNING "cac_initialized wasn't compiled since the module loaded.");
+        printf(T5WARNING "cac_initialized wasn't compiled in this script load.");
         return;
     }
     unsigned int id = FindEntityId(SCRIPTINSTANCE_SERVER, clientNum, CLASS_NUM_ENTITY, 0);
@@ -181,7 +184,14 @@ static void reset_class_cache(int clientNum) {
 #define KILL_WAIT_FRAMES 20
 static int killWait[HOST_MENU_MAX_CLIENTS];
 
-void anti_god_class_reset() { memset(killWait, 0, sizeof(killWait)); }
+void anti_god_class_reset() {
+    memset(killWait, 0, sizeof(killWait));
+    // A load that didn't compile the field leaves an id that may name another string now.
+    if (!cacInitializedSeen) {
+        cacInitializedName = 0;
+    }
+    cacInitializedSeen = false;
+}
 
 void anti_god_class_client_frame(void* ent) {
     int clientNum = ((int)ent - T5_GEntities) / T5_GEntitySize;
