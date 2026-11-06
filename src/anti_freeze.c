@@ -324,7 +324,8 @@ static bool af_is_color_code(const char* p) {
 
 // Returns text if it has no bad icon, else a copy in buffer without them. maxChars and
 // cursorPos count the steps of the game's draw loop, where an icon is one step. Each
-// removed icon that was drawn before them lowers them by one. cached as for
+// removed icon that was drawn before them lowers them by one, as does a 0x01 or 0x02 that
+// is removed so it doesn't join a '^' to a new icon. cached as for
 // af_material_ok, without it every icon is checked.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                                     int* cursorPos, int* maxChars, bool cached) {
@@ -362,6 +363,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
 
     size_t out = 0;
     int icon = 0;
+    bool plainCaretLast = false;
     const char* p = text;
     while (*p && out < size - 1) {
         if (af_is_color_code(p)) {
@@ -371,33 +373,42 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             buffer[out++] = *p++;
             buffer[out++] = *p++;
             cursor += 2;
+            plainCaretLast = false;
             continue;
         }
-        if (!af_is_icon(p)) {
+        // A removed icon between a plain '^' and a 0x01 or 0x02 would join them to an
+        // icon whose pointer was never checked. The '^' of a color code or kept icon is
+        // drawn as part of it and can't join.
+        bool join = plainCaretLast && (*p == 1 || *p == 2);
+        if (!join && !af_is_icon(p)) {
+            plainCaretLast = *p == '^';
             buffer[out++] = *p++;
             chars++;
             cursor++;
             continue;
         }
-        // Only the bad bits are trusted, a cleared or reused entry reads as all good.
-        bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) &&
-                  af_icon_ok(p, cached);
-        if (!ok && !replay && entry) {
-            entry->bad[icon / 8] |= 1 << (icon % 8);
-        }
-        icon++;
-        if (ok) {
-            if (out + AF_ICON_SIZE > size - 1) {
-                break;
+        if (!join) {
+            // Only the bad bits are trusted, a cleared or reused entry reads as all good.
+            bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) &&
+                      af_icon_ok(p, cached);
+            if (!ok && !replay && entry) {
+                entry->bad[icon / 8] |= 1 << (icon % 8);
             }
-            memcpy(&buffer[out], p, AF_ICON_SIZE);
-            out += AF_ICON_SIZE;
-            p += AF_ICON_SIZE;
-            chars++;
-            cursor++;
-            continue;
+            icon++;
+            if (ok) {
+                if (out + AF_ICON_SIZE > size - 1) {
+                    break;
+                }
+                memcpy(&buffer[out], p, AF_ICON_SIZE);
+                out += AF_ICON_SIZE;
+                p += AF_ICON_SIZE;
+                chars++;
+                cursor++;
+                plainCaretLast = false;
+                continue;
+            }
         }
-        // An icon past maxChars or the cursor was never reached, it changes neither.
+        // A step past maxChars or the cursor was never reached, it changes neither.
         if (chars < maxCharsIn) {
             (*maxChars)--;
         }
@@ -406,6 +417,10 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
         }
         chars++;
         cursor++;
+        if (join) {
+            p++;
+            continue;
+        }
         // Skip the whole icon, or what is left of it.
         for (int i = 0; i < AF_ICON_SIZE && *p; i++) {
             p++;
