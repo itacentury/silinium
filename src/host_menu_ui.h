@@ -64,7 +64,7 @@ typedef struct HostMenu {
     bool depatchBounces;
     bool prestigeUnlocks;
     bool disableDlc;
-    bool antiGodmodeClasses;  // fix an invalid body in the clients' classes
+    bool antiGodClasses;  // fix an invalid body in the clients' classes
     signed char playersToStart;
     signed char maxPlayers;
     signed char prestige;

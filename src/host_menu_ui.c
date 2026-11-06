@@ -342,8 +342,8 @@ static void disable_dlc() {
 }
 
 // The check writes the clients' stats, so it runs on the server thread.
-static void anti_godmode_classes() {
-    hostMenu.antiGodClassCheckPending = hostMenu.antiGodmodeClasses;
+static void anti_god_classes() {
+    hostMenu.antiGodClassCheckPending = hostMenu.antiGodClasses;
 }
 
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
@@ -532,7 +532,7 @@ void host_menu_ui_init() {
     hostMenu.kickClient = -1;
     hostMenu.lobbyKickMember = -1;
     hostMenu.showControls = true;
-    hostMenu.antiGodmodeClasses = true;
+    hostMenu.antiGodClasses = true;
     hostMenu.playersToStart = 4;
     hostMenu.maxPlayers = 12;
 
@@ -556,7 +556,7 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
                0, 0, disable_dlc);
     add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
-               &hostMenu.antiGodmodeClasses, 0, 0, anti_godmode_classes);
+               &hostMenu.antiGodClasses, 0, 0, anti_god_classes);
     add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;
