@@ -804,7 +804,7 @@ int host_menu_init() {
     // Optional protection, the menu works without it.
     if ((res = anti_god_class_init()) < 0) {
         hostMenu.antiGodClasses = false;
-        printf(T5ERROR "Anti Godmode Classes init failed (0x%08X), turned it off.", res);
+        printf(T5ERROR "Anti Godmode Classes init failed (0x%08X), hid the option.", res);
     }
 
     sys_ppu_thread_t id;

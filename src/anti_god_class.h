@@ -25,6 +25,9 @@ t5nd(const char*, SL_ConvertToString, (unsigned int stringValue, unsigned int in
 // compile hook that finds the class cache field (MP only, needs the host menu state).
 int anti_god_class_init();
 
+// Whether both hooks are installed, the host menu hides the option otherwise.
+bool anti_god_class_available();
+
 // Checks the clients whose stats are already in, for turning the option on in game, and
 // kills a living player whose classes were fixed. Server thread only, the toggle queues
 // it for ClientEndFrame.

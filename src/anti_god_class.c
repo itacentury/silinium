@@ -292,6 +292,10 @@ void anti_god_class_check_clients() {
     }
 }
 
+static bool installed;
+
+bool anti_god_class_available() { return installed; }
+
 int anti_god_class_init() {
     t5nmi(player_die);
     t5nmi(Com_GetServerDObj);
@@ -304,5 +308,9 @@ int anti_god_class_init() {
     if (err) {
         return err;
     }
-    return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
+    if ((err = cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR))) {
+        return err;
+    }
+    installed = true;
+    return 0;
 }
