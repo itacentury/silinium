@@ -294,6 +294,17 @@
 #define T5_BodyItemFirst 0x62 // standard_mp (Lightweight)
 #define T5_BodyItemLast 0x66 // hardened_mp (Hardline)
 #define T5_BodyItemDefault 0x62 // standard_mp, the body of every class in the 11 dumps
+// Killing a player like the GSC builtin suicide() does (PlayerCmd_suicide 0x2CA338): it clears flags & 3, zeroes the
+// health of the entity and the client, then calls player_die(ent, ent, ent, 100000, 13, 0, NULL, 0, 0). The field names
+// are inferred from that function and the IW engines (unverified).
+#define T5_player_die 0x2D85E0 // (self, inflictor, attacker, damage, meansOfDeath, weapon, dir, hitLoc, psTimeOffset)
+#define T5_GEntityClientOffset 0x144 // gclient_t*, 0 for entities that aren't players
+#define T5_GEntityFlagsOffset 0x174
+#define T5_GEntityGodmodeFlags 0x3 // FL_GODMODE | FL_DEMI_GODMODE in the IW engines (unverified)
+#define T5_GEntityHealthOffset 0x194
+#define T5_GClientHealthOffset 0x1C4 // probably ps.stats[STAT_HEALTH] (unverified)
+#define T5_ModSuicide 13 // meansOfDeath PlayerCmd_suicide passes
+#define T5_SuicideDamage 100000
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

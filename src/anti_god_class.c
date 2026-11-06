@@ -13,6 +13,11 @@
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
 #define CLIENT_USERINFO(client) ((const char*)((client) + T5_ClientUserinfoOffset))
 
+#define ENT_CLIENT(ent) (*(int*)((char*)(ent) + T5_GEntityClientOffset))
+#define ENT_FLAGS(ent) (*(int*)((char*)(ent) + T5_GEntityFlagsOffset))
+#define ENT_HEALTH(ent) (*(int*)((char*)(ent) + T5_GEntityHealthOffset))
+#define GCLIENT_HEALTH(gclient) (*(int*)((gclient) + T5_GClientHealthOffset))
+
 // Custom classes, then the same number of prestige classes.
 #define CLASS_COUNT 5
 
@@ -81,15 +86,30 @@ static bool client_in_use(int clientNum) {
     return CLIENT_STATE(SV_CLIENT(clientNum)) >= T5_ClientStateConnected;
 }
 
-static void check_client_classes(int clientNum, int client) {
+// Returns whether a class was fixed.
+static bool check_client_classes(int clientNum, int client) {
     if (!fix_classes(CLIENT_STATS(client))) {
-        return;
+        return false;
     }
 
     char name[40];
     format_client_name(name, sizeof(name), clientNum, client);
     printf(T5INFO "Fixed a godmode class of %s (client %d).", name, clientNum);
     host_menu_report_client(clientNum, name, HOST_MENU_REPORT_GODMODE_CLASS);
+    return true;
+}
+
+// Dead and spectating players have no health left (inferred from PlayerCmd_suicide, which
+// zeroes it before player_die).
+static bool client_alive(void* ent) { return ENT_CLIENT(ent) && ENT_HEALTH(ent) > 0; }
+
+// The same as the GSC builtin suicide() (PlayerCmd_suicide 0x2CA338): the flags are
+// cleared first, so player_die isn't stopped by godmode.
+static void kill_client(void* ent) {
+    ENT_FLAGS(ent) &= ~T5_GEntityGodmodeFlags;
+    ENT_HEALTH(ent) = 0;
+    GCLIENT_HEALTH(ENT_CLIENT(ent)) = 0;
+    player_die(ent, ent, ent, T5_SuicideDamage, T5_ModSuicide, 0, NULL, 0, 0);
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
@@ -125,8 +145,11 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
     }
 }
 
-// The fixed body only reaches later getdstat reads, a player who already spawned with the
-// class probably keeps it until the next spawn or class change (unverified).
+// The fixed body only reaches later getdstat reads: the loadout is read on spawn, so a
+// player who already spawned with the class keeps it until the next spawn. Such a player
+// is killed to respawn with the fixed class. Only here, the stats hook fixes before the
+// spawn. Calling player_die from ClientEndFrame of another client is assumed to be as
+// safe as the script's suicide() in the same game frame (unverified).
 void anti_god_class_check_clients() {
     if (!hostMenu.antiGodClasses || !SV_CLIENTS) {
         return;
@@ -135,13 +158,19 @@ void anti_god_class_check_clients() {
     int count = max_clients();
     for (int i = 0; i < count; i++) {
         bool isComplete = CLIENT_STATS_MASK(SV_CLIENT(i)) == T5_ClientStatsMaskComplete;
-        if (isComplete && client_in_use(i)) {
-            check_client_classes(i, SV_CLIENT(i));
+        if (!isComplete || !client_in_use(i) || !check_client_classes(i, SV_CLIENT(i))) {
+            continue;
+        }
+        void* ent = G_ENTITY(i);
+        if (client_alive(ent)) {
+            printf(T5INFO "Killed client %d to remove the godmode class.", i);
+            kill_client(ent);
         }
     }
 }
 
 int anti_god_class_init() {
+    t5nmi(player_die);
     t5nmhi(SV_ReceiveStats);
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
 }
