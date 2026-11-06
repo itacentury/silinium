@@ -305,6 +305,13 @@
 #define T5_GClientHealthOffset 0x1C4 // probably ps.stats[STAT_HEALTH] (unverified)
 #define T5_ModSuicide 13 // meansOfDeath PlayerCmd_suicide passes
 #define T5_SuicideDamage 100000
+// player_die returns with health 1 instead of killing when the player has no server DObj (0x2D86C8 -> 0x2D8AA8). A
+// godmode class never gets its setModel, so the player is invisible and can't die. Names from the IW engines (unverified).
+#define T5_Com_GetServerDObj 0x3A55E8 // (entnum) -> DObj*, 0 without a model: 1024 shorts at 0x157D61C index a pool
+                                      // of 3072 DObjs of 0x7C at 0x151C9F0 (cleared at 0x3A56B0)
+#define T5_G_DObjUpdate 0x373DA0 // (ent), frees the old DObj (0x3A5728) and builds one from the model and the attached
+                                 // models (+0x288), setmodel (0x316A00) calls it after G_SetModel
+#define T5_GEntityModelOffset 0x15C // uint16_t model index, G_SetModel (0x3701D8) stores G_ModelIndex(name) there
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

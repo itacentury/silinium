@@ -16,6 +16,7 @@
 #define ENT_CLIENT(ent) (*(int*)((char*)(ent) + T5_GEntityClientOffset))
 #define ENT_FLAGS(ent) (*(int*)((char*)(ent) + T5_GEntityFlagsOffset))
 #define ENT_HEALTH(ent) (*(int*)((char*)(ent) + T5_GEntityHealthOffset))
+#define ENT_MODEL(ent) (*(uint16_t*)((char*)(ent) + T5_GEntityModelOffset))
 #define GCLIENT_HEALTH(gclient) (*(int*)((gclient) + T5_GClientHealthOffset))
 
 // Custom classes, then the same number of prestige classes.
@@ -112,6 +113,27 @@ static void kill_client(void* ent) {
     player_die(ent, ent, ent, T5_SuicideDamage, T5_ModSuicide, 0, NULL, 0, 0);
 }
 
+// player_die needs a DObj, which a godmode class never gets. A model name could be one
+// that isn't precached, which G_ModelIndex turns into a Com_Error, so the model index of
+// a player who has a DObj is copied. The team may not match, the player dies right after.
+// Returns whether the player has a DObj now.
+static bool give_model(int clientNum, void* ent, int count) {
+    if (Com_GetServerDObj(clientNum)) {
+        return true;
+    }
+    for (int i = 0; i < count; i++) {
+        void* other = G_ENTITY(i);
+        if (i == clientNum || !client_in_use(i) || !ENT_CLIENT(other) ||
+            !ENT_MODEL(other) || !Com_GetServerDObj(i)) {
+            continue;
+        }
+        ENT_MODEL(ent) = ENT_MODEL(other);
+        G_DObjUpdate(ent);
+        return Com_GetServerDObj(clientNum) != NULL;
+    }
+    return false;
+}
+
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
 // them, and again after every later packet: the game only skips a packet when the mask
 // bits below the client's chunk count are set, so a count above 33 still overwrites a
@@ -162,15 +184,29 @@ void anti_god_class_check_clients() {
             continue;
         }
         void* ent = G_ENTITY(i);
-        if (client_alive(ent)) {
+        if (!client_alive(ent)) {
+            continue;
+        }
+        if (!give_model(i, ent, count)) {
+            printf(T5WARNING
+                   "No model to copy, client %d keeps the godmode until the next "
+                   "spawn.",
+                   i);
+            continue;
+        }
+        kill_client(ent);
+        if (ENT_HEALTH(ent) > 0) {
+            printf(T5WARNING "player_die didn't kill client %d.", i);
+        } else {
             printf(T5INFO "Killed client %d to remove the godmode class.", i);
-            kill_client(ent);
         }
     }
 }
 
 int anti_god_class_init() {
     t5nmi(player_die);
+    t5nmi(Com_GetServerDObj);
+    t5nmi(G_DObjUpdate);
     t5nmhi(SV_ReceiveStats);
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
 }
