@@ -277,7 +277,9 @@
 // 0x9968 bytes, 32 full chunks of 0x4C6 and a partial 33rd. Same layout as T5_Stats_Base, no checksum over the data.
 #define T5_ClientStatsOffset 0x5A4F8
 #define T5_ClientStatsMaskOffset 0x651B8 // uint64_t, received chunks
-#define T5_ClientStatsMaskComplete 0x1FFFFFFFFull // 33 chunks, what SV_GetClientStatInt (0x3E2700) compares with
+// 33 chunks. SV_GetClientStatInt (0x3E2700) requires the mask to equal this exactly (cmpd at 0x3E2754), a mask
+// with a bit above the 33rd makes it return 0.
+#define T5_ClientStatsMaskComplete 0x1FFFFFFFFull
 #define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
 // Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
 // range, so level.tbl_armor[body] is undefined and the armor/model code breaks (inferred from _class.gsc). The

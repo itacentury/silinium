@@ -115,7 +115,8 @@ static void check_client_classes(int clientNum, int client) {
 // bits below the client's chunk count are set, so a count above 33 still overwrites a
 // chunk after the fix. All class bodies are in chunk 0 and a clean class is silent, so
 // the re-check is cheap. The transition catches every new client, the connect clears the
-// mask of the slot (memset at 0x3E66D4).
+// mask of the slot (memset at 0x3E66D4). A mask with a bit above the 33rd is not complete
+// for getdstat either (exact compare), so such a client needs no check.
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
     if (!hostMenu.antiGodmodeClasses || !*(int*)T5_SvsClients) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);
