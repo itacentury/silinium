@@ -28,6 +28,12 @@
    and sent on to every client. In the lobby, the host sends every party member's name and
    clan tag on in the partystate message.
 
+    A real icon's pointer holds a NUL: materials are in the type 6 asset pool at 0xDD8C68
+   (eboot BSS, from the pool table 0xB320F4; its size is unverified), so the first byte is
+   0. The kill feed (0x1B0CD8) stores the pointer as is and the message window copies the
+   icon bytewise (0x1AEFD4), R_AddCmdDrawConsoleText copies charCount bytes. Console text
+   is filtered by length, a NUL only ends it outside of an icon.
+
     The draw loop takes only 0x01 and 0x02 as icon types ((byte - 1) & 0xFF <= 1 at
    0x799014). It is only reached through the draw-text render command (id 16, handler
    0x79ab78), built by AddBaseDrawTextCmd and R_AddCmdDrawConsoleText, both hooked. The
@@ -64,10 +70,11 @@ static int badMaterialsNext = 0;
 // and check every icon again, every frame. Also makes the log count texts, not draws.
 typedef struct {
     uint32_t hash;
+    int length;              // 0 if unused
     char text[AF_MAX_TEXT];  // Compared in full, an FNV-1a collision is easy to build.
     uint8_t bad[(AF_MAX_ICONS + 7) / 8];  // Bit per icon, in the order they are met.
 } BadText;
-static BadText badTexts[AF_BAD_TEXT_CACHE];  // text[0] == 0 if unused
+static BadText badTexts[AF_BAD_TEXT_CACHE];
 static int badTextsNext = 0;
 
 static uint32_t droppedCount = 0;
@@ -341,18 +348,18 @@ void DB_LoadXAssets_Hook(void* zoneInfo, int zoneCount, int sync) {
 }
 
 // FNV-1a
-static uint32_t af_hash(const char* s) {
+static uint32_t af_hash(const char* s, int length) {
     uint32_t hash = 0x811C9DC5;
-    for (; *s; s++) {
-        hash = (hash ^ (unsigned char)*s) * 0x01000193;
+    for (int i = 0; i < length; i++) {
+        hash = (hash ^ (unsigned char)s[i]) * 0x01000193;
     }
     return hash;
 }
 
-static BadText* af_find_bad_text(const char* text, uint32_t hash) {
+static BadText* af_find_bad_text(const char* text, int length, uint32_t hash) {
     for (int i = 0; i < AF_BAD_TEXT_CACHE; i++) {
-        if (badTexts[i].hash == hash && badTexts[i].text[0] &&
-            strcmp(badTexts[i].text, text) == 0) {
+        if (badTexts[i].hash == hash && badTexts[i].length == length &&
+            memcmp(badTexts[i].text, text, length) == 0) {
             return &badTexts[i];
         }
     }
@@ -360,26 +367,25 @@ static BadText* af_find_bad_text(const char* text, uint32_t hash) {
 }
 
 // NULL if the text doesn't fit, it is then checked on every draw.
-static BadText* af_add_bad_text(const char* text, uint32_t hash) {
-    if (strlen(text) >= AF_MAX_TEXT) {
+static BadText* af_add_bad_text(const char* text, int length, uint32_t hash) {
+    if (length <= 0 || length >= AF_MAX_TEXT) {
         return NULL;
     }
 
     BadText* entry = &badTexts[badTextsNext];
     badTextsNext = (badTextsNext + 1) % AF_BAD_TEXT_CACHE;
     entry->hash = hash;
-    strcpy(entry->text, text);
+    entry->length = length;
+    memcpy(entry->text, text, length);
     memset(entry->bad, 0, sizeof(entry->bad));
     return entry;
 }
 
-static bool af_icon_ok(const char* p, bool cached) {
-    // The game copies the text with strlen, a NUL inside the icon cuts it off and the
-    // renderer reads past the end.
-    for (int i = 1; i < AF_ICON_SIZE; i++) {
-        if (!p[i]) {
-            return false;
-        }
+// end: the end of the text the renderer gets. A draw-text command is copied with strlen,
+// an icon cut off there makes the renderer read past it.
+static bool af_icon_ok(const char* p, const char* end, bool cached) {
+    if (end - p < AF_ICON_SIZE) {
+        return false;
     }
 
     const unsigned char* ptr = (const unsigned char*)p + 4;
@@ -427,33 +433,38 @@ static bool af_is_color_code(const char* p) {
 // removed icon that was drawn before them lowers them by one, as does a 0x01 or 0x02 that
 // is removed so it doesn't join a '^' to a new icon. A plain '^' and a digit or 'F' that
 // a removal joins to a color code lower maxChars by the two steps they were counted with.
+// The text is length bytes, a NUL can be part of an icon; text[length] must be readable.
+// The result is NUL-terminated as well, *outLength is its length.
 // cached as for af_material_ok, without it every icon is checked.
-static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
-                                    int* cursorPos, int* maxChars, bool cached) {
-    uint32_t hash = af_hash(text);
-    BadText* entry = cached ? af_find_bad_text(text, hash) : NULL;
+static const char* af_sanitize_text(const char* text, int length, char* buffer,
+                                    size_t size, int* outLength, int* cursorPos,
+                                    int* maxChars, bool cached) {
+    const char* end = text + length;
+    uint32_t hash = af_hash(text, length);
+    BadText* entry = cached ? af_find_bad_text(text, length, hash) : NULL;
     // Known bad texts skip the icons they found bad, new ones record them.
     bool replay = entry != NULL;
     if (!replay) {
         // Skip valid icons whole, their width, height and pointer bytes can contain
         // "^\x01".
         const char* p = text;
-        while (*p) {
+        while (p < end) {
             if (!af_is_icon(p)) {
                 p++;
                 continue;
             }
-            if (!af_icon_ok(p, cached)) {
+            if (!af_icon_ok(p, end, cached)) {
                 break;
             }
             p += AF_ICON_SIZE;
         }
-        if (!*p) {
+        if (p >= end) {
+            *outLength = length;
             return text;
         }
 
         af_report("a text icon with an invalid material");
-        entry = cached ? af_add_bad_text(text, hash) : NULL;
+        entry = cached ? af_add_bad_text(text, length, hash) : NULL;
     }
 
     // Counted over the original text and compared with the original values.
@@ -467,7 +478,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
     bool plainCaretLast = false;
     int caretStep = 0;
     const char* p = text;
-    while (*p && out < size - 1) {
+    while (p < end && out < size - 1) {
         if (af_is_color_code(p)) {
             if (out + 2 > size - 1) {
                 break;
@@ -510,7 +521,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
         if (!join) {
             // Only the bad bits are trusted, a cleared or reused entry reads as all good.
             bool ok = !(replay && (entry->bad[icon / 8] & (1 << (icon % 8)))) &&
-                      af_icon_ok(p, cached);
+                      af_icon_ok(p, end, cached);
             if (!ok && !replay && entry) {
                 entry->bad[icon / 8] |= 1 << (icon % 8);
             }
@@ -542,11 +553,10 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             continue;
         }
         // Skip the whole icon, or what is left of it.
-        for (int i = 0; i < AF_ICON_SIZE && *p; i++) {
-            p++;
-        }
+        p = end - p < AF_ICON_SIZE ? end : p + AF_ICON_SIZE;
     }
     buffer[out] = 0;
+    *outLength = (int)out;
     return buffer;
 }
 
@@ -651,11 +661,12 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
 
 // af_sanitize_text with the caches when no zone is loading, text as is if the material
 // lookup is broken.
-static const char* af_filter_text(const char* text, char* buffer, size_t size,
-                                  int* cursorPos, int* maxChars) {
+static const char* af_filter_text(const char* text, int length, char* buffer, size_t size,
+                                  int* outLength, int* cursorPos, int* maxChars) {
     sys_lwmutex_lock(&cacheMutex, 0);
     if (!af_lookup_works()) {
         sys_lwmutex_unlock(&cacheMutex);
+        *outLength = length;
         return text;
     }
 
@@ -664,7 +675,8 @@ static const char* af_filter_text(const char* text, char* buffer, size_t size,
     if (!cached) {
         sys_lwmutex_unlock(&cacheMutex);
     }
-    text = af_sanitize_text(text, buffer, size, cursorPos, maxChars, cached);
+    text = af_sanitize_text(text, length, buffer, size, outLength, cursorPos, maxChars,
+                            cached);
     if (cached) {
         sys_lwmutex_unlock(&cacheMutex);
     }
@@ -679,7 +691,10 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
     char buffer[AF_MAX_TEXT];
     // Most texts have no icon and never take the lock.
     if (text && af_has_icon(text)) {
-        text = af_filter_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars);
+        // The game copies the text with strlen, the result is NUL-terminated as well.
+        int length;
+        text = af_filter_text(text, (int)strlen(text), buffer, sizeof(buffer), &length,
+                              &cursorPos, &maxChars);
     }
     return AddBaseDrawTextCmd_Trampoline(text, maxChars, font, x, y, w, xScale, yScale,
                                          rotation, color, style, cursorPos, cursor);
@@ -718,13 +733,24 @@ void* R_AddCmdDrawConsoleText_Hook(const char* textPool, int poolSize, int first
                                                   color, style);
     }
 
-    // The filter only sees the text up to a NUL and the size of the copy. Whether the
-    // renderer stops at a NUL is unverified, so only the copy is drawn, never the pool.
+    // The filter only sees the text up to a NUL outside of an icon (a real icon's pointer
+    // holds one) and the size of the copy. Whether the renderer stops at a NUL is
+    // unverified, so only the copy is drawn, never the pool.
     char linear[AF_MAX_TEXT];
     int limit = charCount < (int)sizeof(linear) - 1 ? charCount : (int)sizeof(linear) - 1;
     int length = 0;
     while (length < limit) {
         char c = af_pool_char(textPool, poolSize, firstChar, length);
+        char type = length + 1 < limit
+                        ? af_pool_char(textPool, poolSize, firstChar, length + 1)
+                        : 0;
+        if (c == '^' && (type == 1 || type == 2)) {
+            for (int i = 0; i < AF_ICON_SIZE && length < limit; i++) {
+                linear[length] = af_pool_char(textPool, poolSize, firstChar, length);
+                length++;
+            }
+            continue;
+        }
         if (!c) {
             break;
         }
@@ -736,11 +762,12 @@ void* R_AddCmdDrawConsoleText_Hook(const char* textPool, int poolSize, int first
     int maxChars = 0x7FFFFFFF;
     int cursorPos = -1;
     char buffer[AF_MAX_TEXT];
-    const char* text =
-        af_filter_text(linear, buffer, sizeof(buffer), &cursorPos, &maxChars);
+    int textLength;
+    const char* text = af_filter_text(linear, length, buffer, sizeof(buffer), &textLength,
+                                      &cursorPos, &maxChars);
     // linear and buffer are both AF_MAX_TEXT long.
-    return R_AddCmdDrawConsoleText_Trampoline(text, AF_MAX_TEXT, 0, (int)strlen(text),
-                                              font, x, y, xScale, yScale, color, style);
+    return R_AddCmdDrawConsoleText_Trampoline(text, AF_MAX_TEXT, 0, textLength, font, x,
+                                              y, xScale, yScale, color, style);
 }
 
 // The host sends chat to every client, also to the ones without this module. "SAY" is
