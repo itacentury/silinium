@@ -83,7 +83,6 @@ t5nhd(int, VM_Notify,
       (unsigned int inst, unsigned int notifyListOwnerId, unsigned int stringValue,
        void* top));
 t5nhd(void, Menu_PaintAll, (void* a1, void* uiContext));
-t5nhd(void, ClientCommand, (int clientNum));
 t5nhd(void, ClientEndFrame, (void* ent, void* a2));
 t5nhd(int, DDL_SetFromString, (void* state, const char* value, void* buffer));
 t5nhd(void, ClanName_Sanitize, ());
@@ -101,6 +100,9 @@ int host_menu_lobby_view_party();
 int host_menu_lobby_party();
 // Names in the game's ban list (menu and banClient bans).
 int host_menu_ban_count();
+// Host side: false if the client command being run is blocked (endround from a client
+// that isn't the host). Called from the ClientCommand hook, see client_command.c.
+bool host_menu_client_command_ok(int clientNum, const char* cmd);
 // Called once per server script load, after the scripts are compiled.
 void host_menu_on_server_scripts_loaded();
 // Write into the local stats.
@@ -109,6 +111,17 @@ void host_menu_write_prestige(int prestige);
 // Shows a message in the kill feed of the local player, in game only. Called from the
 // server thread; while one is waiting to be shown, further ones are dropped.
 void host_menu_game_message(const char* format, ...);
+// Blocked attempts of a client, reported to the host with host_menu_game_message.
+typedef enum {
+    HOST_MENU_REPORT_END_GAME,
+    HOST_MENU_REPORT_FREEZE,
+    HOST_MENU_REPORT_COUNT
+} HostMenuReport;
+// "<name> tried to ..." in the host's kill feed, at most once per client and kind every
+// few seconds. Called from the server thread, also works if host_menu_init failed. NULL
+// as name takes it from the host's cgame client info, which only holds it once the client
+// is in the game.
+void host_menu_report_client(int clientNum, const char* name, HostMenuReport report);
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);

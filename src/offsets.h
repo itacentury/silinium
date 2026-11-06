@@ -42,13 +42,15 @@
 #define T5_R_AddCmdDrawStretchPic 0x751940
 #define T5_R_AddCmdDrawText 0x754410
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
-#define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it
+#define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it, folds only A-Z
 #define T5_UI_OpenKeyboard 0x56A118
 #define T5_Dvar_GetBool 0x4C7BF0
 #define T5_R_TextHeight 0x734340
 #define T5_R_TextWidth 0x734570
 #define T5_SL_GetString 0x5B9A28
 #define T5_R_RegisterFont 0x734350
+// DB_FindXAssetHeader(material, name, errorIfMissing 1, wait forever): a miss creates a default entry, only for fixed
+// names.
 #define T5_Material_RegisterHandle 0x7458D8
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
@@ -149,16 +151,23 @@
 #define T5_PartyHostIndexOffset 0x5668
 #define T5_PartyActiveOffset 0x5714
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
-#define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name
+#define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name, +0x5C clan tag
 #define T5_PartyMemberSize 0x220
+#define T5_PartyMaxMembers 18 // members of T5_PartyMemberSize at T5_PartyMembersOffset
 #define T5_PartyMemberNameOffset 0x18
+#define T5_PartyMemberNameSize 0x20 // next field at +0x38
 #define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. T5_PartyMemberClanSize
-                                      // bytes, the COD points follow at +0x64
+                                      // bytes, the COD points follow at +0x64. I_strncpyz'd with 5 by NetMsg_clan
+                                      // (0x212918), 4 bytes are sent
 #define T5_PartyMemberClanSize 8
 #define T5_PartyMemberClanFeatureOffset 0xF8 // int, clan tag feature index (mp/clantagfeatures.csv), read at 0x222AA4
 // Set from the party message "rank <rankId> <prestige> <codpoints>" (sent at 0x1FB768, handled at 0x2122F0)
 #define T5_PartyMemberRankOffset 0xC8 // int, rankId (level - 1)
 #define T5_PartyMemberPrestigeOffset 0xCC // int
+// (party, ?, firstMember, targetMember, msg), writes the members from firstMember on into a partystate message until
+// it's full: name with MSG_WriteString, clan tag with MSG_WriteData. Only called by the host's partystate sender
+// (0x208DB0, "%ipartystate"), at 0x209404, 0x209538 and 0x2096FC.
+#define T5_Party_WriteMembers 0x204820
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int
@@ -186,6 +195,71 @@
 // (state, value string, buffer), *(int*)state = bit offset in the DDL. statWriteDDL (handler 0x6A36B8) writes with it, a
 // menu script runs "statWriteDDL ... 0" for prestige camos and the clan tag color when joining a lobby.
 #define T5_DDL_SetFromString 0x5E74E8
+
+// Anti-Freeze (MP only)
+// (localClientNum, serverCommandNumber), tokenizes the reliable server command and returns 0 if CG_ServerCommand
+// (0x164BB8) shouldn't run it. Called by CG_ExecuteNewServerCommands (0x166DF0) for each new command.
+#define T5_CL_CGameNeedsServerCommand 0x1A6F00
+#define T5_ClientConnection 0xD223C8 // pointer, + localClientNum * T5_ClientConnectionSize
+#define T5_ClientConnectionSize 0x35890
+#define T5_ServerCommandSequenceOffset 0x4348 // int, last received reliable command
+#define T5_LastExecutedServerCommandOffset 0x434C // int, set by CL_CGameNeedsServerCommand
+#define T5_ServerCommandsOffset 0x4350 // T5_MaxReliableCommands commands of T5_ServerCommandSize chars
+#define T5_MaxReliableCommands 128
+#define T5_ServerCommandSize 0x400
+#define T5_MaxConfigstrings 0xAC2 // "d <index> <value>": CL_CGameNeedsServerCommand calls Com_Error above 0xAC1
+#define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
+// The client side tokenizer. CL_CGameNeedsServerCommand tokenizes with Cmd_TokenizeString, "d" ends it and tokenizes
+// again with Cmd_TokenizeStringWithLimit(text, 3). CG_ExecuteNewServerCommands ends it only when 1 was returned.
+#define T5_Cmd_TokenizeString 0x39B538
+#define T5_Cmd_TokenizeStringWithLimit 0x39B828
+#define T5_Cmd_EndTokenizedString 0x39A150
+// CmdArgs layout of both tokenizers (T5_CmdArgsSlot, T5_SvCmdArgs): +0x00 nesting, argc[nesting] at
+// T5_CmdArgsArgcOffset, argv[nesting] at T5_CmdArgsArgvOffset.
+#define T5_CmdArgsArgcOffset 0x84
+#define T5_CmdArgsArgvOffset 0xA4
+// (index), thread local values. T5_CmdArgsSlot is the client side CmdArgs.
+#define T5_Sys_GetValue 0x3D2C40
+#define T5_CmdArgsSlot 4
+#define T5_game_strtol 0x44824 // the game's strtol, CG_ServerCommand and "d" read argv1 with (argv1, NULL, 10)
+// Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
+#define T5_AddBaseDrawTextCmd 0x7538E8
+// (textPool, poolSize, firstChar, charCount, font, x, y, xScale, yScale, color, style), the other builder of the same
+// draw-text command (id 16): copies charCount bytes of a ring buffer from firstChar on. Only called by three wrappers
+// (0x753610, 0x753768, 0x753860) from the console's message windows. Name and prototype inferred from CoD4 and the
+// register use.
+#define T5_R_AddCmdDrawConsoleText 0x7533C0
+// sv_cmd_args, the CmdArgs read by SV_Cmd_ArgvBuffer. SV_Cmd_Argc is inlined, there is no function to call.
+#define T5_SvCmdArgs 0x1461F74
+// (client_t* cl), copies name and clanAbbrev from the userinfo at T5_ClientUserinfoOffset into the client_t. Called on
+// connect and for each "userinfo" from the client.
+#define T5_SV_UserinfoChanged 0x3E49D0
+// (index, buffer, size), the only way the game (ClientUserinfoChanged 0x2C2AE8, ClientConnect 0x2C2FB8) reads userinfo.
+// 0x3E5EF8 calls ClientUserinfoChanged before SV_UserinfoChanged.
+#define T5_SV_GetUserinfo 0x3EAB20
+#define T5_ClientUserinfoOffset 0x720 // char[], userinfo string in client_t
+#define T5_SvClients 0x169529C // pointer to the client_t array (svs.clients), stride T5_ClientSize
+#define T5_ClientSize 0x651C8
+// (XZoneInfo* zones, count, sync), XZoneInfo = {name, allocFlags, freeFlags}. Every zone load and unload goes through it:
+// Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}). The
+// unload runs on the calling thread, before the load is handed off: a loop over the loaded zones calls the zone free
+// 0x25E2C8 (no other caller) for each zone matching freeFlags, under critical section 68. Only then are the names
+// queued and the DB thread signaled (0x3D4410, 0x3D3FD8, 0x3D6388, no other caller). sync only selects the wait at
+// the end, the DB thread only loads. Names inferred from the code; quit exits the process.
+#define T5_DB_LoadXAssets 0x2615C0
+// DB_FindXAssetHeader (0x2601A0, not called): a miss waits while a zone loads, then links a default entry under the
+// name (0x25E918), Com_Error once the entry pool is full. The anti-freeze reads the hash table itself instead.
+#define T5_XAssetHashTable 0xF3E97C // uint16_t[T5_XAssetHashTableSize] entry indices, 0 ends a chain
+#define T5_XAssetHashTableSize 30000
+// 16-byte entries: type, header, zoneIndex (u8), inuse (u8), nextHash (u16), nextOverride (u16). Layout from the
+// lookup code, field names inferred from the IW engine (unverified).
+#define T5_XAssetEntryPool 0xEC8C74
+#define T5_XAssetEntrySize 0x10
+#define T5_XAssetEntryPoolSize 30000 // entries, index 0 is never used (DB_LoadXAssets builds the free list from 1, 0x26183c)
+#define T5_XAssetEntryTypeOffset 0x0
+#define T5_XAssetEntryHeaderOffset 0x4
+#define T5_XAssetEntryNextHashOffset 0xA
+#define T5_AssetTypeMaterial 6
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

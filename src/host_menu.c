@@ -8,6 +8,7 @@
 #include <sys/sys_time.h>
 #include <sys/timer.h>
 
+#include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
 #include "t5.h"
@@ -534,36 +535,57 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
 }
 
-// A blocked endround is reported at most once per client in this window, so a client
-// repeating the command can't flood the host's kill feed.
-#define ENDROUND_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
-static system_time_t endroundMessageTime[HOST_MENU_MAX_CLIENTS];
+// Each kind of blocked attempt is reported at most once per client in this window, so a
+// client repeating it can't flood the host's kill feed.
+#define REPORT_MESSAGE_COOLDOWN_US (5 * 1000 * 1000)
+static system_time_t reportTime[HOST_MENU_REPORT_COUNT][HOST_MENU_MAX_CLIENTS];
+
+static const char* const reportText[HOST_MENU_REPORT_COUNT] = {
+    [HOST_MENU_REPORT_END_GAME] = "tried to end the game",
+    [HOST_MENU_REPORT_FREEZE] = "tried to freeze the game",
+};
+
+void host_menu_report_client(int clientNum, const char* name, HostMenuReport report) {
+    if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS || report < 0 ||
+        report >= HOST_MENU_REPORT_COUNT) {
+        return;
+    }
+    if (!name) {
+        if (!CG_CLIENTINFO_BASE) {
+            return;
+        }
+        name = CG_CLIENT_NAME(clientNum);
+    }
+    if (!*name) {
+        return;
+    }
+
+    system_time_t now = sys_time_get_system_time();
+    system_time_t* last = &reportTime[report][clientNum];
+    if (*last && now - *last < REPORT_MESSAGE_COOLDOWN_US) {
+        return;
+    }
+    *last = now;
+    host_menu_game_message("^1%s %s", name, reportText[report]);
+}
 
 // Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
 // matched with the game's I_stricmp like ClientCommand does, so "MR" can't slip past. The
 // response is compared case-sensitively by the script, so other casings of "endround" are
 // harmless.
-void ClientCommand_Hook(int clientNum) {
-    char cmd[37] = {0};
-    char arg3[37] = {0};
-    SV_Cmd_ArgvBuffer(0, cmd, sizeof(cmd));
-    SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
-
-    if (I_stricmp(cmd, "mr") == 0 && strcmp(arg3, "endround") == 0 &&
-        !is_host(clientNum)) {
-        if (CG_CLIENTINFO_BASE && clientNum >= 0 && clientNum < HOST_MENU_MAX_CLIENTS) {
-            system_time_t now = sys_time_get_system_time();
-            system_time_t* last = &endroundMessageTime[clientNum];
-            if (!*last || now - *last >= ENDROUND_MESSAGE_COOLDOWN_US) {
-                *last = now;
-                host_menu_game_message("^1%s tried to end the game",
-                                       CG_CLIENT_NAME(clientNum));
-            }
-        }
-        return;
+bool host_menu_client_command_ok(int clientNum, const char* cmd) {
+    if (I_stricmp(cmd, "mr") != 0) {
+        return true;
     }
 
-    ClientCommand_Trampoline(clientNum);
+    char arg3[37] = {0};
+    SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
+
+    if (strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
+        host_menu_report_client(clientNum, NULL, HOST_MENU_REPORT_END_GAME);
+        return false;
+    }
+    return true;
 }
 
 // Server frame: runs the queued kick, scorelimit and keyboard requests.
@@ -633,15 +655,12 @@ static void init_host_menu_offsets() {
     t5nmi(Menus_OpenByName);
     t5nmi(R_AddCmdDrawStretchPic);
     t5nmi(R_AddCmdDrawText);
-    t5nmi(SV_Cmd_ArgvBuffer);
-    t5nmi(I_stricmp);
     t5nmi(UI_OpenKeyboard);
     t5nmi(Dvar_GetBool);
     t5nmi(R_TextHeight);
     t5nmi(R_TextWidth);
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
-    t5nmi(Material_RegisterHandle);
     t5nmi(Party_RemoveMember);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);
@@ -658,7 +677,6 @@ static int init_host_menu_hooks() {
     t5nmhi(PadGetData);
     t5nmhi(VM_Notify);
     t5nmhi(Menu_PaintAll);
-    t5nmhi(ClientCommand);
     t5nmhi(ClientEndFrame);
     t5nmhi(DDL_SetFromString);
     t5nmhi(ClanName_Sanitize);
@@ -673,7 +691,7 @@ static int init_host_menu_hooks() {
     if ((res = cs_hook_install(Menu_PaintAll, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
     }
-    if ((res = cs_hook_install(ClientCommand, CS_HOOK_TYPE_CTR)) < 0) {
+    if ((res = client_command_init()) < 0) {
         return res;
     }
     if ((res = cs_hook_install(ClientEndFrame, CS_HOOK_TYPE_CTR)) < 0) {

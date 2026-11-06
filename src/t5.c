@@ -5,6 +5,8 @@
 #include <sys/memory.h>
 #include <sys/timer.h>
 
+#include "anti_freeze.h"
+#include "client_command.h"
 #include "cshook.h"
 #include "host_menu.h"
 #include "offsets.h"
@@ -20,6 +22,13 @@ void init_offsets() {
     t5ni(Scr_AddInt);
     t5ni(Scr_AddString);
     t5ni(Hunk_AllocateTempMemoryHigh);
+}
+
+// MP natives used by both the anti-freeze and the host menu, set before either inits.
+static void init_mp_offsets() {
+    t5nmi(SV_Cmd_ArgvBuffer);
+    t5nmi(Material_RegisterHandle);
+    t5nmi(I_stricmp);
 }
 
 int init_hooks() {
@@ -137,8 +146,18 @@ int init_game() {
         return -3;
     }
 
-    // The Host menu only exists for MP, the loader keeps running if it fails.
+    // The Host menu and the anti-freeze only exist for MP, the loader keeps running if
+    // they fail.
     if (isMultiplayer) {
+        init_mp_offsets();
+        if ((err = anti_freeze_init()) < 0) {
+            printf(T5ERROR
+                   "Anti-Freeze init failed (0x%08X), it may be partially active.",
+                   err);
+        } else {
+            printf(T5INFO "Anti-Freeze ready.");
+        }
+
         if ((err = host_menu_init()) < 0) {
             printf(T5ERROR "Host menu init failed (0x%08X).", err);
         } else {
