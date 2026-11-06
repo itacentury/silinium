@@ -109,16 +109,18 @@ static void check_client_classes(int clientNum, int client) {
     char name[40];
     format_client_name(name, sizeof(name), clientNum, client);
     printf(T5INFO "Fixed a godmode class of %s (client %d).", name, clientNum);
-    host_menu_game_message("^1%s^7: godmode class fixed", name);
+    host_menu_report_client(clientNum, name, HOST_MENU_REPORT_GODMODE_CLASS);
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
 // them, and again after every later packet: the game only skips a packet when the mask
 // bits below the client's chunk count are set, so a count above 33 still overwrites a
 // chunk after the fix. All class bodies are in chunk 0 and a clean class is silent, so
-// the re-check is cheap. The transition catches every new client, the connect clears the
-// mask of the slot (memset at 0x3E66D4). The count only bypasses the skip, the chunk
-// index stays at 32 or below, so the mask can't grow past complete.
+// the re-check is cheap. Every re-check fixes, but host_menu_report_client limits the
+// kill feed report, so a client resending godmode chunks can't flood the message queue.
+// The transition catches every new client, the connect clears the mask of the slot
+// (memset at 0x3E66D4). The count only bypasses the skip, the chunk index stays at 32 or
+// below, so the mask can't grow past complete.
 void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* msg) {
     if (!hostMenu.antiGodClasses || !*(int*)T5_SvClients) {
         SV_ReceiveStats_Trampoline(from0, from1, from2, msg);

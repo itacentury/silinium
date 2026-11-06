@@ -117,6 +117,7 @@ void host_menu_game_message(const char* format, ...);
 typedef enum {
     HOST_MENU_REPORT_END_GAME,
     HOST_MENU_REPORT_FREEZE,
+    HOST_MENU_REPORT_GODMODE_CLASS,
     HOST_MENU_REPORT_COUNT
 } HostMenuReport;
 // "<name> tried to ..." in the host's kill feed, at most once per client and kind every

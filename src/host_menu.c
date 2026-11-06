@@ -578,6 +578,7 @@ static system_time_t reportTime[HOST_MENU_REPORT_COUNT][HOST_MENU_MAX_CLIENTS];
 static const char* const reportText[HOST_MENU_REPORT_COUNT] = {
     [HOST_MENU_REPORT_END_GAME] = "tried to end the game",
     [HOST_MENU_REPORT_FREEZE] = "tried to freeze the game",
+    [HOST_MENU_REPORT_GODMODE_CLASS] = "tried to use a godmode class",
 };
 
 void host_menu_report_client(int clientNum, const char* name, HostMenuReport report) {
