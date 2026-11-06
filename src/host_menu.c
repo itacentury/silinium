@@ -644,6 +644,7 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         anti_god_class_check_clients();
     }
     send_keyboard_input(ent);
+    anti_god_class_client_frame(ent);
     ClientEndFrame_Trampoline(ent, a2);
 }
 

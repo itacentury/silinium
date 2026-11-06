@@ -14,7 +14,6 @@ t5nd(void, player_die,
      (void* self, void* inflictor, void* attacker, int damage, int meansOfDeath,
       int weapon, const float* dir, int hitLoc, int psTimeOffset));
 t5nd(void*, Com_GetServerDObj, (int entnum));
-t5nd(void, G_DObjUpdate, (void* ent));
 
 // Installs the stats hook that fixes godmode/invisible custom classes of clients (MP
 // only, needs the host menu state).
@@ -24,5 +23,9 @@ int anti_god_class_init();
 // kills a living player whose classes were fixed. Server thread only, the toggle queues
 // it for ClientEndFrame.
 void anti_god_class_check_clients();
+
+// Runs the kill anti_god_class_check_clients queued for this player once the game built
+// its DObj. Server thread, from ClientEndFrame.
+void anti_god_class_client_frame(void* ent);
 
 #endif /* ANTI_GOD_CLASS_H */

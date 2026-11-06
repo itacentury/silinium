@@ -113,14 +113,20 @@ static void kill_client(void* ent) {
     player_die(ent, ent, ent, T5_SuicideDamage, T5_ModSuicide, 0, NULL, 0, 0);
 }
 
+static void kill_and_log(int clientNum, void* ent) {
+    kill_client(ent);
+    if (ENT_HEALTH(ent) > 0) {
+        printf(T5WARNING "player_die didn't kill client %d.", clientNum);
+    } else {
+        printf(T5INFO "Killed client %d to remove the godmode class.", clientNum);
+    }
+}
+
 // player_die needs a DObj, which a godmode class never gets. A model name could be one
 // that isn't precached, which G_ModelIndex turns into a Com_Error, so the model index of
 // a player who has a DObj is copied. The team may not match, the player dies right after.
-// Returns whether the player has a DObj now.
-static bool give_model(int clientNum, void* ent, int count) {
-    if (Com_GetServerDObj(clientNum)) {
-        return true;
-    }
+// The game builds the DObj from it in a later frame. Returns whether a model was copied.
+static bool copy_model(int clientNum, void* ent, int count) {
     for (int i = 0; i < count; i++) {
         void* other = G_ENTITY(i);
         if (i == clientNum || !client_in_use(i) || !ENT_CLIENT(other) ||
@@ -128,10 +134,33 @@ static bool give_model(int clientNum, void* ent, int count) {
             continue;
         }
         ENT_MODEL(ent) = ENT_MODEL(other);
-        G_DObjUpdate(ent);
-        return Com_GetServerDObj(clientNum) != NULL;
+        return true;
     }
     return false;
+}
+
+// Server frames a queued kill waits for the DObj, about a second at sv_fps 20.
+#define KILL_WAIT_FRAMES 20
+static int killWait[HOST_MENU_MAX_CLIENTS];
+
+void anti_god_class_client_frame(void* ent) {
+    int clientNum = ((int)ent - T5_GEntities) / T5_GEntitySize;
+    if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS || !killWait[clientNum]) {
+        return;
+    }
+    if (!SV_CLIENTS || !client_in_use(clientNum) || !client_alive(ent)) {
+        killWait[clientNum] = 0;
+        return;
+    }
+    if (Com_GetServerDObj(clientNum)) {
+        killWait[clientNum] = 0;
+        kill_and_log(clientNum, ent);
+        return;
+    }
+    if (--killWait[clientNum] == 0) {
+        printf(T5WARNING "Client %d got no DObj, keeps the godmode until the next spawn.",
+               clientNum);
+    }
 }
 
 // Checks a client's classes once its last stats chunk is in, before getdstat can read
@@ -187,18 +216,16 @@ void anti_god_class_check_clients() {
         if (!client_alive(ent)) {
             continue;
         }
-        if (!give_model(i, ent, count)) {
+        if (Com_GetServerDObj(i)) {
+            kill_and_log(i, ent);
+        } else if (copy_model(i, ent, count)) {
+            killWait[i] = KILL_WAIT_FRAMES;
+            printf(T5INFO "Gave client %d a model, killing it once it has a DObj.", i);
+        } else {
             printf(T5WARNING
                    "No model to copy, client %d keeps the godmode until the next "
                    "spawn.",
                    i);
-            continue;
-        }
-        kill_client(ent);
-        if (ENT_HEALTH(ent) > 0) {
-            printf(T5WARNING "player_die didn't kill client %d.", i);
-        } else {
-            printf(T5INFO "Killed client %d to remove the godmode class.", i);
         }
     }
 }
@@ -206,7 +233,6 @@ void anti_god_class_check_clients() {
 int anti_god_class_init() {
     t5nmi(player_die);
     t5nmi(Com_GetServerDObj);
-    t5nmi(G_DObjUpdate);
     t5nmhi(SV_ReceiveStats);
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
 }

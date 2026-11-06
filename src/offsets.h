@@ -309,8 +309,9 @@
 // godmode class never gets its setModel, so the player is invisible and can't die. Names from the IW engines (unverified).
 #define T5_Com_GetServerDObj 0x3A55E8 // (entnum) -> DObj*, 0 without a model: 1024 shorts at 0x157D61C index a pool
                                       // of 3072 DObjs of 0x7C at 0x151C9F0 (cleared at 0x3A56B0)
-#define T5_G_DObjUpdate 0x373DA0 // (ent), frees the old DObj (0x3A5728) and builds one from the model and the attached
-                                 // models (+0x288), setmodel (0x316A00) calls it after G_SetModel
+// The DObj of a player is only built in a later server frame: setmodel's G_DObjUpdate (0x373DA0) returns for clients,
+// the frame code copies the model name into the clientinfo (0x2B9810), frees the DObj when it changed (0x36F880) and
+// BG_UpdatePlayerDObj (0x5A390) creates it again through the bgs callback 0x2EC160 (unverified).
 #define T5_GEntityModelOffset 0x15C // uint16_t model index, G_SetModel (0x3701D8) stores G_ModelIndex(name) there
 
 #define PPC_NOP 0x60000000
