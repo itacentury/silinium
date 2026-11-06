@@ -181,12 +181,17 @@ static void reset_class_cache(int clientNum) {
 #define KILL_WAIT_FRAMES 20
 static int killWait[HOST_MENU_MAX_CLIENTS];
 
+void anti_god_class_reset() { memset(killWait, 0, sizeof(killWait)); }
+
 void anti_god_class_client_frame(void* ent) {
     int clientNum = ((int)ent - T5_GEntities) / T5_GEntitySize;
     if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS || !killWait[clientNum]) {
         return;
     }
-    if (!SV_CLIENTS || !client_in_use(clientNum) || !client_alive(ent)) {
+    // With the option off the stats hook skips the connect transition below, so a kill
+    // queued before turning it off is dropped here instead of reaching the next client.
+    if (!hostMenu.antiGodClasses || !SV_CLIENTS || !client_in_use(clientNum) ||
+        !client_alive(ent)) {
         killWait[clientNum] = 0;
         return;
     }
@@ -228,6 +233,11 @@ void SV_ReceiveStats_Hook(uint64_t from0, uint64_t from1, uint64_t from2, void* 
         // When the state is set relative to the first stats packet is unverified, but a
         // mask that just became complete belongs to a live sender found by its address.
         bool isComplete = CLIENT_STATS_MASK(SV_CLIENT(i)) == T5_ClientStatsMaskComplete;
+        // A new client in the slot: a kill queued for the previous one, who left during
+        // the wait, would otherwise hit this one on the first spawn.
+        if (isComplete && !complete[i]) {
+            killWait[i] = 0;
+        }
         if (isComplete && (!complete[i] || client_in_use(i))) {
             check_client_classes(i, SV_CLIENT(i));
         }

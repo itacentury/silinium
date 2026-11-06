@@ -537,6 +537,7 @@ void host_menu_on_server_scripts_loaded() {
         return;
     }
     hostSpawned = false;
+    anti_god_class_reset();
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
     keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }

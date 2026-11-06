@@ -30,6 +30,10 @@ int anti_god_class_init();
 // it for ClientEndFrame.
 void anti_god_class_check_clients();
 
+// Drops all queued kills, on every server script load, since a new match reuses the
+// slots.
+void anti_god_class_reset();
+
 // Runs the kill anti_god_class_check_clients queued for this player once the game built
 // its DObj. Server thread, from ClientEndFrame.
 void anti_god_class_client_frame(void* ent);
