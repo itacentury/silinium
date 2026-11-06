@@ -284,8 +284,10 @@
 #define T5_ClientStatsMaskComplete 0x1FFFFFFFFull
 #define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
 // Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
-// range, so level.tbl_armor[body] is undefined and the armor/model code breaks (inferred from _class.gsc). The
-// head field is not checked: custom classes get the default head, and Sakura's primary writes leave it at 0x01.
+// range, and level.tbl_armor holds the statsTable rows of group body and head, so tbl_armor[0x72] is probably a
+// head reference instead of a body, for which _armor.gsc has no functions (inferred from the PC _class.gsc, not
+// confirmed which row 0x72 is). The head field is not checked: custom classes get the default head, and Sakura's
+// primary writes leave it at 0x01.
 #define T5_Stats_CustomClassBodyBit 0x164C // cacloadouts.customclass1.body (0x2C9 bit 4)
 #define T5_Stats_PrestigeClassBodyBit 0x1BE5 // cacloadouts.prestigeclass1.body (0x37C bit 5)
 #define T5_Stats_BodyItemBits 8
@@ -316,11 +318,25 @@
 // _class.gsc cac_getdata() reads the classes from the stats only once per connection, guarded by self.cac_initialized,
 // so a class fixed after the first spawn needs that field removed. Script variable functions, names and argument order
 // from CoD4's scr_variable with the T5 instance first (unverified): both hash (name + parentId) % 0xFFFD + 1 into the
-// variable list *(0x1E8B100 + inst * 0x80) and walk the chain comparing status >> 8 with the name.
+// variable list *(0x1E8B100 + inst * 0x80) and walk the chain comparing status >> 8 with the name. The returned id
+// indexes the server entries at list + (0x6000 + id) * 0x10.
 #define T5_FindVariable 0x5BD240 // (inst, parentId, name) -> variable id, 0 if there is none; 62 callers
 // (inst, parentId, name): no check whether the variable exists, a missing one goes on with index 0, so only call it
 // after FindVariable found it. Makes the variable external (0x5BF060) and frees it with its value (tail call 0x5BE608).
 #define T5_RemoveVariable 0x5BF908
+// Variable entries as FindVariable and FreeValue (0x5BE608) read them: status at +8, its low 5 bits are the type
+// (clrlwi at 0x5BE688), the value at +4. The child offset 0x6000 is the server instance's, the client instance uses
+// another. Undefined is type 0, as isdefined (0x30AB20) treats it. FreeValue passes the value of types 2 and 3 to
+// 0x5B7FD8 (probably SL_RemoveRefToString), so they hold a string id: VAR_STRING and VAR_ISTRING as in CoD4. Names
+// from CoD4's scrVarGlob (unverified).
+#define T5_ScrVarGlob 0x1E8B100 // VariableValueInternal* per instance
+#define T5_ScrVarGlobStride 0x80
+#define T5_VariableChildBegin 0x6000
+#define T5_VariableSize 0x10
+#define T5_VariableValueOffset 0x4
+#define T5_VariableStatusOffset 0x8
+#define T5_VariableTypeMask 0x1F
+#define T5_VarString 2
 // Object fields are keyed by canonical strings (as in CoD4), the 16-bit names VM_Execute reads from the bytecode.
 // The compiler gets them from SL_TransferToCanonicalString(inst, sv) and stores the result in the bytecode (callers
 // such as 0x5977D0, 0x5A30A8): it moves the string's ref to user 2 (0x5B7310), then returns the ushort

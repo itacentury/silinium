@@ -20,6 +20,14 @@
 #define ENT_MODEL(ent) (*(uint16_t*)((char*)(ent) + T5_GEntityModelOffset))
 #define GCLIENT_HEALTH(gclient) (*(int*)((gclient) + T5_GClientHealthOffset))
 
+// Only for the server instance, the child offset differs for the client one.
+#define SERVER_VARIABLE(id) \
+    (*(uint32_t*)T5_ScrVarGlob + (T5_VariableChildBegin + (id)) * T5_VariableSize)
+#define SERVER_VARIABLE_VALUE(id) \
+    (*(uint32_t*)(SERVER_VARIABLE(id) + T5_VariableValueOffset))
+#define SERVER_VARIABLE_TYPE(id) \
+    (*(uint32_t*)(SERVER_VARIABLE(id) + T5_VariableStatusOffset) & T5_VariableTypeMask)
+
 // Custom classes, then the same number of prestige classes.
 #define CLASS_COUNT 5
 
@@ -207,10 +215,37 @@ static void reset_class_cache(int clientNum) {
     printf(T5INFO "Reset the class cache of client %d.", clientNum);
 }
 
-// The loadout sets self.cac_body_type = level.tbl_armor[body], which is undefined for a
-// godmode body, and assigning undefined removes the field. So a living player without
-// the field plays a godmode class right now (inferred from the scripts, unverified). A
-// DObj doesn't tell: a half god mode player is visible. Without the field id every fixed
+// The bodies that register their level.cac_functions in the PC mpbody/*.gsc.
+static const char* const bodyTypes[] = {
+    "standard_mp",          "camo_mp",     "utility_mp",
+    "ordnance_disposal_mp", "hardened_mp", "body_default_mp",
+};
+
+static bool is_body_type(const char* body) {
+    for (size_t i = 0; i < sizeof(bodyTypes) / sizeof(*bodyTypes); i++) {
+        if (strcmp(body, bodyTypes[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// self.cac_body_type as a string, NULL when it is missing or not a string.
+static const char* active_body_type(unsigned int object, unsigned int name) {
+    unsigned int field = FindVariable(SCRIPTINSTANCE_SERVER, object, name);
+    if (!field || SERVER_VARIABLE_TYPE(field) != T5_VarString) {
+        return NULL;
+    }
+    return SL_ConvertToString(SERVER_VARIABLE_VALUE(field), SCRIPTINSTANCE_SERVER);
+}
+
+// The loadout sets self.cac_body_type = self.custom_class[n]["body"], which comes from
+// level.tbl_armor[body]. That table also holds the heads, so a godmode body is a defined
+// head string rather than undefined (on the console the field was found with a defined
+// type; which row 0x72 is, is inferred, unverified). get_default_head then has no
+// function for it and the loadout stops before the model is set. So a living player whose
+// body is not one of the registered bodies plays a godmode class right now. A DObj
+// doesn't tell: a half god mode player is visible. Without the field id every fixed
 // player counts as godmode, so nobody who needs the kill is skipped.
 static bool active_class_godmode(int clientNum) {
     unsigned int name = scriptFields[FIELD_CAC_BODY_TYPE].name;
@@ -218,8 +253,13 @@ static bool active_class_godmode(int clientNum) {
         printf(T5WARNING "cac_body_type wasn't compiled in this script load.");
         return true;
     }
-    unsigned int id = client_object(clientNum);
-    return !id || !FindVariable(SCRIPTINSTANCE_SERVER, id, name);
+    unsigned int object = client_object(clientNum);
+    if (!object) {
+        return true;
+    }
+    const char* body = active_body_type(object, name);
+    printf(T5INFO "Client %d has the body %s.", clientNum, body ? body : "(none)");
+    return !body || !is_body_type(body);
 }
 
 // Server frames a queued kill waits for the DObj, about a second at sv_fps 20.
