@@ -161,10 +161,10 @@ static bool af_material_registered(const char* name, uint32_t material) {
     return af_material_chain_position(name, material) >= 0;
 }
 
-// Materials the lookup test lists. "white" is registered by UI_AssetCache,
-// "ui_arrow_right" by the host menu, "black" is a common name (unverified). A missing one
-// works too: Material_RegisterHandle links a default entry under its name.
-static const char* const AF_LOOKUP_PROBES[] = {"white", "black", "ui_arrow_right"};
+// Materials the lookup test lists, only ones registered before it can run: "white" by
+// UI_AssetCache, "ui_arrow_right" by the host menu on every frame. A miss in
+// Material_RegisterHandle would wait for the zone load that is still running.
+static const char* const AF_LOOKUP_PROBES[] = {"white", "ui_arrow_right"};
 
 // Whether every probe is found. followedChain: one was found past the head of its bucket,
 // which also proves nextHash.
