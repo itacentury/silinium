@@ -189,26 +189,23 @@ static bool af_lookup_test(bool* followedChain) {
 // The probes prove the hash, the table size and the type and header fields; nextHash only
 // if one is not the head of its bucket. Tested again after every load, on a draw outside
 // of one. Off after AF_LOOKUP_MAX_MISSES misses, until then the filter runs.
+// Called and returns under cacheMutex, the test drops it in between.
 static bool af_lookup_works() {
-    sys_lwmutex_lock(&cacheMutex, 0);
-    LookupState state = lookupState;
-    bool loading = loadingDepth > 0;
-    uint32_t loads = loadCount;
+    if (lookupState != AF_LOOKUP_UNTESTED) {
+        return lookupState == AF_LOOKUP_WORKS;
+    }
     bool waiting = lookupMisses > 0 &&
                    sys_time_get_system_time() - lookupLastMiss < AF_LOOKUP_RETRY_US;
-    sys_lwmutex_unlock(&cacheMutex);
-    if (state != AF_LOOKUP_UNTESTED) {
-        return state == AF_LOOKUP_WORKS;
-    }
-    if (loading || waiting) {
+    if (loadingDepth > 0 || waiting) {
         return true;
     }
 
     // Not under cacheMutex: a miss waits for zone loads, and DB_LoadXAssets_Hook takes
     // the lock.
+    uint32_t loads = loadCount;
+    sys_lwmutex_unlock(&cacheMutex);
     bool followedChain;
     bool works = af_lookup_test(&followedChain);
-
     sys_lwmutex_lock(&cacheMutex, 0);
     // A load in between can relink the chain and make the lookup miss, test again later.
     if (lookupState == AF_LOOKUP_UNTESTED && loadingDepth == 0 && loadCount == loads) {
@@ -223,8 +220,6 @@ static bool af_lookup_works() {
             lookupLastMiss = sys_time_get_system_time();
         }
     }
-    state = lookupState;
-    sys_lwmutex_unlock(&cacheMutex);
 
     // Once per session, so a console run shows that nextHash was tested.
     static bool chainReported = false;
@@ -232,7 +227,7 @@ static bool af_lookup_works() {
         chainReported = true;
         printf(T5INFO "Anti-Freeze: the material lookup followed a hash chain.");
     }
-    return state != AF_LOOKUP_BROKEN;
+    return lookupState != AF_LOOKUP_BROKEN;
 }
 
 // Length of the name in buffer, -1 if it holds a non-printable character, size if it has
@@ -636,11 +631,13 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
 // lookup is broken.
 static const char* af_filter_text(const char* text, char* buffer, size_t size,
                                   int* cursorPos, int* maxChars) {
+    sys_lwmutex_lock(&cacheMutex, 0);
     if (!af_lookup_works()) {
+        sys_lwmutex_unlock(&cacheMutex);
         return text;
     }
 
-    sys_lwmutex_lock(&cacheMutex, 0);
+    // After af_lookup_works, a load can have started while it tested.
     bool cached = loadingDepth == 0;
     if (!cached) {
         sys_lwmutex_unlock(&cacheMutex);
