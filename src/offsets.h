@@ -313,6 +313,23 @@
 // the frame code copies the model name into the clientinfo (0x2B9810), frees the DObj when it changed (0x36F880) and
 // BG_UpdatePlayerDObj (0x5A390) creates it again through the bgs callback 0x2EC160 (unverified).
 #define T5_GEntityModelOffset 0x15C // uint16_t model index, G_SetModel (0x3701D8) stores G_ModelIndex(name) there
+// _class.gsc cac_getdata() reads the classes from the stats only once per connection, guarded by self.cac_initialized,
+// so a class fixed after the first spawn needs that field removed. Script variable functions, names and argument order
+// from CoD4's scr_variable with the T5 instance first (unverified): both hash (name + parentId) % 0xFFFD + 1 into the
+// variable list *(0x1E8B100 + inst * 0x80) and walk the chain comparing status >> 8 with the name.
+#define T5_FindVariable 0x5BD240 // (inst, parentId, name) -> variable id, 0 if there is none; 62 callers
+// (inst, parentId, name): no check whether the variable exists, a missing one goes on with index 0, so only call it
+// after FindVariable found it. Makes the variable external (0x5BF060) and frees it with its value (tail call 0x5BE608).
+#define T5_RemoveVariable 0x5BF908
+// Object fields are keyed by canonical strings (as in CoD4), the 16-bit names VM_Execute reads from the bytecode.
+// The compiler gets them from SL_TransferToCanonicalString(inst, sv) and stores the result in the bytecode (callers
+// such as 0x5977D0, 0x5A30A8): it moves the string's ref to user 2 (0x5B7310), then returns the ushort
+// canonicalStrings[sv] at 0x1BE8870 + 0x1C + 2 * (inst * 0x1081C + sv), or a new id from the counter at
+// 0x1E8B200 + inst * 0x58 + 4. Scr_BeginLoadScripts clears the table (memset at 0x5A9628). The user 2 strings seem to
+// be freed after the load (CoD4's SL_ShutdownSystem(2)), so a lookup by name afterwards (SL_GetCanonicalString
+// 0x5A9700) creates a new id instead. Names from CoD4 (unverified).
+#define T5_SL_TransferToCanonicalString 0x5A9178
+#define T5_SL_ConvertToString 0x5B6D10 // (sv, inst) -> string
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

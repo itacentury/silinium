@@ -1,6 +1,7 @@
 #include "anti_god_class.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "cshook.h"
 #include "host_menu.h"
@@ -139,6 +140,43 @@ static bool copy_model(int clientNum, void* ent, int count) {
     return false;
 }
 
+// _class.gsc caches the classes it read at the first spawn in self.custom_class and only
+// reads the stats again while self.cac_initialized is undefined. Without this, every
+// respawn keeps the undefined body, so get_default_head stops the loadout before the
+// model is set and get_armor_damage fails on body shots (half god mode). Object fields
+// are keyed by canonical strings, which can't be looked up by name after the load, so
+// the id is taken from the compile.
+static unsigned int cacInitializedName;
+
+unsigned int SL_TransferToCanonicalString_Hook(unsigned int inst,
+                                               unsigned int stringValue) {
+    // Before the trampoline, while the compiler still holds its ref.
+    const char* str = SL_ConvertToString(stringValue, inst);
+    unsigned int name = SL_TransferToCanonicalString_Trampoline(inst, stringValue);
+    if (inst == SCRIPTINSTANCE_SERVER && str && strcmp(str, "cac_initialized") == 0) {
+        cacInitializedName = name;
+    }
+    return name;
+}
+
+static void reset_class_cache(int clientNum) {
+    if (!cacInitializedName) {
+        printf(T5WARNING "cac_initialized wasn't compiled since the module loaded.");
+        return;
+    }
+    unsigned int id = FindEntityId(SCRIPTINSTANCE_SERVER, clientNum, CLASS_NUM_ENTITY, 0);
+    if (!id) {
+        return;
+    }
+    unsigned int name = cacInitializedName;
+    if (!FindVariable(SCRIPTINSTANCE_SERVER, id, name)) {
+        printf(T5WARNING "Client %d has no class cache to reset.", clientNum);
+        return;
+    }
+    RemoveVariable(SCRIPTINSTANCE_SERVER, id, name);
+    printf(T5INFO "Reset the class cache of client %d.", clientNum);
+}
+
 // Server frames a queued kill waits for the DObj, about a second at sv_fps 20.
 #define KILL_WAIT_FRAMES 20
 static int killWait[HOST_MENU_MAX_CLIENTS];
@@ -212,6 +250,8 @@ void anti_god_class_check_clients() {
         if (!isComplete || !client_in_use(i) || !check_client_classes(i, SV_CLIENT(i))) {
             continue;
         }
+        // Dead and spectating players respawn from the cache as well.
+        reset_class_cache(i);
         void* ent = G_ENTITY(i);
         if (!client_alive(ent)) {
             continue;
@@ -233,6 +273,14 @@ void anti_god_class_check_clients() {
 int anti_god_class_init() {
     t5nmi(player_die);
     t5nmi(Com_GetServerDObj);
+    t5nmi(FindVariable);
+    t5nmi(RemoveVariable);
+    t5nmi(SL_ConvertToString);
+    t5nmhi(SL_TransferToCanonicalString);
     t5nmhi(SV_ReceiveStats);
+    int err = cs_hook_install(SL_TransferToCanonicalString, CS_HOOK_TYPE_CTR);
+    if (err) {
+        return err;
+    }
     return cs_hook_install(SV_ReceiveStats, CS_HOOK_TYPE_CTR);
 }

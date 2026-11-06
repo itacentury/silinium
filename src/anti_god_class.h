@@ -14,9 +14,15 @@ t5nd(void, player_die,
      (void* self, void* inflictor, void* attacker, int damage, int meansOfDeath,
       int weapon, const float* dir, int hitLoc, int psTimeOffset));
 t5nd(void*, Com_GetServerDObj, (int entnum));
+t5nd(unsigned int, FindVariable,
+     (unsigned int inst, unsigned int parentId, unsigned int name));
+t5nd(void, RemoveVariable, (unsigned int inst, unsigned int parentId, unsigned int name));
+t5nhd(unsigned int, SL_TransferToCanonicalString,
+      (unsigned int inst, unsigned int stringValue));
+t5nd(const char*, SL_ConvertToString, (unsigned int stringValue, unsigned int inst));
 
-// Installs the stats hook that fixes godmode/invisible custom classes of clients (MP
-// only, needs the host menu state).
+// Installs the stats hook that fixes godmode/invisible custom classes of clients and the
+// compile hook that finds the class cache field (MP only, needs the host menu state).
 int anti_god_class_init();
 
 // Checks the clients whose stats are already in, for turning the option on in game, and
