@@ -102,7 +102,8 @@ static bool af_has_icon(const char* s) {
     return false;
 }
 
-// Chains are short, the bound only stops a cycle seen while the DB thread relinks one.
+// Chains are short. The index is read while the DB thread may relink a chain: the pool
+// bound stops a garbage index, this bound a cycle.
 #define AF_MAX_HASH_CHAIN 256
 
 #define XASSET_ENTRY(index) (T5_XAssetEntryPool + (uint32_t)(index) * T5_XAssetEntrySize)
@@ -134,7 +135,8 @@ static bool af_material_registered(const char* name, uint32_t material) {
     const uint16_t* hashTable = (const uint16_t*)T5_XAssetHashTable;
     uint16_t index =
         hashTable[af_asset_hash(T5_AssetTypeMaterial, name) % T5_XAssetHashTableSize];
-    for (int i = 0; index && i < AF_MAX_HASH_CHAIN; i++) {
+    for (int i = 0; index && index < T5_XAssetEntryPoolSize && i < AF_MAX_HASH_CHAIN;
+         i++) {
         uint32_t entry = XASSET_ENTRY(index);
         if (XASSET_ENTRY_TYPE(entry) == T5_AssetTypeMaterial &&
             XASSET_ENTRY_HEADER(entry) == material) {

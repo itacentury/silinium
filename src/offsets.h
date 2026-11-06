@@ -254,6 +254,7 @@
 // lookup code, field names inferred from the IW engine (unverified).
 #define T5_XAssetEntryPool 0xEC8C74
 #define T5_XAssetEntrySize 0x10
+#define T5_XAssetEntryPoolSize 30000 // entries, index 0 is never used (DB_LoadXAssets builds the free list from 1, 0x26183c)
 #define T5_XAssetEntryTypeOffset 0x0
 #define T5_XAssetEntryHeaderOffset 0x4
 #define T5_XAssetEntryNextHashOffset 0xA
