@@ -413,18 +413,21 @@ static bool af_strip_icons(char* s) {
     return out != p;
 }
 
+static bool af_is_color_char(char c) { return (c >= '0' && c <= '9') || c == 'F'; }
+
 // A color code as the draw loop (0x798490) reads it: it takes no maxChars step and two
 // cursor steps. Other '^' codes and multi-byte characters (some languages only) are
 // unverified and counted as one step per byte.
 static bool af_is_color_code(const char* p) {
-    return p[0] == '^' && ((p[1] >= '0' && p[1] <= '9') || p[1] == 'F');
+    return p[0] == '^' && af_is_color_char(p[1]);
 }
 
 // Returns text if it has no bad icon, else a copy in buffer without them. maxChars and
 // cursorPos count the steps of the game's draw loop, where an icon is one step. Each
 // removed icon that was drawn before them lowers them by one, as does a 0x01 or 0x02 that
-// is removed so it doesn't join a '^' to a new icon. cached as for
-// af_material_ok, without it every icon is checked.
+// is removed so it doesn't join a '^' to a new icon. A plain '^' and a digit or 'F' that
+// a removal joins to a color code lower maxChars by the two steps they were counted with.
+// cached as for af_material_ok, without it every icon is checked.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                                     int* cursorPos, int* maxChars, bool cached) {
     uint32_t hash = af_hash(text);
@@ -462,6 +465,7 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
     size_t out = 0;
     int icon = 0;
     bool plainCaretLast = false;
+    int caretStep = 0;
     const char* p = text;
     while (*p && out < size - 1) {
         if (af_is_color_code(p)) {
@@ -474,12 +478,30 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             plainCaretLast = false;
             continue;
         }
+        // A removed icon between a plain '^' and this character joins them to a color
+        // code, which takes no maxChars step: take back the steps both were counted with.
+        if (plainCaretLast && af_is_color_char(*p)) {
+            if (caretStep < maxCharsIn) {
+                (*maxChars)--;
+            }
+            if (chars < maxCharsIn) {
+                (*maxChars)--;
+            }
+            buffer[out++] = *p++;
+            chars++;
+            cursor++;
+            plainCaretLast = false;
+            continue;
+        }
         // A removed icon between a plain '^' and a 0x01 or 0x02 would join them to an
         // icon whose pointer was never checked. The '^' of a color code or kept icon is
         // drawn as part of it and can't join.
         bool join = plainCaretLast && (*p == 1 || *p == 2);
         if (!join && !af_is_icon(p)) {
             plainCaretLast = *p == '^';
+            if (plainCaretLast) {
+                caretStep = chars;
+            }
             buffer[out++] = *p++;
             chars++;
             cursor++;
