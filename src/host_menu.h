@@ -118,8 +118,10 @@ typedef enum {
     HOST_MENU_REPORT_COUNT
 } HostMenuReport;
 // "<name> tried to ..." in the host's kill feed, at most once per client and kind every
-// few seconds. Called from the server thread, also works if host_menu_init failed.
-void host_menu_report_client(int clientNum, HostMenuReport report);
+// few seconds. Called from the server thread, also works if host_menu_init failed. NULL
+// as name takes it from the host's cgame client info, which only holds it once the client
+// is in the game.
+void host_menu_report_client(int clientNum, const char* name, HostMenuReport report);
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);

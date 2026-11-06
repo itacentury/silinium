@@ -466,25 +466,59 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
         if (af_has_icon(af_args_argv(T5_SvCmdArgs, i))) {
             af_report("chat with a text icon");
             printf(T5WARNING "Anti-Freeze: the chat came from client %i.", clientNum);
-            host_menu_report_client(clientNum, HOST_MENU_REPORT_FREEZE);
+            host_menu_report_client(clientNum, NULL, HOST_MENU_REPORT_FREEZE);
             return false;
         }
     }
     return true;
 }
 
-static void af_report_name(int clientNum) {
+// The "name" value of a "\key\value\..." userinfo, truncated to size, "" if missing.
+static void af_userinfo_name(const char* info, char* out, size_t size) {
+    out[0] = 0;
+    while (*info) {
+        if (*info == '\\') {
+            info++;
+        }
+        const char* key = info;
+        while (*info && *info != '\\') {
+            info++;
+        }
+        bool match = info - key == 4 && memcmp(key, "name", 4) == 0;
+        if (*info) {
+            info++;
+        }
+        size_t length = 0;
+        while (*info && *info != '\\') {
+            if (match && length < size - 1) {
+                out[length++] = *info;
+            }
+            info++;
+        }
+        if (match) {
+            out[length] = 0;
+            return;
+        }
+    }
+}
+
+// Reported with the name from the userinfo: on connect the host's cgame client info
+// doesn't hold this client yet, it's empty or still has the previous one's name.
+static void af_report_name(int clientNum, const char* userinfo) {
     af_report("a text icon in a player name");
     printf(T5WARNING "Anti-Freeze: the name came from client %i.", clientNum);
-    host_menu_report_client(clientNum, HOST_MENU_REPORT_FREEZE);
+    char name[64];
+    af_userinfo_name(userinfo, name, sizeof(name));
+    host_menu_report_client(clientNum, name, HOST_MENU_REPORT_FREEZE);
 }
 
 // The host sends names and clan tags to every client. Both hooks only run on the host:
 // SV_UserinfoChanged cleans the stored userinfo, SV_GetUserinfo covers the game reading
 // it before SV_UserinfoChanged ran.
 void SV_UserinfoChanged_Hook(void* cl) {
-    if (af_strip_icons((char*)cl + T5_ClientUserinfoOffset)) {
-        af_report_name(((int)cl - *(int*)T5_SvClients) / T5_ClientSize);
+    char* userinfo = (char*)cl + T5_ClientUserinfoOffset;
+    if (af_strip_icons(userinfo)) {
+        af_report_name(((int)cl - *(int*)T5_SvClients) / T5_ClientSize, userinfo);
     }
     SV_UserinfoChanged_Trampoline(cl);
 }
@@ -492,7 +526,7 @@ void SV_UserinfoChanged_Hook(void* cl) {
 void SV_GetUserinfo_Hook(int index, char* buffer, int bufferSize) {
     SV_GetUserinfo_Trampoline(index, buffer, bufferSize);
     if (bufferSize > 0 && af_strip_icons(buffer)) {
-        af_report_name(index);
+        af_report_name(index, buffer);
     }
 }
 

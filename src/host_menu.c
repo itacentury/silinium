@@ -545,9 +545,18 @@ static const char* const reportText[HOST_MENU_REPORT_COUNT] = {
     [HOST_MENU_REPORT_FREEZE] = "tried to freeze the game",
 };
 
-void host_menu_report_client(int clientNum, HostMenuReport report) {
-    if (!CG_CLIENTINFO_BASE || clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS ||
-        report < 0 || report >= HOST_MENU_REPORT_COUNT) {
+void host_menu_report_client(int clientNum, const char* name, HostMenuReport report) {
+    if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS || report < 0 ||
+        report >= HOST_MENU_REPORT_COUNT) {
+        return;
+    }
+    if (!name) {
+        if (!CG_CLIENTINFO_BASE) {
+            return;
+        }
+        name = CG_CLIENT_NAME(clientNum);
+    }
+    if (!*name) {
         return;
     }
 
@@ -557,7 +566,7 @@ void host_menu_report_client(int clientNum, HostMenuReport report) {
         return;
     }
     *last = now;
-    host_menu_game_message("^1%s %s", CG_CLIENT_NAME(clientNum), reportText[report]);
+    host_menu_game_message("^1%s %s", name, reportText[report]);
 }
 
 // Blocks "mr <n> <menu> endround" from everyone except the host. The command name is
@@ -573,7 +582,7 @@ bool host_menu_client_command_ok(int clientNum, const char* cmd) {
     SV_Cmd_ArgvBuffer(3, arg3, sizeof(arg3));
 
     if (strcmp(arg3, "endround") == 0 && !is_host(clientNum)) {
-        host_menu_report_client(clientNum, HOST_MENU_REPORT_END_GAME);
+        host_menu_report_client(clientNum, NULL, HOST_MENU_REPORT_END_GAME);
         return false;
     }
     return true;
