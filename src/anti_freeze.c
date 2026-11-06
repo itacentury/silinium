@@ -26,6 +26,12 @@
    console that draws the text freezes. A name set through userinfo is stored by the host
    and sent on to every client. In the lobby, the host sends every party member's name and
    clan tag on in the partystate message.
+
+    The draw loop takes only 0x01 and 0x02 as icon types ((byte - 1) & 0xFF <= 1 at
+   0x799014). It is only reached through the draw-text render command (id 16, handler
+   0x79ab78), built by AddBaseDrawTextCmd and R_AddCmdDrawConsoleText, both hooked. The
+   other icon parsers (text width 0x734cec, message window copy 0x1aefcc) don't read the
+   pointer.
 */
 
 #define AF_ICON_SIZE 8  // '^', type, width, height, Material*
@@ -482,6 +488,21 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
     return res;
 }
 
+// af_sanitize_text with the caches when no zone is loading.
+static const char* af_filter_text(const char* text, char* buffer, size_t size,
+                                  int* cursorPos, int* maxChars) {
+    sys_lwmutex_lock(&cacheMutex, 0);
+    bool cached = loadingDepth == 0;
+    if (!cached) {
+        sys_lwmutex_unlock(&cacheMutex);
+    }
+    text = af_sanitize_text(text, buffer, size, cursorPos, maxChars, cached);
+    if (cached) {
+        sys_lwmutex_unlock(&cacheMutex);
+    }
+    return text;
+}
+
 void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float x,
                               float y, float w, float xScale, float yScale,
                               float rotation, const float* color, int style,
@@ -490,19 +511,66 @@ void* AddBaseDrawTextCmd_Hook(const char* text, int maxChars, void* font, float 
     char buffer[AF_MAX_TEXT];
     // Most texts have no icon and never take the lock.
     if (text && af_has_icon(text)) {
-        sys_lwmutex_lock(&cacheMutex, 0);
-        bool cached = loadingDepth == 0;
-        if (!cached) {
-            sys_lwmutex_unlock(&cacheMutex);
-        }
-        text =
-            af_sanitize_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars, cached);
-        if (cached) {
-            sys_lwmutex_unlock(&cacheMutex);
-        }
+        text = af_filter_text(text, buffer, sizeof(buffer), &cursorPos, &maxChars);
     }
     return AddBaseDrawTextCmd_Trampoline(text, maxChars, font, x, y, w, xScale, yScale,
                                          rotation, color, style, cursorPos, cursor);
+}
+
+// Byte i of the charCount bytes R_AddCmdDrawConsoleText copies, which wrap at poolSize.
+static char af_pool_char(const char* pool, int poolSize, int firstChar, int i) {
+    int index = firstChar + i;
+    return pool[index < poolSize ? index : index - poolSize];
+}
+
+static bool af_pool_has_icon(const char* pool, int poolSize, int firstChar,
+                             int charCount) {
+    for (int i = 0; i + 1 < charCount; i++) {
+        char type = af_pool_char(pool, poolSize, firstChar, i + 1);
+        if (af_pool_char(pool, poolSize, firstChar, i) == '^' &&
+            (type == 1 || type == 2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The console's message windows draw from their ring buffer through here, not through
+// AddBaseDrawTextCmd. A name that reached the kill feed unstripped (gamestate, partystate
+// on a client) would freeze in here.
+void* R_AddCmdDrawConsoleText_Hook(const char* textPool, int poolSize, int firstChar,
+                                   int charCount, void* font, float x, float y,
+                                   float xScale, float yScale, const float* color,
+                                   int style) {
+    if (!textPool || poolSize <= 0 || firstChar < 0 || firstChar >= poolSize ||
+        charCount <= 0 || charCount > poolSize ||
+        !af_pool_has_icon(textPool, poolSize, firstChar, charCount)) {
+        return R_AddCmdDrawConsoleText_Trampoline(textPool, poolSize, firstChar,
+                                                  charCount, font, x, y, xScale, yScale,
+                                                  color, style);
+    }
+
+    char linear[AF_MAX_TEXT];
+    int length =
+        charCount < (int)sizeof(linear) - 1 ? charCount : (int)sizeof(linear) - 1;
+    for (int i = 0; i < length; i++) {
+        linear[i] = af_pool_char(textPool, poolSize, firstChar, i);
+    }
+    linear[length] = 0;
+
+    // The builder sets maxChars and the cursor itself, these only satisfy the filter.
+    int maxChars = 0x7FFFFFFF;
+    int cursorPos = -1;
+    char buffer[AF_MAX_TEXT];
+    const char* text =
+        af_filter_text(linear, buffer, sizeof(buffer), &cursorPos, &maxChars);
+    if (text == linear) {
+        return R_AddCmdDrawConsoleText_Trampoline(textPool, poolSize, firstChar,
+                                                  charCount, font, x, y, xScale, yScale,
+                                                  color, style);
+    }
+    return R_AddCmdDrawConsoleText_Trampoline(text, sizeof(buffer), 0, (int)strlen(text),
+                                              font, x, y, xScale, yScale, color, style);
 }
 
 // The host sends chat to every client, also to the ones without this module. "SAY" is
@@ -636,6 +704,7 @@ int anti_freeze_init() {
     t5nmi(game_strtol);
     t5nmhi(CL_CGameNeedsServerCommand);
     t5nmhi(AddBaseDrawTextCmd);
+    t5nmhi(R_AddCmdDrawConsoleText);
     t5nmhi(SV_UserinfoChanged);
     t5nmhi(SV_GetUserinfo);
     t5nmhi(Party_WriteMembers);
@@ -659,6 +728,9 @@ int anti_freeze_init() {
     // icon would fail the check and be stripped, button prompts included.
     if (af_debug_read_works()) {
         if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) {
+            return res;
+        }
+        if ((res = cs_hook_install(R_AddCmdDrawConsoleText, CS_HOOK_TYPE_CTR)) < 0) {
             return res;
         }
     } else {

@@ -24,6 +24,9 @@ t5nhd(void*, AddBaseDrawTextCmd,
       (const char* text, int maxChars, void* font, float x, float y, float w,
        float xScale, float yScale, float rotation, const float* color, int style,
        int cursorPos, char cursor));
+t5nhd(void*, R_AddCmdDrawConsoleText,
+      (const char* textPool, int poolSize, int firstChar, int charCount, void* font,
+       float x, float y, float xScale, float yScale, const float* color, int style));
 t5nhd(void, SV_UserinfoChanged, (void* cl));
 t5nhd(void, SV_GetUserinfo, (int index, char* buffer, int bufferSize));
 t5nhd(void, Party_WriteMembers,

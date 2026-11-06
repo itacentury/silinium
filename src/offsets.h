@@ -223,6 +223,11 @@
 #define T5_game_strtol 0x44824 // the game's strtol, CG_ServerCommand and "d" read argv1 with (argv1, NULL, 10)
 // Every 2D text draw (R_AddCmdDrawText and the *WithEffects variants) copies its text into the render command here.
 #define T5_AddBaseDrawTextCmd 0x7538E8
+// (textPool, poolSize, firstChar, charCount, font, x, y, xScale, yScale, color, style), the other builder of the same
+// draw-text command (id 16): copies charCount bytes of a ring buffer from firstChar on. Only called by three wrappers
+// (0x753610, 0x753768, 0x753860) from the console's message windows. Name and prototype inferred from CoD4 and the
+// register use.
+#define T5_R_AddCmdDrawConsoleText 0x7533C0
 // sv_cmd_args, the CmdArgs read by SV_Cmd_ArgvBuffer. SV_Cmd_Argc is inlined, there is no function to call.
 #define T5_SvCmdArgs 0x1461F74
 // (client_t* cl), copies name and clanAbbrev from the userinfo at T5_ClientUserinfoOffset into the client_t. Called on
