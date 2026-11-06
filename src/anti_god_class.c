@@ -154,8 +154,10 @@ unsigned int SL_TransferToCanonicalString_Hook(unsigned int inst,
                                                unsigned int stringValue) {
     // Before the trampoline, while the compiler still holds its ref.
     const char* str = SL_ConvertToString(stringValue, inst);
+    bool isCacInitialized =
+        inst == SCRIPTINSTANCE_SERVER && str && strcmp(str, "cac_initialized") == 0;
     unsigned int name = SL_TransferToCanonicalString_Trampoline(inst, stringValue);
-    if (inst == SCRIPTINSTANCE_SERVER && str && strcmp(str, "cac_initialized") == 0) {
+    if (isCacInitialized) {
         cacInitializedName = name;
         cacInitializedSeen = true;
     }
