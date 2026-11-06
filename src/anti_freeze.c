@@ -531,6 +531,16 @@ void Party_WriteMembers_Hook(int party, int unknown, int firstMember, int target
     Party_WriteMembers_Trampoline(party, unknown, firstMember, targetMember, msg);
 }
 
+// Fails if syscall 904 is missing or refused, which may depend on the setup (unverified
+// for the HEN build). Reads a value of this module back, so a call that returns 0 without
+// reading anything fails too.
+static bool af_debug_read_works() {
+    static volatile const uint32_t probe = 0x5AF3E7C1;
+    uint32_t value = 0;
+    return sys_dbg_process_read((uint32_t)&probe, &value, sizeof(value)) == 0 &&
+           value == probe;
+}
+
 int anti_freeze_init() {
     t5nmi(BG_GetNumWeapons);
     t5nmi(Cmd_TokenizeString);
@@ -553,8 +563,15 @@ int anti_freeze_init() {
     if ((res = cs_hook_install(CL_CGameNeedsServerCommand, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
     }
-    if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) {
-        return res;
+    // The text filter reads material pointers with sys_dbg_process_read. Without it every
+    // icon would fail the check and be stripped, button prompts included.
+    if (af_debug_read_works()) {
+        if ((res = cs_hook_install(AddBaseDrawTextCmd, CS_HOOK_TYPE_CTR)) < 0) {
+            return res;
+        }
+    } else {
+        printf(T5ERROR
+               "Anti-Freeze: sys_dbg_process_read failed, text icons are not filtered.");
     }
     if ((res = cs_hook_install(SV_UserinfoChanged, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
