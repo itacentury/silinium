@@ -82,7 +82,7 @@
 // FindEntityId(inst, entnum, classnum, clientNum), name inferred from CoD4: Scr_NotifyNumInternal (0x5D34F8) calls it
 // at 0x5D3678 and passes the result to VM_Notify as the owner id, skipping the notify if it is 0. Leaf function that
 // looks up entnum + 0x800000 in the class map at 0xB62DD0 and never allocates (unlike Scr_GetEntityId at 0x5C2B00).
-// ZM counterpart 0x5AFDA0 (bo1-re match, unused).
+// MP-only (host menu), so no _ZM define; the ZM counterpart would be 0x5AFDA0 (bo1-re match, unverified).
 #define T5_FindEntityId 0x5C60B8
 #define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
