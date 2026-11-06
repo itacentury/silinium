@@ -692,6 +692,21 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
     return true;
 }
 
+// key (length chars, not NUL-terminated) equals the lowercase lower, A-Z folded like
+// I_stricmp.
+static bool af_key_equals(const char* key, size_t length, const char* lower) {
+    for (size_t i = 0; i < length; i++) {
+        char c = key[i];
+        if (c >= 'A' && c <= 'Z') {
+            c += 'a' - 'A';
+        }
+        if (!lower[i] || c != lower[i]) {
+            return false;
+        }
+    }
+    return !lower[length];
+}
+
 // The "name" value of a "\key\value\..." userinfo, truncated to size, "" if missing.
 static void af_userinfo_name(const char* info, char* out, size_t size) {
     out[0] = 0;
@@ -703,7 +718,7 @@ static void af_userinfo_name(const char* info, char* out, size_t size) {
         while (*info && *info != '\\') {
             info++;
         }
-        bool match = info - key == 4 && memcmp(key, "name", 4) == 0;
+        bool match = af_key_equals(key, info - key, "name");
         if (*info) {
             info++;
         }
@@ -767,7 +782,7 @@ static bool af_strip_field(char* field, int size) {
 // host's lobby list and every later partystate are clean too.
 void Party_WriteMembers_Hook(int party, int unknown, int firstMember, int targetMember,
                              void* msg) {
-    for (int i = 0; i < PARTY_MAX_MEMBERS; i++) {
+    for (int i = 0; i < T5_PartyMaxMembers; i++) {
         if (!PARTY_MEMBER_USED(party, i)) {
             continue;
         }

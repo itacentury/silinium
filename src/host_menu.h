@@ -36,7 +36,6 @@
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberRankOffset))
 #define PARTY_MEMBER_PRESTIGE(party, i) \
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
-#define PARTY_MAX_MEMBERS 18  // members of T5_PartyMemberSize at T5_PartyMembersOffset
 #define PARTY_BAN_NAME(i) \
     ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
 

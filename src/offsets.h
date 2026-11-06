@@ -153,6 +153,7 @@
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name, +0x5C clan tag
 #define T5_PartyMemberSize 0x220
+#define T5_PartyMaxMembers 18 // members of T5_PartyMemberSize at T5_PartyMembersOffset
 #define T5_PartyMemberNameOffset 0x18
 #define T5_PartyMemberNameSize 0x20 // next field at +0x38
 #define T5_PartyMemberClanOffset 0x5C // clan tag, read by the lobby list (0x222A90) and 0x21C130. T5_PartyMemberClanSize
