@@ -126,9 +126,12 @@ static void kill_and_log(int clientNum, void* ent) {
     kill_client(ent);
     if (ENT_HEALTH(ent) > 0) {
         printf(T5WARNING "player_die didn't kill client %d.", clientNum);
-    } else {
-        printf(T5INFO "Killed client %d to remove the godmode class.", clientNum);
+        return;
     }
+    printf(T5INFO "Killed client %d to remove the godmode class.", clientNum);
+    char name[40];
+    format_client_name(name, sizeof(name), clientNum, SV_CLIENT(clientNum));
+    host_menu_report_client(clientNum, name, HOST_MENU_REPORT_GODMODE_KILL);
 }
 
 // player_die needs a DObj, which a godmode class never gets. A model name could be one
