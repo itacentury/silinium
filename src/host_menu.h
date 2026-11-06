@@ -40,6 +40,10 @@
     ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
+#define G_ENTITY_NUM(ent) (((int)(ent) - T5_GEntities) / T5_GEntitySize)
+#define SV_CLIENTS (*(int*)T5_SvClients)  // 0 while no server runs
+#define SV_CLIENT(i) (SV_CLIENTS + (i) * T5_ClientSize)
+#define SV_CLIENT_NUM(client) (((int)(client) - SV_CLIENTS) / T5_ClientSize)
 
 #define HOST_MENU_MAX_CLIENTS 18
 
@@ -77,6 +81,8 @@ t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
 t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));
 t5nd(bool, Sys_IsMainThread, ());
 t5nd(void, Scr_Notify, (void* ent, unsigned int stringValue, unsigned int paramcount));
+t5nd(unsigned int, FindEntityId,
+     (unsigned int inst, int entnum, classNum_e classnum, unsigned int clientNum));
 
 t5nhd(int, PadGetData, (uint32_t port, CellPadData* data));
 t5nhd(int, VM_Notify,
@@ -109,15 +115,17 @@ void host_menu_on_server_scripts_loaded();
 void host_menu_write_recovery();
 void host_menu_write_prestige(int prestige);
 // Shows a message in the kill feed of the local player, in game only. Called from the
-// server thread; while one is waiting to be shown, further ones are dropped.
+// server thread; queued until the host has spawned, dropped while the queue is full.
 void host_menu_game_message(const char* format, ...);
 // Blocked attempts of a client, reported to the host with host_menu_game_message.
 typedef enum {
     HOST_MENU_REPORT_END_GAME,
     HOST_MENU_REPORT_FREEZE,
+    HOST_MENU_REPORT_GODMODE_CLASS,
+    HOST_MENU_REPORT_GODMODE_KILL,
     HOST_MENU_REPORT_COUNT
 } HostMenuReport;
-// "<name> tried to ..." in the host's kill feed, at most once per client and kind every
+// "<name> <report text>" in the host's kill feed, at most once per client and kind every
 // few seconds. Called from the server thread, also works if host_menu_init failed. NULL
 // as name takes it from the host's cgame client info, which only holds it once the client
 // is in the game.

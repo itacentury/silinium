@@ -61,6 +61,9 @@ typedef enum scriptInstance_t {
     SCRIPT_INSTANCE_MAX = 2
 } scriptInstance_t;
 
+// Only the entity class is used; 0 as in CoD4 (unverified).
+typedef enum classNum_e { CLASS_NUM_ENTITY = 0 } classNum_e;
+
 typedef enum dvarType_t {
     DVAR_TYPE_BOOL = 0x0,
     DVAR_TYPE_FLOAT = 0x1,

@@ -54,6 +54,8 @@ typedef struct HostMenu {
     bool selectGametypePending;
     bool endGamePending;
     bool scorelimitPending;
+    bool antiGodClassCheckPending;  // set by the Anti Godmode Classes toggle, run by
+                                    // ClientEndFrame
     bool maxPlayersSet;  // Max Players was applied with the menu, the TDM scorelimit
                          // follows it
     char originalName[33];
@@ -62,6 +64,7 @@ typedef struct HostMenu {
     bool depatchBounces;
     bool prestigeUnlocks;
     bool disableDlc;
+    bool antiGodClasses;  // fix an invalid body in the clients' classes
     signed char playersToStart;
     signed char maxPlayers;
     signed char prestige;

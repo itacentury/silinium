@@ -105,3 +105,65 @@ int hex_str_to_int32(char* hexStr, size_t hexLen) {
 
     return *(int*)(&out);
 }
+
+// key (length chars, not NUL-terminated) equals the lowercase lower, A-Z folded like
+// I_stricmp.
+static bool key_equals(const char* key, size_t length, const char* lower) {
+    for (size_t i = 0; i < length; i++) {
+        char c = key[i];
+        if (c >= 'A' && c <= 'Z') {
+            c += 'a' - 'A';
+        }
+        if (!lower[i] || c != lower[i]) {
+            return false;
+        }
+    }
+    return !lower[length];
+}
+
+void userinfo_name(const char* info, char* out, size_t size) {
+    out[0] = 0;
+    while (*info) {
+        if (*info == '\\') {
+            info++;
+        }
+        const char* key = info;
+        while (*info && *info != '\\') {
+            info++;
+        }
+        bool match = key_equals(key, info - key, "name");
+        if (*info) {
+            info++;
+        }
+        size_t length = 0;
+        while (*info && *info != '\\') {
+            if (match && length < size - 1) {
+                out[length++] = *info;
+            }
+            info++;
+        }
+        if (match) {
+            out[length] = 0;
+            return;
+        }
+    }
+}
+
+int ddl_read_bits(const uint8_t* buffer, int bit, int count) {
+    int value = 0;
+    for (int i = 0; i < count; i++, bit++) {
+        value |= ((buffer[bit >> 3] >> (bit & 7)) & 1) << i;
+    }
+    return value;
+}
+
+void ddl_write_bits(uint8_t* buffer, int bit, int count, int value) {
+    for (int i = 0; i < count; i++, bit++) {
+        uint8_t mask = 1 << (bit & 7);
+        if ((value >> i) & 1) {
+            buffer[bit >> 3] |= mask;
+        } else {
+            buffer[bit >> 3] &= ~mask;
+        }
+    }
+}

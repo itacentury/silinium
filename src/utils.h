@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/prx.h>
 #include <types.h>
 
@@ -32,5 +33,11 @@ size_t get_file_size(char* filePath);
 void hex_str_to_padded_hex_str(char* out, char* hexStr);
 void hex_str_to_buffer(char* out, char* hexStr, size_t hexLen);
 int hex_str_to_int32(char* hexStr, size_t hexLen);
+// The "name" value of a "\key\value\..." userinfo, truncated to size, "" if missing.
+void userinfo_name(const char* info, char* out, size_t size);
+// DDL fields are packed from the lowest bit of each byte up. Reads or writes count bits
+// starting at bit, the first one is the lowest bit of the value.
+int ddl_read_bits(const uint8_t* buffer, int bit, int count);
+void ddl_write_bits(uint8_t* buffer, int bit, int count, int value);
 
 #endif /* UTILS_H */

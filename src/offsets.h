@@ -79,6 +79,11 @@
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
+// FindEntityId(inst, entnum, classnum, clientNum), name inferred from CoD4: Scr_NotifyNumInternal (0x5D34F8) calls it
+// at 0x5D3678 and passes the result to VM_Notify as the owner id, skipping the notify if it is 0. Leaf function that
+// looks up entnum + 0x800000 in the class map at 0xB62DD0 and never allocates (unlike Scr_GetEntityId at 0x5C2B00).
+// MP-only (host menu), so no _ZM define; the ZM counterpart would be 0x5AFDA0 (bo1-re match, unverified).
+#define T5_FindEntityId 0x5C60B8
 #define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData
@@ -238,7 +243,9 @@
 // 0x3E5EF8 calls ClientUserinfoChanged before SV_UserinfoChanged.
 #define T5_SV_GetUserinfo 0x3EAB20
 #define T5_ClientUserinfoOffset 0x720 // char[], userinfo string in client_t
-#define T5_SvClients 0x169529C // pointer to the client_t array (svs.clients), stride T5_ClientSize
+// client_t *, the client array (svs.clients, svs 0x1695280 + 0x1C) with stride T5_ClientSize. 0 while no server runs
+// (zeroed at 0x3EAA0C on shutdown).
+#define T5_SvClients 0x169529C
 #define T5_ClientSize 0x651C8
 // (XZoneInfo* zones, count, sync), XZoneInfo = {name, allocFlags, freeFlags}. Every zone load and unload goes through it:
 // Cmd_loadzone_f (0x266018) via 0x265F60, and the level / UI code (e.g. 0x3A3298 frees with {NULL, 0, 0x40}). The
@@ -260,6 +267,85 @@
 #define T5_XAssetEntryHeaderOffset 0x4
 #define T5_XAssetEntryNextHashOffset 0xA
 #define T5_AssetTypeMaterial 6
+
+// Client stats on the host (MP only, see docs/mp/05-network.md in bo1-re). SV_ReceiveStats handles the OOB "stats"
+// packets: chunk i of 0x4C6 bytes goes to client + T5_ClientStatsOffset + i * 0x4C6 (client_t at T5_SvClients) and
+// sets bit i of the mask. getdstat reads the buffer only once the mask is complete.
+#define T5_SV_ReceiveStats 0x3E2828
+// int at client_t + 0: SV_DropClient stores 1 (0x3E4224) or 0 (0x3E45C4), SV_GetClientStatInt reads stats only
+// above 1. The names of the individual states above 1 are unverified.
+#define T5_ClientStateOffset 0x0
+#define T5_ClientStateConnected 2 // lowest state of a connected client
+// 0x9968 bytes, 32 full chunks of 0x4C6 and a partial 33rd. Same layout as T5_Stats_Base, no checksum over the data.
+#define T5_ClientStatsOffset 0x5A4F8
+#define T5_ClientStatsMaskOffset 0x651B8 // uint64_t, received chunks
+// 33 chunks. SV_GetClientStatInt (0x3E2700) requires the mask to equal this exactly (cmpd at 0x3E2754). The mask
+// can't get more bits: SV_ReceiveStats drops a chunk index above 0x20 (cmplwi at 0x3E2A78) and sets only bit index.
+#define T5_ClientStatsMaskComplete 0x1FFFFFFFFull
+#define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
+// Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
+// range, and level.tbl_armor holds the statsTable rows of group body and head, so tbl_armor[0x72] is probably a
+// head reference instead of a body, for which _armor.gsc has no functions (inferred from the PC _class.gsc, not
+// confirmed which row 0x72 is). The head field is not checked: custom classes get the default head, and Sakura's
+// primary writes leave it at 0x01.
+#define T5_Stats_CustomClassBodyBit 0x164C // cacloadouts.customclass1.body (0x2C9 bit 4)
+#define T5_Stats_PrestigeClassBodyBit 0x1BE5 // cacloadouts.prestigeclass1.body (0x37C bit 5)
+#define T5_Stats_BodyItemBits 8
+// Body item ids: the statsTable rows of group "body" (stock PC raw mp/statsTable.csv, assumed identical on PS3).
+// 0x61 is armor_null, which _armor.gsc replaces with standard_mp, so only 0x62-0x66 are real bodies.
+#define T5_BodyItemFirst 0x62 // standard_mp (Lightweight)
+#define T5_BodyItemLast 0x66 // hardened_mp (Hardline)
+#define T5_BodyItemDefault 0x62 // standard_mp, the body of every class in the 11 dumps
+// Killing a player like the GSC builtin suicide() does (PlayerCmd_suicide 0x2CA338): it clears flags & 3, zeroes the
+// health of the entity and the client, then calls player_die(ent, ent, ent, 100000, 13, 0, NULL, 0, 0). The field names
+// are inferred from that function and the IW engines (unverified).
+#define T5_player_die 0x2D85E0 // (self, inflictor, attacker, damage, meansOfDeath, weapon, dir, hitLoc, psTimeOffset)
+#define T5_GEntityClientOffset 0x144 // gclient_t*, 0 for entities that aren't players
+#define T5_GEntityFlagsOffset 0x174
+#define T5_GEntityGodmodeFlags 0x3 // FL_GODMODE | FL_DEMI_GODMODE in the IW engines (unverified)
+#define T5_GEntityHealthOffset 0x194
+#define T5_GClientHealthOffset 0x1C4 // probably ps.stats[STAT_HEALTH] (unverified)
+#define T5_ModSuicide 13 // meansOfDeath PlayerCmd_suicide passes
+#define T5_SuicideDamage 100000
+// player_die returns with health 1 instead of killing when the player has no server DObj (0x2D86C8 -> 0x2D8AA8). A
+// godmode class never gets its setModel, so the player is invisible and can't die. Names from the IW engines (unverified).
+#define T5_Com_GetServerDObj 0x3A55E8 // (entnum) -> DObj*, 0 without a model: 1024 shorts at 0x157D61C index a pool
+                                      // of 3072 DObjs of 0x7C at 0x151C9F0 (cleared at 0x3A56B0)
+// The DObj of a player is only built in a later server frame: setmodel's G_DObjUpdate (0x373DA0) returns for clients,
+// the frame code copies the model name into the clientinfo (0x2B9810), frees the DObj when it changed (0x36F880) and
+// BG_UpdatePlayerDObj (0x5A390) creates it again through the bgs callback 0x2EC160 (unverified).
+#define T5_GEntityModelOffset 0x15C // uint16_t model index, G_SetModel (0x3701D8) stores G_ModelIndex(name) there
+// _class.gsc cac_getdata() reads the classes from the stats only once per connection, guarded by self.cac_initialized,
+// so a class fixed after the first spawn needs that field removed. Script variable functions, names and argument order
+// from CoD4's scr_variable with the T5 instance first (unverified): both hash (name + parentId) % 0xFFFD + 1 into the
+// variable list *(0x1E8B100 + inst * 0x80) and walk the chain comparing status >> 8 with the name. The returned id
+// indexes the server entries at list + (0x6000 + id) * 0x10.
+#define T5_FindVariable 0x5BD240 // (inst, parentId, name) -> variable id, 0 if there is none; 62 callers
+// (inst, parentId, name): no check whether the variable exists, a missing one goes on with index 0, so only call it
+// after FindVariable found it. Makes the variable external (0x5BF060) and frees it with its value (tail call 0x5BE608).
+#define T5_RemoveVariable 0x5BF908
+// Variable entries as FindVariable and FreeValue (0x5BE608) read them: status at +8, its low 5 bits are the type
+// (clrlwi at 0x5BE688), the value at +4. The child offset 0x6000 is the server instance's, the client instance uses
+// another. Undefined is type 0, as isdefined (0x30AB20) treats it. FreeValue passes the value of types 2 and 3 to
+// 0x5B7FD8 (probably SL_RemoveRefToString), so they hold a string id: VAR_STRING and VAR_ISTRING as in CoD4. Names
+// from CoD4's scrVarGlob (unverified).
+#define T5_ScrVarGlob 0x1E8B100 // VariableValueInternal* per instance
+#define T5_ScrVarGlobStride 0x80
+#define T5_VariableChildBegin 0x6000
+#define T5_VariableSize 0x10
+#define T5_VariableValueOffset 0x4
+#define T5_VariableStatusOffset 0x8
+#define T5_VariableTypeMask 0x1F
+#define T5_VarString 2
+// Object fields are keyed by canonical strings (as in CoD4), the 16-bit names VM_Execute reads from the bytecode.
+// The compiler gets them from SL_TransferToCanonicalString(inst, sv) and stores the result in the bytecode (callers
+// such as 0x5977D0, 0x5A30A8): it moves the string's ref to user 2 (0x5B7310), then returns the ushort
+// canonicalStrings[sv] at 0x1BE8870 + 0x1C + 2 * (inst * 0x1081C + sv), or a new id from the counter at
+// 0x1E8B200 + inst * 0x58 + 4. Scr_BeginLoadScripts clears the table (memset at 0x5A9628). The user 2 strings seem to
+// be freed after the load (CoD4's SL_ShutdownSystem(2)), so a lookup by name afterwards (SL_GetCanonicalString
+// 0x5A9700) creates a new id instead. Names from CoD4 (unverified).
+#define T5_SL_TransferToCanonicalString 0x5A9178
+#define T5_SL_ConvertToString 0x5B6D10 // (sv, inst) -> string
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020

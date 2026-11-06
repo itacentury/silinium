@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/timer.h>
 
+#include "anti_god_class.h"
 #include "host_menu.h"
 #include "t5.h"
 #include "utils.h"
@@ -341,6 +342,14 @@ static void disable_dlc() {
     }
 }
 
+// The check writes the clients' stats, so it runs on the server thread.
+static void anti_god_classes() {
+    hostMenu.antiGodClassCheckPending = hostMenu.antiGodClasses;
+}
+
+// Without its hooks the check would run on stats that were never fixed.
+static bool anti_god_classes_visible(bool inGame) { return anti_god_class_available(); }
+
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
 
 static void change_name() {
@@ -527,6 +536,7 @@ void host_menu_ui_init() {
     hostMenu.kickClient = -1;
     hostMenu.lobbyKickMember = -1;
     hostMenu.showControls = true;
+    hostMenu.antiGodClasses = true;
     hostMenu.playersToStart = 4;
     hostMenu.maxPlayers = 12;
 
@@ -549,6 +559,9 @@ void host_menu_ui_init() {
                &hostMenu.depatchBounces, 0, 0, depatch_bounces);
     add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
                0, 0, disable_dlc);
+    add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
+               &hostMenu.antiGodClasses, 0, 0, anti_god_classes)
+        ->visible = anti_god_classes_visible;
     add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;
