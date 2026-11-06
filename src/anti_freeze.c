@@ -647,11 +647,17 @@ void* R_AddCmdDrawConsoleText_Hook(const char* textPool, int poolSize, int first
                                                   color, style);
     }
 
+    // The filter only sees the text up to a NUL and the size of the copy. Whether the
+    // renderer stops at a NUL is unverified, so only the copy is drawn, never the pool.
     char linear[AF_MAX_TEXT];
-    int length =
-        charCount < (int)sizeof(linear) - 1 ? charCount : (int)sizeof(linear) - 1;
-    for (int i = 0; i < length; i++) {
-        linear[i] = af_pool_char(textPool, poolSize, firstChar, i);
+    int limit = charCount < (int)sizeof(linear) - 1 ? charCount : (int)sizeof(linear) - 1;
+    int length = 0;
+    while (length < limit) {
+        char c = af_pool_char(textPool, poolSize, firstChar, length);
+        if (!c) {
+            break;
+        }
+        linear[length++] = c;
     }
     linear[length] = 0;
 
@@ -661,12 +667,8 @@ void* R_AddCmdDrawConsoleText_Hook(const char* textPool, int poolSize, int first
     char buffer[AF_MAX_TEXT];
     const char* text =
         af_filter_text(linear, buffer, sizeof(buffer), &cursorPos, &maxChars);
-    if (text == linear) {
-        return R_AddCmdDrawConsoleText_Trampoline(textPool, poolSize, firstChar,
-                                                  charCount, font, x, y, xScale, yScale,
-                                                  color, style);
-    }
-    return R_AddCmdDrawConsoleText_Trampoline(text, sizeof(buffer), 0, (int)strlen(text),
+    // linear and buffer are both AF_MAX_TEXT long.
+    return R_AddCmdDrawConsoleText_Trampoline(text, AF_MAX_TEXT, 0, (int)strlen(text),
                                               font, x, y, xScale, yScale, color, style);
 }
 
