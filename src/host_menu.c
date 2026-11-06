@@ -333,8 +333,11 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
 
 // Kill feed messages, queued on the server thread and shown on the UI thread once the
 // host has spawned, so they don't scroll by behind the loading screen or the class menu.
-// Only the server thread moves the head and only the UI thread the tail. Dropped while
-// not in a match, so nothing carries over to the next one.
+// Only the server thread moves the head and only the UI thread the tail; a producer on
+// another thread could lose a slot or show half-written text. All producers run on the
+// server thread: ClientEndFrame in the game frame, ClientCommand and SV_ReceiveStats
+// from its packet dispatcher (0x3EF7E8, direct call graph in bo1-re, indirect calls not
+// covered). Dropped while not in a match, so nothing carries over to the next one.
 #define GAME_MESSAGE_COUNT 8
 static char gameMessages[GAME_MESSAGE_COUNT][128];
 static volatile uint32_t gameMessageHead;
