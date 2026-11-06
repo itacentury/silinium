@@ -6,11 +6,13 @@
 #include "host_menu.h"
 #include "host_menu_ui.h"
 #include "t5.h"
+#include "utils.h"
 
 #define CLIENT(i) (*(int*)T5_SvClients + (i) * T5_ClientSize)
 #define CLIENT_STATE(client) (*(int*)((client) + T5_ClientStateOffset))
 #define CLIENT_STATS(client) ((uint8_t*)((client) + T5_ClientStatsOffset))
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
+#define CLIENT_USERINFO(client) ((const char*)((client) + T5_ClientUserinfoOffset))
 
 // Custom classes, then the same number of prestige classes.
 #define CLASS_COUNT 5
@@ -83,13 +85,13 @@ static int max_clients() {
     return count < HOST_MENU_MAX_CLIENTS ? count : HOST_MENU_MAX_CLIENTS;
 }
 
-// The client info can still be empty while a client connects.
-static void format_client_name(char* out, int size, int clientNum) {
-    if (CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(clientNum)) {
-        snprintf(out, size, "%s", CG_CLIENT_NAME(clientNum));
-        return;
+// From the userinfo: the check mostly runs on connect, when the host's cgame client info
+// doesn't hold this client yet, it's empty or still has the previous one's name.
+static void format_client_name(char* out, int size, int clientNum, int client) {
+    userinfo_name(CLIENT_USERINFO(client), out, size);
+    if (!*out) {
+        snprintf(out, size, "Client %d", clientNum);
     }
-    snprintf(out, size, "Client %d", clientNum);
 }
 
 // A free or dropped slot keeps the stats and mask of its last client until
@@ -105,7 +107,7 @@ static void check_client_classes(int clientNum, int client) {
     }
 
     char name[40];
-    format_client_name(name, sizeof(name), clientNum);
+    format_client_name(name, sizeof(name), clientNum, client);
     printf(T5INFO "Fixed a godmode class of %s (client %d).", name, clientNum);
     host_menu_game_message("^1%s^7: godmode class fixed", name);
 }

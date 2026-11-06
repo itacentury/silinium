@@ -32,5 +32,7 @@ size_t get_file_size(char* filePath);
 void hex_str_to_padded_hex_str(char* out, char* hexStr);
 void hex_str_to_buffer(char* out, char* hexStr, size_t hexLen);
 int hex_str_to_int32(char* hexStr, size_t hexLen);
+// The "name" value of a "\key\value\..." userinfo, truncated to size, "" if missing.
+void userinfo_name(const char* info, char* out, size_t size);
 
 #endif /* UTILS_H */

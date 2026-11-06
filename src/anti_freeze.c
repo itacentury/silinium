@@ -790,57 +790,13 @@ bool anti_freeze_client_command_ok(int clientNum, const char* cmd) {
     return true;
 }
 
-// key (length chars, not NUL-terminated) equals the lowercase lower, A-Z folded like
-// I_stricmp.
-static bool af_key_equals(const char* key, size_t length, const char* lower) {
-    for (size_t i = 0; i < length; i++) {
-        char c = key[i];
-        if (c >= 'A' && c <= 'Z') {
-            c += 'a' - 'A';
-        }
-        if (!lower[i] || c != lower[i]) {
-            return false;
-        }
-    }
-    return !lower[length];
-}
-
-// The "name" value of a "\key\value\..." userinfo, truncated to size, "" if missing.
-static void af_userinfo_name(const char* info, char* out, size_t size) {
-    out[0] = 0;
-    while (*info) {
-        if (*info == '\\') {
-            info++;
-        }
-        const char* key = info;
-        while (*info && *info != '\\') {
-            info++;
-        }
-        bool match = af_key_equals(key, info - key, "name");
-        if (*info) {
-            info++;
-        }
-        size_t length = 0;
-        while (*info && *info != '\\') {
-            if (match && length < size - 1) {
-                out[length++] = *info;
-            }
-            info++;
-        }
-        if (match) {
-            out[length] = 0;
-            return;
-        }
-    }
-}
-
 // Reported with the name from the userinfo: on connect the host's cgame client info
 // doesn't hold this client yet, it's empty or still has the previous one's name.
 static void af_report_name(int clientNum, const char* userinfo) {
     af_report("a text icon in a player name");
     printf(T5WARNING "Anti-Freeze: the name came from client %i.", clientNum);
     char name[64];
-    af_userinfo_name(userinfo, name, sizeof(name));
+    userinfo_name(userinfo, name, sizeof(name));
     host_menu_report_client(clientNum, name, HOST_MENU_REPORT_FREEZE);
 }
 
