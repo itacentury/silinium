@@ -78,9 +78,51 @@ static bool af_has_icon(const char* s) {
     return false;
 }
 
-// A real icon points to a loaded material, and looking up the material's name returns the
-// same pointer. The memory is read with sys_dbg_process_read, a garbage pointer must not
-// crash here either.
+// Chains are short, the bound only stops a cycle seen while the DB thread relinks one.
+#define AF_MAX_HASH_CHAIN 256
+
+#define XASSET_ENTRY(index) (T5_XAssetEntryPool + (uint32_t)(index) * T5_XAssetEntrySize)
+#define XASSET_ENTRY_TYPE(entry) (*(const uint32_t*)((entry) + T5_XAssetEntryTypeOffset))
+#define XASSET_ENTRY_HEADER(entry) \
+    (*(const uint32_t*)((entry) + T5_XAssetEntryHeaderOffset))
+#define XASSET_ENTRY_NEXT_HASH(entry) \
+    (*(const uint16_t*)((entry) + T5_XAssetEntryNextHashOffset))
+
+// The hash DB_FindXAssetHeader starts its lookup with.
+static uint32_t af_asset_hash(uint32_t type, const char* name) {
+    uint32_t hash = type;
+    for (; *name; name++) {
+        uint32_t c = (unsigned char)*name;
+        if (c >= 'A' && c <= 'Z') {
+            c += 'a' - 'A';
+        } else if (c == '\\') {
+            c = '/';
+        }
+        hash = c + (hash << 6) + (hash << 16) - hash;
+    }
+    return hash;
+}
+
+// Whether a material entry in the bucket of name holds this pointer. Read-only, unlike
+// Material_RegisterHandle, whose miss waits for zone loads and takes an entry from the
+// pool. Without the game's lock: a race with the DB thread can only miss a material.
+static bool af_material_registered(const char* name, uint32_t material) {
+    const uint16_t* hashTable = (const uint16_t*)T5_XAssetHashTable;
+    uint16_t index =
+        hashTable[af_asset_hash(T5_AssetTypeMaterial, name) % T5_XAssetHashTableSize];
+    for (int i = 0; index && i < AF_MAX_HASH_CHAIN; i++) {
+        uint32_t entry = XASSET_ENTRY(index);
+        if (XASSET_ENTRY_TYPE(entry) == T5_AssetTypeMaterial &&
+            XASSET_ENTRY_HEADER(entry) == material) {
+            return true;
+        }
+        index = XASSET_ENTRY_NEXT_HASH(entry);
+    }
+    return false;
+}
+
+// A real icon points to a loaded material, which is registered under its own name. The
+// memory is read with sys_dbg_process_read, a garbage pointer must not crash here either.
 static bool af_material_check(uint32_t material) {
     uint32_t namePtr;
     if (sys_dbg_process_read(material, &namePtr, sizeof(namePtr)) != 0 || !namePtr) {
@@ -105,7 +147,7 @@ static bool af_material_check(uint32_t material) {
         return false;
     }
 
-    return (uint32_t)Material_RegisterHandle(name, 0) == material;
+    return af_material_registered(name, material);
 }
 
 static bool af_material_ok(uint32_t material) {

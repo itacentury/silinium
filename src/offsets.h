@@ -49,6 +49,8 @@
 #define T5_R_TextWidth 0x734570
 #define T5_SL_GetString 0x5B9A28
 #define T5_R_RegisterFont 0x734350
+// DB_FindXAssetHeader(material, name, errorIfMissing 1, wait forever): a miss creates a default entry, only for fixed
+// names.
 #define T5_Material_RegisterHandle 0x7458D8
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
@@ -237,6 +239,18 @@
 // unload is inlined here, its free helpers (0x7384A8, 0x3D4410, 0x3D3FD8, 0x3D6388) have no other caller; quit
 // exits the process.
 #define T5_DB_LoadXAssets 0x2615C0
+// DB_FindXAssetHeader (0x2601A0, not called): a miss waits while a zone loads, then links a default entry under the
+// name (0x25E918), Com_Error once the entry pool is full. The anti-freeze reads the hash table itself instead.
+#define T5_XAssetHashTable 0xF3E97C // uint16_t[T5_XAssetHashTableSize] entry indices, 0 ends a chain
+#define T5_XAssetHashTableSize 30000
+// 16-byte entries: type, header, zoneIndex (u8), inuse (u8), nextHash (u16), nextOverride (u16). Layout from the
+// lookup code, field names inferred from the IW engine (unverified).
+#define T5_XAssetEntryPool 0xEC8C74
+#define T5_XAssetEntrySize 0x10
+#define T5_XAssetEntryTypeOffset 0x0
+#define T5_XAssetEntryHeaderOffset 0x4
+#define T5_XAssetEntryNextHashOffset 0xA
+#define T5_AssetTypeMaterial 6
 
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020
