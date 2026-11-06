@@ -65,8 +65,8 @@ typedef struct {
     uint32_t hash;
     char text[AF_MAX_TEXT];  // Compared in full, an FNV-1a collision is easy to build.
     uint8_t bad[(AF_MAX_ICONS + 7) / 8];  // Bit per icon, in the order they are met.
-} af_bad_text;
-static af_bad_text badTexts[AF_BAD_TEXT_CACHE];  // text[0] == 0 if unused
+} BadText;
+static BadText badTexts[AF_BAD_TEXT_CACHE];  // text[0] == 0 if unused
 static int badTextsNext = 0;
 
 static uint32_t droppedCount = 0;
@@ -251,7 +251,7 @@ static uint32_t af_hash(const char* s) {
     return hash;
 }
 
-static af_bad_text* af_find_bad_text(const char* text, uint32_t hash) {
+static BadText* af_find_bad_text(const char* text, uint32_t hash) {
     for (int i = 0; i < AF_BAD_TEXT_CACHE; i++) {
         if (badTexts[i].hash == hash && badTexts[i].text[0] &&
             strcmp(badTexts[i].text, text) == 0) {
@@ -262,12 +262,12 @@ static af_bad_text* af_find_bad_text(const char* text, uint32_t hash) {
 }
 
 // NULL if the text doesn't fit, it is then checked on every draw.
-static af_bad_text* af_add_bad_text(const char* text, uint32_t hash) {
+static BadText* af_add_bad_text(const char* text, uint32_t hash) {
     if (strlen(text) >= AF_MAX_TEXT) {
         return NULL;
     }
 
-    af_bad_text* entry = &badTexts[badTextsNext];
+    BadText* entry = &badTexts[badTextsNext];
     badTextsNext = (badTextsNext + 1) % AF_BAD_TEXT_CACHE;
     entry->hash = hash;
     strcpy(entry->text, text);
@@ -329,7 +329,7 @@ static bool af_is_color_code(const char* p) {
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                                     int* cursorPos, int* maxChars, bool cached) {
     uint32_t hash = af_hash(text);
-    af_bad_text* entry = cached ? af_find_bad_text(text, hash) : NULL;
+    BadText* entry = cached ? af_find_bad_text(text, hash) : NULL;
     // Known bad texts skip the icons they found bad, new ones record them.
     bool replay = entry != NULL;
     if (!replay) {
@@ -694,7 +694,7 @@ static bool af_strip_field(char* field, int size) {
 // host's lobby list and every later partystate are clean too.
 void Party_WriteMembers_Hook(int party, int unknown, int firstMember, int targetMember,
                              void* msg) {
-    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+    for (int i = 0; i < PARTY_MAX_MEMBERS; i++) {
         if (!PARTY_MEMBER_USED(party, i)) {
             continue;
         }
@@ -704,6 +704,8 @@ void Party_WriteMembers_Hook(int party, int unknown, int firstMember, int target
         bool clan =
             af_strip_field(member + T5_PartyMemberClanOffset, T5_PartyMemberClanSize);
         if (name || clan) {
+            // No host_menu_report_client: there is no clientNum in the lobby, and the
+            // kill feed only shows in game.
             af_report("a text icon in a party member name");
             printf(T5WARNING "Anti-Freeze: the name came from party member %i.", i);
         }
