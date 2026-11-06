@@ -196,7 +196,7 @@ void anti_god_class_reset() {
 }
 
 void anti_god_class_client_frame(void* ent) {
-    int clientNum = ((int)ent - T5_GEntities) / T5_GEntitySize;
+    int clientNum = G_ENTITY_NUM(ent);
     if (clientNum < 0 || clientNum >= HOST_MENU_MAX_CLIENTS || !killWait[clientNum]) {
         return;
     }
