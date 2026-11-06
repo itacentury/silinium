@@ -550,12 +550,14 @@ int VM_Notify_Hook(unsigned int inst, unsigned int notifyListOwnerId,
         if (hostMenu.depatchBounces) {
             host_menu_set_bounce_dvars(true);
         }
-        // The owner is the spawning player, so its entity id already exists and the
-        // lookup doesn't allocate one. cg.clientNum is the host's server slot.
+        // Scr_NotifyNumInternal computes the owner id with the same lookup.
+        // cg.clientNum is the host's server slot.
         if (!hostSpawned && CG_CLIENTINFO_BASE &&
-            notifyListOwnerId == Scr_GetEntityId(SCRIPTINSTANCE_SERVER, CG_CLIENTNUM,
-                                                 CLASS_NUM_ENTITY, 0)) {
+            notifyListOwnerId ==
+                FindEntityId(SCRIPTINSTANCE_SERVER, CG_CLIENTNUM, CLASS_NUM_ENTITY, 0)) {
             hostSpawned = true;
+            printf(T5INFO "Host spawn detected (client %d), kill feed enabled.",
+                   CG_CLIENTNUM);
         }
     }
     return VM_Notify_Trampoline(inst, notifyListOwnerId, stringValue, top);
@@ -701,7 +703,7 @@ static void init_host_menu_offsets() {
     t5nmi(CG_GameMessage);
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
-    t5nmi(Scr_GetEntityId);
+    t5nmi(FindEntityId);
 }
 
 static int init_host_menu_hooks() {

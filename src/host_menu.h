@@ -77,7 +77,7 @@ t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
 t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));
 t5nd(bool, Sys_IsMainThread, ());
 t5nd(void, Scr_Notify, (void* ent, unsigned int stringValue, unsigned int paramcount));
-t5nd(unsigned int, Scr_GetEntityId,
+t5nd(unsigned int, FindEntityId,
      (unsigned int inst, int entnum, classNum_e classnum, unsigned int clientNum));
 
 t5nhd(int, PadGetData, (uint32_t port, CellPadData* data));

@@ -79,10 +79,11 @@
 #define T5_Scr_Notify 0x354F08 // (ent, stringValue, paramcount), Scr_NotifyNum on ent->s.number
 #define T5_GEntities 0x12AB290 // g_entities
 #define T5_GEntitySize 0x2F8
-// Likely Scr_GetEntityId(inst, entnum, classnum, clientNum), unverified: Scr_AddEntity (0x5DF800) calls it with the
-// script instance first, and it looks up entnum + 0x800000 in the per-instance class map at 0xB62DD0 (12 bytes per
-// class), like CoD4's Scr_GetEntityId.
-#define T5_Scr_GetEntityId 0x5C2B00
+// FindEntityId(inst, entnum, classnum, clientNum), name inferred from CoD4: Scr_NotifyNumInternal (0x5D34F8) calls it
+// at 0x5D3678 and passes the result to VM_Notify as the owner id, skipping the notify if it is 0. Leaf function that
+// looks up entnum + 0x800000 in the class map at 0xB62DD0 and never allocates (unlike Scr_GetEntityId at 0x5C2B00).
+// ZM counterpart 0x5AFDA0 (bo1-re match, unused).
+#define T5_FindEntityId 0x5C60B8
 #define T5_ClServerId 0xD25EF0 // cl.serverId, UIScript_scriptmenuresponse (0x44BB18) sends it as "cmd mr %i %i %s"
 
 #define T5_PadGetData 0x8C6A98 // import stub of cellPadGetData
