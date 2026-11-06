@@ -111,7 +111,7 @@ void host_menu_on_server_scripts_loaded();
 void host_menu_write_recovery();
 void host_menu_write_prestige(int prestige);
 // Shows a message in the kill feed of the local player, in game only. Called from the
-// server thread; while one is waiting to be shown, further ones are dropped.
+// server thread; queued until the host has spawned, dropped while the queue is full.
 void host_menu_game_message(const char* format, ...);
 // Blocked attempts of a client, reported to the host with host_menu_game_message.
 typedef enum {
