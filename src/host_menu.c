@@ -345,7 +345,8 @@ int DDL_SetFromString_Hook(void* state, const char* value, void* buffer) {
 static char gameMessages[GAME_MESSAGE_COUNT][128];
 static volatile uint32_t gameMessageHead;
 static volatile uint32_t gameMessageTail;
-// Set on the host's first spawn in a match, cleared on every server script load.
+// Set on the host's first spawn in a match, cleared on every server script load and while
+// no server runs.
 static volatile bool hostSpawned;
 
 void host_menu_game_message(const char* format, ...) {
@@ -482,8 +483,11 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
 
     // Messages left over from a match the host never spawned in name its players. Kept
     // while a server runs, so the ones queued during the host's loading screen survive.
+    // The spawn flag is reset too, it would otherwise carry over until the next server
+    // script load. Nothing sets it while no server runs.
     if (!*(int*)T5_SvClients) {
         gameMessageTail = gameMessageHead;
+        hostSpawned = false;
     }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
