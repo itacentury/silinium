@@ -262,16 +262,16 @@ static bool af_strip_icons(char* s) {
     return out != p;
 }
 
-// Moves an offset into the original text back by the bytes removed before it.
-static void af_shift_offset(int* offset, int at, int removed) {
-    if (*offset <= at) {
-        return;
-    }
-    *offset -= *offset - at < removed ? *offset - at : removed;
+// A color code as the draw loop (0x798490) reads it: it takes no maxChars step and two
+// cursor steps. Other '^' codes and multi-byte characters (some languages only) are
+// unverified and counted as one step per byte.
+static bool af_is_color_code(const char* p) {
+    return p[0] == '^' && ((p[1] >= '0' && p[1] <= '9') || p[1] == 'F');
 }
 
-// Returns text if it has no bad icon, else a copy in buffer without them. cursorPos and
-// maxChars index into text and are moved to index into the copy.
+// Returns text if it has no bad icon, else a copy in buffer without them. maxChars and
+// cursorPos count the steps of the game's draw loop, where an icon is one step. Each
+// removed icon that was drawn before them lowers them by one.
 static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
                                     int* cursorPos, int* maxChars) {
     if (!af_has_icon(text)) {
@@ -304,12 +304,29 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
         entry = af_add_bad_text(text, hash);
     }
 
+    // Counted over the original text and compared with the original values.
+    int maxCharsIn = *maxChars;
+    int cursorPosIn = *cursorPos;
+    int chars = 0;
+    int cursor = 0;
+
     size_t out = 0;
     int icon = 0;
     const char* p = text;
     while (*p && out < size - 1) {
+        if (af_is_color_code(p)) {
+            if (out + 2 > size - 1) {
+                break;
+            }
+            buffer[out++] = *p++;
+            buffer[out++] = *p++;
+            cursor += 2;
+            continue;
+        }
         if (!af_is_icon(p)) {
             buffer[out++] = *p++;
+            chars++;
+            cursor++;
             continue;
         }
         // Only the bad bits are trusted, a cleared or reused entry reads as all good.
@@ -326,16 +343,23 @@ static const char* af_sanitize_text(const char* text, char* buffer, size_t size,
             memcpy(&buffer[out], p, AF_ICON_SIZE);
             out += AF_ICON_SIZE;
             p += AF_ICON_SIZE;
+            chars++;
+            cursor++;
             continue;
         }
+        // An icon past maxChars or the cursor was never reached, it changes neither.
+        if (chars < maxCharsIn) {
+            (*maxChars)--;
+        }
+        if (cursor < cursorPosIn) {
+            (*cursorPos)--;
+        }
+        chars++;
+        cursor++;
         // Skip the whole icon, or what is left of it.
-        int at = (int)(p - text);
         for (int i = 0; i < AF_ICON_SIZE && *p; i++) {
             p++;
         }
-        int removed = (int)(p - text) - at;
-        af_shift_offset(cursorPos, at, removed);
-        af_shift_offset(maxChars, at, removed);
     }
     buffer[out] = 0;
     return buffer;
