@@ -541,7 +541,11 @@ static void open_stats_modal() {
 // The name is copied, so a list rebuilt meanwhile doesn't change the file acted on.
 static void queue_stats_action(HostMenuStatsAction action) {
     int i = hostMenu.cursor[HOST_MENU_STATS];
-    if (i >= statsCount || hostMenu.statsAction != HOST_MENU_STATS_NONE) {
+    if (i >= statsCount) {
+        return;
+    }
+    if (hostMenu.statsAction != HOST_MENU_STATS_NONE) {
+        show_status("Busy: another stats action is pending");
         return;
     }
     strcpy(hostMenu.statsActionName, statsNames[i]);
@@ -625,6 +629,8 @@ void host_menu_ui_run_stats_actions(bool inGame) {
     HostMenuStatsAction action = hostMenu.statsAction;
     if (action == HOST_MENU_STATS_LOAD && !inGame) {
         run_load_stats();
+    } else if (action == HOST_MENU_STATS_LOAD) {
+        show_status("Load skipped: stats can only be loaded in the lobby");
     } else if (action == HOST_MENU_STATS_DELETE) {
         run_delete_stats();
     }
@@ -658,6 +664,7 @@ void host_menu_ui_open_name_keyboard() {
 // Runs on the UI thread, so the clan tag is read here rather than in the menu thread.
 static void stats_keyboard_callback(int localClientNum, const char16* text, int length) {
     if (hostMenu.saveStatsPending) {
+        show_status("Save skipped: previous save still pending");
         return;
     }
     char entered[STATS_FILE_NAME_MAX + 1];
