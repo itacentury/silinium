@@ -209,7 +209,8 @@
 #define T5_Stats_DdlBit (T5_StatsHeaderSize * 8) // bit offset of the DDL data in the stats buffer
 #define T5_StatsDirtyOffset 0x8
 #define T5_StatsDirtyFlag 0x1
-// Fields of the account and the console, kept when stats are loaded (DDL bits from data/mp/stats_ddl.txt in bo1-re)
+// Fields of the account, the console and the game's moderation, kept when stats are loaded (DDL bits from
+// data/mp/stats_ddl.txt in bo1-re)
 #define T5_Stats_ConnectionIdBit 0x3B1C // connectionid (0x763 bit 4), 64 bits
 #define T5_Stats_ConsoleInfoBit 0x3B5C // consoleinfo (0x76B bit 4), 10 x 296 bits
 #define T5_Stats_ConsoleInfoBits 2960
@@ -217,6 +218,24 @@
 #define T5_Stats_PlayerXuidBit 0x489E8 // playerxuid (0x913D bit 0), 64 bits
 #define T5_Stats_StatResetNotificationBit 0x49B3C // statresetnotification (0x9367 bit 4), 64 bits
 #define T5_Stats_WebTokenBit 0x4BF5E // webtoken (0x97EB bit 6), 128 bits
+#define T5_Stats_IAmACheaterBit 0x1BCC // cacloadouts.iamacheater (0x379 bit 4), 1 bit
+#define T5_Stats_ResetWarningDisplayedBit 0x215D // cacloadouts.resetwarningdislayed (0x42B bit 5), 1 bit
+// lastconsolesave (0x7650 bit 4), 4 bits, likely the index into the 10 consoleinfo entries (unverified)
+#define T5_Stats_LastConsoleSaveBit 0x3B284
+#define T5_Stats_UploadBandwidthBit 0x49B7E // uploadbandwidth (0x936F bit 6), 32 bits
+#define T5_Stats_PlayerStatsListBit 0x462E8 // playerstatslist (0x8C5D bit 0), 312 x 32 bits, enum globalstats_e
+#define T5_Stats_PlayerStatBits 32
+#define T5_Stats_PlayerStatBit(index) (T5_Stats_PlayerStatsListBit + (index) * T5_Stats_PlayerStatBits)
+// globalstats_e indices of the ban, host and version entries (meaning inferred from the names, unverified)
+#define T5_PlayerStat_BadHostCount 5
+#define T5_PlayerStat_GametypeBan 50
+#define T5_PlayerStat_MonthlyTimestamp 230
+#define T5_PlayerStat_SessionBans 286
+#define T5_PlayerStat_StatsVersion 287 // compared with the stats_version_check dvar
+#define T5_PlayerStat_StatsBackupVersion 288
+#define T5_PlayerStat_TimeWhenNextHost 300
+#define T5_PlayerStat_Version 308
+#define T5_PlayerStat_WeeklyTimestamp 309
 
 // Import stubs of the game's sys_net functions (data/mp/imports.csv in bo1-re), for the webMAN notification. Called
 // like T5_PadGetData, so the plugin doesn't import sys_net itself.

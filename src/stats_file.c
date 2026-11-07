@@ -39,15 +39,29 @@ typedef struct DdlField {
     int bits;
 } DdlField;
 
-// Account and console fields: loading stats saved on another account or console must not
-// take over its XUID, addresses or tokens.
+// Account, console and moderation fields: loading stats saved on another account or
+// console must not take over its XUID, addresses, tokens, bans, cheater flag or version
+// stamps.
 static const DdlField protectedFields[] = {
     {T5_Stats_ConnectionIdBit, 64},
     {T5_Stats_ConsoleInfoBit, T5_Stats_ConsoleInfoBits},
+    {T5_Stats_LastConsoleSaveBit, 4},
     {T5_Stats_FriendsListFingerprintBit, 64},
     {T5_Stats_PlayerXuidBit, 64},
     {T5_Stats_StatResetNotificationBit, 64},
+    {T5_Stats_ResetWarningDisplayedBit, 1},
+    {T5_Stats_UploadBandwidthBit, 32},
     {T5_Stats_WebTokenBit, 128},
+    {T5_Stats_IAmACheaterBit, 1},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_BadHostCount), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_GametypeBan), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_MonthlyTimestamp), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_SessionBans), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_StatsVersion), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_StatsBackupVersion), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_TimeWhenNextHost), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_Version), T5_Stats_PlayerStatBits},
+    {T5_Stats_PlayerStatBit(T5_PlayerStat_WeeklyTimestamp), T5_Stats_PlayerStatBits},
 };
 
 static uint8_t* stats_buffer() { return (uint8_t*)T5_Stats_Base; }
