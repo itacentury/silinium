@@ -504,6 +504,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     if (hostMenu.statsLoadPending) {
         __lwsync();
         stats_file_apply_loaded();
+        hostMenu.prestige = *(uint8_t*)T5_Stats_Prestige;
         // A stats file can hold any 31 bytes. The cap is the largest buffer the game
         // copies the tag into, longer tags never reach the other consoles in full.
         char clanName[T5_CgClientClanSize];
