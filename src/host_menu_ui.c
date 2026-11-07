@@ -1213,9 +1213,9 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
     draw_modal(HOST_MENU_KICK, HOST_MENU_PLAYER, name, inGame, listBottom);
 }
 
-// Below the session info, also while the menu is closed (Save Stats closes it for the
-// keyboard).
-static void draw_status() {
+// Drawn in the given left column row: below the session info while the menu is open,
+// below the open hint while it is closed (Save Stats closes it for the keyboard).
+static void draw_status(int row) {
     system_time_t time = statusTime;
     if (!time || sys_time_get_system_time() - time > STATUS_DURATION_US) {
         return;
@@ -1225,7 +1225,7 @@ static void draw_status() {
     memcpy(text, statusText, sizeof(text));
     text[sizeof(text) - 1] = 0;
     float step = R_TextHeight(font) * 0.5f + 10;
-    draw_text_box(text, 10, 20 + 4 * step, 0.5f);
+    draw_text_box(text, 10, 20 + row * step, 0.5f);
 }
 
 // Builds every row's rank, tag and their widths for the draw loop and returns the list
@@ -1294,14 +1294,15 @@ void host_menu_ui_draw() {
         arrowMaterial = Material_RegisterHandle("ui_arrow_right", 0);
     }
 
-    draw_status();
     if (!hostMenu.open) {
         playerListWidth = 0;
         if (hostMenu.showControls) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
         }
+        draw_status(hostMenu.showControls ? 1 : 0);
         return;
     }
+    draw_status(4);
 
     close_stale_player_modal();
     bool inGame = Dvar_GetBool("cl_ingame");
