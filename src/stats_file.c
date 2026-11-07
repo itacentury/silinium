@@ -30,7 +30,8 @@ typedef struct StatsFile {
     uint8_t stats[T5_StatsSize];
 } StatsFile;
 
-// Too large for the menu thread's stack. Only the menu thread saves and loads.
+// Too large for the menu thread's stack. Only the menu thread saves and loads, the main
+// thread reads it in stats_file_apply_loaded while a load waits to be applied.
 static StatsFile file;
 
 typedef struct DdlField {
@@ -214,21 +215,24 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
 
     // The file's own fields are replaced with the current ones before anything reaches
     // the game's buffer, so the live stats change in a single copy.
-    uint8_t* stats = stats_buffer();
     for (int i = 0; i < sizeof(protectedFields) / sizeof(*protectedFields); i++) {
-        copy_bits(file.stats, stats, T5_Stats_DdlBit + protectedFields[i].bit,
+        copy_bits(file.stats, stats_buffer(), T5_Stats_DdlBit + protectedFields[i].bit,
                   protectedFields[i].bits);
     }
-    // The game's header stays, only the DDL data is taken over.
-    memcpy(stats + T5_StatsHeaderSize, file.stats + T5_StatsHeaderSize,
-           T5_StatsSize - T5_StatsHeaderSize);
-    stats[T5_StatsDirtyOffset] |= T5_StatsDirtyFlag;
 
     memcpy(clanName, file.header.clanName, STATS_FILE_CLAN_MAX);
     clanName[STATS_FILE_CLAN_MAX - 1] = 0;
     *flags = file.header.flags;
     printf(T5INFO "Load Stats: loaded '%s'.", path);
     return 0;
+}
+
+void stats_file_apply_loaded() {
+    // The game's header stays, only the DDL data is taken over.
+    uint8_t* stats = stats_buffer();
+    memcpy(stats + T5_StatsHeaderSize, file.stats + T5_StatsHeaderSize,
+           T5_StatsSize - T5_StatsHeaderSize);
+    stats[T5_StatsDirtyOffset] |= T5_StatsDirtyFlag;
 }
 
 int stats_file_delete(const char* name) {

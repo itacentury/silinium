@@ -101,8 +101,9 @@ typedef struct HostMenu {
     // Load and Delete from the stats modal, run by the menu thread on the file named.
     HostMenuStatsAction statsAction;
     char statsActionName[STATS_FILE_NAME_MAX + 1];
-    // Clan tag of loaded stats, set as the clanName dvar by Menu_PaintAll.
-    bool clanNamePending;
+    // Loaded stats and their clan tag, applied by Menu_PaintAll. Save, Load and Delete
+    // wait while set, save and load share the file buffer.
+    bool statsLoadPending;
     char loadedClanName[STATS_FILE_CLAN_MAX];
 } HostMenu;
 

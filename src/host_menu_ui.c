@@ -589,9 +589,9 @@ static void run_load_stats() {
         report_stats_result(text);
         return;
     }
-    // The clan tag has to be visible before the flag that marks it ready.
+    // Stats and clan tag have to be visible before the flag that marks them ready.
     __lwsync();
-    hostMenu.clanNamePending = true;
+    hostMenu.statsLoadPending = true;
     hostMenu.prestigeUnlocks = flags & STATS_FILE_PRESTIGE_UNLOCKS;
     prestige_unlocks();
     snprintf(text, sizeof(text), "Stats '%s' loaded", hostMenu.statsActionName);
@@ -611,6 +611,10 @@ static void run_delete_stats() {
 }
 
 void host_menu_ui_run_stats_actions(bool inGame) {
+    // Queued actions stay queued until Menu_PaintAll took the loaded stats over.
+    if (hostMenu.statsLoadPending) {
+        return;
+    }
     if (hostMenu.saveStatsPending) {
         // Pairs with the one in the keyboard callback: name and clan tag are ready.
         __lwsync();

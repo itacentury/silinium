@@ -498,16 +498,20 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostSpawned = false;
     }
 
-    // Dvars are set on the main thread, the menu thread only loads the file. Whether the
-    // clan tag also reaches the profile this way is unverified.
-    if (hostMenu.clanNamePending) {
+    // The stats buffer and dvars are written on the main thread, where the game's stats
+    // code runs, so it never sees half loaded stats. The menu thread only loads the file.
+    // Whether the clan tag also reaches the profile this way is unverified.
+    if (hostMenu.statsLoadPending) {
         __lwsync();
+        stats_file_apply_loaded();
         // A stats file can hold any 31 bytes. The cap is the largest buffer the game
         // copies the tag into, longer tags never reach the other consoles in full.
         char clanName[T5_CgClientClanSize];
         clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName));
         Dvar_SetStringByName("clanName", clanName);
-        hostMenu.clanNamePending = false;
+        // The file buffer is released only once it was read.
+        __lwsync();
+        hostMenu.statsLoadPending = false;
     }
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
