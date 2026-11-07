@@ -1220,6 +1220,8 @@ static void draw_status(int row) {
     if (!time || sys_time_get_system_time() - time > STATUS_DURATION_US) {
         return;
     }
+    // Pairs with the one in show_status: the text is read only after the time that marks
+    // it ready.
     __lwsync();
     char text[sizeof(statusText)];
     memcpy(text, statusText, sizeof(text));
