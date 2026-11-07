@@ -200,8 +200,11 @@
 // (state, value string, buffer), *(int*)state = bit offset in the DDL. statWriteDDL (handler 0x6A36B8) writes with it, a
 // menu script runs "statWriteDDL ... 0" for prestige camos and the clan tag color when joining a lobby.
 #define T5_DDL_SetFromString 0x5E74E8
-// Save/Load Stats: DDL_SetInt marks the buffer dirty with buffer[8] |= 1 (bo1-re re-journal 33). That the game saves a
-// buffer marked like this is unverified.
+// Save/Load Stats: the buffer starts with a 0x28-byte header (bo1-re re-journal 33 and 44, static analysis only).
+// +0 is a CRC-32 of the rest of the buffer, recalculated by the upload function 0x6B97D8 before every save and only
+// checked on fetched buffers, so the stale one Load Stats leaves in the live header is harmless. +4 is the DDL version
+// that DDL_ValidateBuffer checks, the same for every 1.13 buffer. +8 bit 0 is the dirty flag: DDL_SetInt sets it, the
+// upload clears it; that the game saves a buffer marked like this is unverified. The other header bytes are unknown.
 #define T5_StatsHeaderSize 0x28 // the DDL data follows
 #define T5_Stats_DdlBit (T5_StatsHeaderSize * 8) // bit offset of the DDL data in the stats buffer
 #define T5_StatsDirtyOffset 0x8
