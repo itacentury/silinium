@@ -489,29 +489,43 @@ static void report_stats_result(const char* text) {
     notify_popup(popup);
 }
 
-// The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete. Names
-// are always NUL-terminated within their entry, so the draw code can read them while
-// they are being replaced.
+// The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete while
+// the UI thread draws it. The directory is read into the buffer the options don't point
+// to, then the options are switched over row by row, so each drawn row is a complete old
+// or new name. The buffer written was last shown two rebuilds ago.
 #define STATS_LIST_MAX 20
-static char statsNames[STATS_LIST_MAX][STATS_FILE_NAME_MAX + 1];
+static char statsNames[2][STATS_LIST_MAX][STATS_FILE_NAME_MAX + 1];
+static int statsNamesActive;  // buffer the options of HOST_MENU_STATS point into
 static int statsCount;
 
 static void open_stats_modal();
-static HostMenuOption* add_option(HostMenuId m, const char* text, HostMenuOptionType type,
-                                  void* value, signed char min, signed char max,
-                                  void (*func)(void));
+
+// In place instead of add_option, so the drawn option count never drops to 0 meanwhile.
+static void set_stats_option(int i, const char* text, void (*func)(void)) {
+    HostMenuOption* option = &hostMenu.options[HOST_MENU_STATS][i];
+    option->text = text;
+    option->type = HOST_MENU_TYPE_ACTION;
+    option->value = 0;
+    option->min = 0;
+    option->max = 0;
+    option->func = func;
+}
 
 static void build_stats_list() {
-    statsCount = stats_file_list(statsNames, STATS_LIST_MAX);
-    hostMenu.optionCount[HOST_MENU_STATS] = 0;
-    for (int i = 0; i < statsCount; i++) {
-        add_option(HOST_MENU_STATS, statsNames[i], HOST_MENU_TYPE_ACTION, 0, 0, 0,
-                   open_stats_modal);
+    int next = !statsNamesActive;
+    int count = stats_file_list(statsNames[next], STATS_LIST_MAX);
+    // The names have to be visible before the options pointing to them.
+    __lwsync();
+    for (int i = 0; i < count; i++) {
+        set_stats_option(i, statsNames[next][i], open_stats_modal);
     }
-    if (!statsCount) {
-        add_option(HOST_MENU_STATS, "No Saved Stats", HOST_MENU_TYPE_ACTION, 0, 0, 0,
-                   nothing);
+    if (!count) {
+        set_stats_option(0, "No Saved Stats", nothing);
     }
+    __lwsync();
+    hostMenu.optionCount[HOST_MENU_STATS] = count ? count : 1;
+    statsNamesActive = next;
+    statsCount = count;
     int last = hostMenu.optionCount[HOST_MENU_STATS] - 1;
     if (hostMenu.cursor[HOST_MENU_STATS] > last) {
         hostMenu.cursor[HOST_MENU_STATS] = last;
@@ -548,7 +562,7 @@ static void queue_stats_action(HostMenuStatsAction action) {
         show_status("Busy: another stats action is pending");
         return;
     }
-    strcpy(hostMenu.statsActionName, statsNames[i]);
+    strcpy(hostMenu.statsActionName, statsNames[statsNamesActive][i]);
     hostMenu.statsAction = action;
 }
 
