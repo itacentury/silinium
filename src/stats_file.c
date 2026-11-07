@@ -116,6 +116,26 @@ static int read_all(int fd, void* data, uint64_t size) {
     return 0;
 }
 
+static void copy_bits(uint8_t* to, const uint8_t* from, int bit, int count) {
+    // ddl_read_bits returns an int, so in chunks that stay clear of the sign bit.
+    while (count > 0) {
+        int chunk = count < 16 ? count : 16;
+        ddl_write_bits(to, bit, chunk, ddl_read_bits(from, bit, chunk));
+        bit += chunk;
+        count -= chunk;
+    }
+}
+
+static void clear_bits(uint8_t* buffer, int bit, int count) {
+    // ddl_write_bits shifts an int by up to count - 1, so in chunks like copy_bits.
+    while (count > 0) {
+        int chunk = count < 16 ? count : 16;
+        ddl_write_bits(buffer, bit, chunk, 0);
+        bit += chunk;
+        count -= chunk;
+    }
+}
+
 int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
     if (!valid_name(name)) {
         return STATS_FILE_ERROR_INVALID_NAME;
@@ -136,6 +156,12 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
     snprintf(file.header.clanName, sizeof(file.header.clanName), "%s",
              clanName ? clanName : "");
     memcpy(file.stats, stats_buffer(), sizeof(file.stats));
+    // Files get shared and load restores these fields from the live stats anyway, so the
+    // saver's XUID, console info and tokens never end up in a file.
+    for (int i = 0; i < sizeof(protectedFields) / sizeof(*protectedFields); i++) {
+        clear_bits(file.stats, T5_Stats_DdlBit + protectedFields[i].bit,
+                   protectedFields[i].bits);
+    }
 
     char path[CELL_FS_MAX_FS_PATH_LENGTH];
     file_path(name, path);
@@ -154,16 +180,6 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
     }
     printf(T5INFO "Save Stats: saved '%s'.", path);
     return 0;
-}
-
-static void copy_bits(uint8_t* to, const uint8_t* from, int bit, int count) {
-    // ddl_read_bits returns an int, so in chunks that stay clear of the sign bit.
-    while (count > 0) {
-        int chunk = count < 16 ? count : 16;
-        ddl_write_bits(to, bit, chunk, ddl_read_bits(from, bit, chunk));
-        bit += chunk;
-        count -= chunk;
-    }
 }
 
 static bool valid_header(const StatsFileHeader* header) {
