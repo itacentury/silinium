@@ -77,18 +77,23 @@ bool notify_popup(const char* text) {
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     // Reaching the VSH's webMAN over loopback from the game process is unverified.
-    bool sent = Net_connect(s, (struct sockaddr*)&address, sizeof(address)) == 0 &&
-                Net_send(s, request, length, 0) == length;
+    if (Net_connect(s, (struct sockaddr*)&address, sizeof(address)) != 0) {
+        if (!warned) {
+            warned = true;
+            printf(T5WARNING
+                   "No webMAN on 127.0.0.1:%d, notifications only show in the menu.",
+                   WEBMAN_PORT);
+        }
+        Net_socketclose(s);
+        return false;
+    }
+
+    bool sent = Net_send(s, request, length, 0) == length;
     if (sent) {
         // Closing before webMAN answered could reset the connection before it read the
         // request, so wait for the first bytes of the answer.
         char answer[16];
         Net_recv(s, answer, sizeof(answer), 0);
-    } else if (!warned) {
-        warned = true;
-        printf(T5WARNING
-               "No webMAN on 127.0.0.1:%d, notifications only show in the menu.",
-               WEBMAN_PORT);
     }
     Net_socketclose(s);
     return sent;
