@@ -51,14 +51,20 @@ static void set_timeouts(int s) {
     Net_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
 
-bool notify_popup(const char* text) {
+bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
     static bool warned;
     char encoded[256];
     url_encode(text, encoded, sizeof(encoded));
-    char request[320];
+    // webMAN cuts the text at "&snd=" before it parses "&icon=", so the sound goes last.
+    char soundParameter[8] = "";
+    if (sound != NOTIFY_SOUND_NONE) {
+        snprintf(soundParameter, sizeof(soundParameter), "&snd=%d", sound);
+    }
+    char request[352];
     int length =
         snprintf(request, sizeof(request),
-                 "GET /popup.ps3?%s HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n", encoded);
+                 "GET /popup.ps3?%s&icon=%d%s HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n",
+                 encoded, icon, soundParameter);
     if (length < 0 || length >= (int)sizeof(request)) {
         return false;
     }

@@ -482,11 +482,15 @@ static void show_status(const char* text) {
 }
 
 // In the menu and as a PS3 notification (webMAN only).
-static void report_stats_result(const char* text) {
+static void report_stats_result(const char* text, bool success) {
     show_status(text);
     char popup[96];
     snprintf(popup, sizeof(popup), "Silinium: %s", text);
-    notify_popup(popup);
+    if (success) {
+        notify_popup(popup, NOTIFY_ICON_INFO, NOTIFY_SOUND_OK);
+    } else {
+        notify_popup(popup, NOTIFY_ICON_CAUTION, NOTIFY_SOUND_ERROR);
+    }
 }
 
 // The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete while
@@ -593,7 +597,7 @@ static void run_save_stats() {
     } else {
         snprintf(text, sizeof(text), "Stats '%s' saved", hostMenu.saveStatsName);
     }
-    report_stats_result(text);
+    report_stats_result(text, !err);
 }
 
 // Prestige Unlocks is taken over as saved: stats with prestige items picked through it
@@ -604,7 +608,7 @@ static void run_load_stats() {
     int err = stats_file_load(hostMenu.statsActionName, hostMenu.loadedClanName, &flags);
     if (err) {
         snprintf(text, sizeof(text), "Load failed: %s", stats_file_error_text(err));
-        report_stats_result(text);
+        report_stats_result(text, false);
         return;
     }
     // Stats and clan tag have to be visible before the flag that marks them ready.
@@ -613,7 +617,7 @@ static void run_load_stats() {
     hostMenu.prestigeUnlocks = flags & STATS_FILE_PRESTIGE_UNLOCKS;
     prestige_unlocks();
     snprintf(text, sizeof(text), "Stats '%s' loaded", hostMenu.statsActionName);
-    report_stats_result(text);
+    report_stats_result(text, true);
 }
 
 static void run_delete_stats() {
