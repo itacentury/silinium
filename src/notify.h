@@ -22,7 +22,8 @@ t5nd(int, Net_socketclose, (int s));
 void notify_init();
 // Shows text as a PS3 (XMB) notification through webMAN's /popup.ps3 on 127.0.0.1. The
 // notification lives in the VSH process, which a plugin in the game can't call, so
-// without webMAN nothing is shown. Blocks for up to a second, not for the render thread.
+// without webMAN nothing is shown. Blocks for up to about half a second (send and receive
+// timeout of 250 ms each, connect timeout unverified), not for the render thread.
 // Returns whether webMAN took the request.
 bool notify_popup(const char* text);
 

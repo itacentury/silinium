@@ -11,6 +11,9 @@
 #include "offsets.h"
 
 #define WEBMAN_PORT 80
+// webMAN answers over loopback within milliseconds; keep this short, the menu thread
+// that calls notify_popup also handles pad input.
+#define WEBMAN_TIMEOUT_MS 250
 
 static bool url_safe(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
@@ -41,8 +44,9 @@ static void url_encode(const char* text, char* out, size_t size) {
     out[length] = 0;
 }
 
+// Whether lv2 also bounds connect with SO_SNDTIMEO is unverified.
 static void set_timeouts(int s) {
-    struct timeval timeout = {1, 0};
+    struct timeval timeout = {0, WEBMAN_TIMEOUT_MS * 1000};
     Net_setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     Net_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
