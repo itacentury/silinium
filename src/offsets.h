@@ -203,6 +203,7 @@
 // Save/Load Stats: DDL_SetInt marks the buffer dirty with buffer[8] |= 1 (bo1-re re-journal 33). That the game saves a
 // buffer marked like this is unverified.
 #define T5_StatsHeaderSize 0x28 // the DDL data follows
+#define T5_Stats_DdlBit (T5_StatsHeaderSize * 8) // bit offset of the DDL data in the stats buffer
 #define T5_StatsDirtyOffset 0x8
 #define T5_StatsDirtyFlag 0x1
 // Fields of the account and the console, kept when stats are loaded (DDL bits from data/mp/stats_ddl.txt in bo1-re)
@@ -304,7 +305,6 @@
 // 33 chunks. SV_GetClientStatInt (0x3E2700) requires the mask to equal this exactly (cmpd at 0x3E2754). The mask
 // can't get more bits: SV_ReceiveStats drops a chunk index above 0x20 (cmplwi at 0x3E2A78) and sets only bit index.
 #define T5_ClientStatsMaskComplete 0x1FFFFFFFFull
-#define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
 // Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
 // range, and level.tbl_armor holds the statsTable rows of group body and head, so tbl_armor[0x72] is probably a
 // head reference instead of a body, for which _armor.gsc has no functions (inferred from the PC _class.gsc, not
