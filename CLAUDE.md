@@ -47,6 +47,8 @@ All sources are in `src/`.
 - `host_menu.c`: host menu logic and its hooks (`PadGetData`, `ClientCommand`,
   `VM_Notify`, ...), installed by `host_menu_init()`. `host_menu_ui.c`: drawing
   and the menu options.
+- `stats_file.c`: Save/Load Stats files (`/dev_hdd0/tmp/Silinium/stats/<name>.bin`).
+  `notify.c`: PS3 notifications through webMAN, over the game's `sys_net` import stubs.
 - `offsets.h`: all game addresses (`T5_<Name>` / `T5_<Name>_ZM`).
 - `defines.h`: the `t5nd` / `t5nhd` / `t5ni` / `t5nmi` declaration macros and game
   structs.

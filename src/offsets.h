@@ -200,6 +200,51 @@
 // (state, value string, buffer), *(int*)state = bit offset in the DDL. statWriteDDL (handler 0x6A36B8) writes with it, a
 // menu script runs "statWriteDDL ... 0" for prestige camos and the clan tag color when joining a lobby.
 #define T5_DDL_SetFromString 0x5E74E8
+// Save/Load Stats: the buffer starts with a 0x28-byte header (bo1-re re-journal 33 and 44, static analysis only).
+// +0 is a CRC-32 of the rest of the buffer, recalculated by the upload function 0x6B97D8 before every save and only
+// checked on fetched buffers, so the stale one Load Stats leaves in the live header is harmless. +4 is the DDL version
+// that DDL_ValidateBuffer checks, the same for every 1.13 buffer. +8 bit 0 is the dirty flag: DDL_SetInt sets it, the
+// upload clears it; that the game saves a buffer marked like this is unverified. The other header bytes are unknown.
+#define T5_StatsHeaderSize 0x28 // the DDL data follows
+#define T5_Stats_DdlBit (T5_StatsHeaderSize * 8) // bit offset of the DDL data in the stats buffer
+#define T5_StatsDirtyOffset 0x8
+#define T5_StatsDirtyFlag 0x1
+// Fields of the account, the console and the game's moderation, kept when stats are loaded (DDL bits from
+// data/mp/stats_ddl.txt in bo1-re)
+#define T5_Stats_ConnectionIdBit 0x3B1C // connectionid (0x763 bit 4), 64 bits
+#define T5_Stats_ConsoleInfoBit 0x3B5C // consoleinfo (0x76B bit 4), 10 x 296 bits
+#define T5_Stats_ConsoleInfoBits 2960
+#define T5_Stats_FriendsListFingerprintBit 0xDBD8 // friendslistfingerprint (0x1B7B bit 0), 64 bits
+#define T5_Stats_PlayerXuidBit 0x489E8 // playerxuid (0x913D bit 0), 64 bits
+#define T5_Stats_StatResetNotificationBit 0x49B3C // statresetnotification (0x9367 bit 4), 64 bits
+#define T5_Stats_WebTokenBit 0x4BF5E // webtoken (0x97EB bit 6), 128 bits
+#define T5_Stats_IAmACheaterBit 0x1BCC // cacloadouts.iamacheater (0x379 bit 4), 1 bit
+#define T5_Stats_ResetWarningDisplayedBit 0x215D // cacloadouts.resetwarningdislayed (0x42B bit 5), 1 bit
+// lastconsolesave (0x7650 bit 4), 4 bits, likely the index into the 10 consoleinfo entries (unverified)
+#define T5_Stats_LastConsoleSaveBit 0x3B284
+#define T5_Stats_UploadBandwidthBit 0x49B7E // uploadbandwidth (0x936F bit 6), 32 bits
+#define T5_Stats_PlayerStatsListBit 0x462E8 // playerstatslist (0x8C5D bit 0), 312 x 32 bits, enum globalstats_e
+#define T5_Stats_PlayerStatBits 32
+#define T5_Stats_PlayerStatBit(index) (T5_Stats_PlayerStatsListBit + (index) * T5_Stats_PlayerStatBits)
+// globalstats_e indices of the ban, host and version entries (meaning inferred from the names, unverified)
+#define T5_PlayerStat_BadHostCount 5
+#define T5_PlayerStat_GametypeBan 50
+#define T5_PlayerStat_MonthlyTimestamp 230
+#define T5_PlayerStat_SessionBans 286
+#define T5_PlayerStat_StatsVersion 287 // compared with the stats_version_check dvar
+#define T5_PlayerStat_StatsBackupVersion 288
+#define T5_PlayerStat_TimeWhenNextHost 300
+#define T5_PlayerStat_Version 308
+#define T5_PlayerStat_WeeklyTimestamp 309
+
+// Import stubs of the game's sys_net functions (data/mp/imports.csv in bo1-re), for the webMAN notification. Called
+// like T5_PadGetData, so the plugin doesn't import sys_net itself.
+#define T5_Net_socket 0x8C62B8
+#define T5_Net_connect 0x8C6130
+#define T5_Net_send 0x8C63D0
+#define T5_Net_recv 0x8C7D68
+#define T5_Net_setsockopt 0x8C6210
+#define T5_Net_socketclose 0x8C6168
 
 // Anti-Freeze (MP only)
 // (localClientNum, serverCommandNumber), tokenizes the reliable server command and returns 0 if CG_ServerCommand
@@ -282,7 +327,6 @@
 // 33 chunks. SV_GetClientStatInt (0x3E2700) requires the mask to equal this exactly (cmpd at 0x3E2754). The mask
 // can't get more bits: SV_ReceiveStats drops a chunk index above 0x20 (cmplwi at 0x3E2A78) and sets only bit index.
 #define T5_ClientStatsMaskComplete 0x1FFFFFFFFull
-#define T5_Stats_DdlBit 0x140 // the DDL data starts after the 0x28 byte header
 // Godmode classes (Sakura Class Editor) set cacloadouts.<class>.body to 0x72. The class script only asserts the
 // range, and level.tbl_armor holds the statsTable rows of group body and head, so tbl_armor[0x72] is probably a
 // head reference instead of a body, for which _armor.gsc has no functions (inferred from the PC _class.gsc, not

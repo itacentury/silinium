@@ -12,6 +12,7 @@
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
+#include "notify.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -450,6 +451,19 @@ static void send_keyboard_input(void* ent) {
     keyboardState = KEYBOARD_IDLE;
 }
 
+// Drops % and control characters, keeps ^ for color codes: the clan tag is sent to the
+// other consoles in the lobby, and a % there turns into a format specifier wherever they
+// print it with a printf-style function. Writes at most size - 1 characters.
+static void clan_name_filter(const char* clanName, char* out, int size) {
+    int length = 0;
+    for (const char* c = clanName; *c && length < size - 1; c++) {
+        if (*c != '%' && (unsigned char)*c >= 0x20) {
+            out[length++] = *c;
+        }
+    }
+    out[length] = 0;
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
@@ -484,6 +498,23 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostSpawned = false;
     }
 
+    // The stats buffer and dvars are written on the main thread, where the game's stats
+    // code runs, so it never sees half loaded stats. The menu thread only loads the file.
+    // Whether the clan tag also reaches the profile this way is unverified.
+    if (hostMenu.statsLoadPending) {
+        __lwsync();
+        stats_file_apply_loaded();
+        hostMenu.prestige = *(uint8_t*)T5_Stats_Prestige;
+        // A stats file can hold any 31 bytes. The cap is the largest buffer the game
+        // copies the tag into, longer tags never reach the other consoles in full.
+        char clanName[T5_CgClientClanSize];
+        clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName));
+        Dvar_SetStringByName("clanName", clanName);
+        // The file buffer is released only once it was read.
+        __lwsync();
+        hostMenu.statsLoadPending = false;
+    }
+
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
     if (!Dvar_GetBool("cl_ingame")) {
@@ -510,6 +541,10 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         if (hostMenu.changeNamePending) {
             hostMenu.changeNamePending = false;
             host_menu_ui_open_name_keyboard();
+        }
+        if (hostMenu.saveStatsKeyboardPending) {
+            hostMenu.saveStatsKeyboardPending = false;
+            host_menu_ui_open_stats_keyboard();
         }
     } else {
         // The same command as End Game in the pause menu. -1 is the menu index the game
@@ -670,8 +705,10 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.selectMapPending = false;
             hostMenu.selectGametypePending = false;
             hostMenu.changeNamePending = false;
+            hostMenu.saveStatsKeyboardPending = false;
             hostMenu.lobbyKickMember = -1;
         }
+        host_menu_ui_run_stats_actions(inGame);
         // The list choice only applies while both parties are up; each lobby (and the one
         // after a match) starts on the Lobby list.
         if (inGame || !host_menu_lobby_parties_both_active()) {
@@ -713,6 +750,7 @@ static void init_host_menu_offsets() {
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
     t5nmi(FindEntityId);
+    notify_init();
 }
 
 static int init_host_menu_hooks() {
@@ -749,23 +787,18 @@ static int init_host_menu_hooks() {
     return 0;
 }
 
-// Replaces the game's sanitizer, which turns ^ into a space. Only % is dropped: the clan
-// tag is sent to the other consoles in the lobby, and a % there turns into a format
-// specifier wherever they print it with a printf-style function.
+// Replaces the game's sanitizer, which turns ^ into a space (see clan_name_filter).
 void ClanName_Sanitize_Hook() {
     const char* clanName = Dvar_GetString("clanName");
-    if (!clanName || !strchr(clanName, '%')) {
+    if (!clanName) {
         return;
     }
 
     char sanitized[32];
-    int length = 0;
-    for (const char* c = clanName; *c && length < sizeof(sanitized) - 1; c++) {
-        if (*c != '%') {
-            sanitized[length++] = *c;
-        }
+    clan_name_filter(clanName, sanitized, sizeof(sanitized));
+    if (strcmp(sanitized, clanName) == 0) {
+        return;
     }
-    sanitized[length] = 0;
     Dvar_SetStringByName("clanName", sanitized);
 }
 

@@ -3,10 +3,12 @@
 #include <ppu_intrinsics.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/sys_time.h>
 #include <sys/timer.h>
 
 #include "anti_god_class.h"
 #include "host_menu.h"
+#include "notify.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -69,6 +71,8 @@ static const DisplayName gametypeNames[] = {
 static const char16 keyboardTitle[] = {'C', 'h', 'a', 'n', 'g', 'e',
                                        ' ', 'N', 'a', 'm', 'e', 0};
 static const char16 keyboardPreset[] = {0};
+static const char16 statsKeyboardTitle[] = {'S', 'a', 'v', 'e', ' ', 'S',
+                                            't', 'a', 't', 's', 0};
 
 // Registered once on the first draw.
 static void* font;
@@ -460,6 +464,198 @@ static void ban_selected() {
 }
 
 // ---------------------------------------------------------------------------
+// Save / Load Stats
+// ---------------------------------------------------------------------------
+
+#define STATUS_DURATION_US (4 * 1000 * 1000)
+
+// Result of the last stats action, shown below the session info for a few seconds.
+// Written by the menu thread and drawn by the UI thread, which copies it bounded, so a
+// text being rewritten can't be read past its end.
+static char statusText[64];
+static volatile system_time_t statusTime;
+
+static void show_status(const char* text) {
+    snprintf(statusText, sizeof(statusText), "%s", text);
+    __lwsync();
+    statusTime = sys_time_get_system_time();
+}
+
+// In the menu and as a PS3 notification (webMAN only).
+static void report_stats_result(const char* text, bool success) {
+    show_status(text);
+    char popup[96];
+    snprintf(popup, sizeof(popup), "Silinium: %s", text);
+    if (success) {
+        notify_popup(popup, NOTIFY_ICON_INFO, NOTIFY_SOUND_OK);
+    } else {
+        notify_popup(popup, NOTIFY_ICON_CAUTION, NOTIFY_SOUND_ERROR);
+    }
+}
+
+// The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete while
+// the UI thread draws it. The directory is read into the buffer the options don't point
+// to, then the options are switched over row by row, so each drawn row is a complete old
+// or new name. The buffer written was last shown two rebuilds ago.
+#define STATS_LIST_MAX 20
+static char statsNames[2][STATS_LIST_MAX][STATS_FILE_NAME_MAX + 1];
+static int statsNamesActive;  // buffer the options of HOST_MENU_STATS point into
+static int statsCount;
+
+static void open_stats_modal();
+
+// In place instead of add_option, so the drawn option count never drops to 0 meanwhile.
+static void set_stats_option(int i, const char* text, void (*func)(void)) {
+    HostMenuOption* option = &hostMenu.options[HOST_MENU_STATS][i];
+    option->text = text;
+    option->type = HOST_MENU_TYPE_ACTION;
+    option->value = 0;
+    option->min = 0;
+    option->max = 0;
+    option->func = func;
+}
+
+static void build_stats_list() {
+    int next = !statsNamesActive;
+    int count = stats_file_list(statsNames[next], STATS_LIST_MAX);
+    // The names have to be visible before the options pointing to them.
+    __lwsync();
+    for (int i = 0; i < count; i++) {
+        set_stats_option(i, statsNames[next][i], open_stats_modal);
+    }
+    if (!count) {
+        set_stats_option(0, "No Saved Stats", nothing);
+    }
+    __lwsync();
+    hostMenu.optionCount[HOST_MENU_STATS] = count ? count : 1;
+    statsNamesActive = next;
+    statsCount = count;
+    int last = hostMenu.optionCount[HOST_MENU_STATS] - 1;
+    if (hostMenu.cursor[HOST_MENU_STATS] > last) {
+        hostMenu.cursor[HOST_MENU_STATS] = last;
+    }
+}
+
+// The keyboard only works while the menu is closed, so it is opened by Menu_PaintAll.
+static void save_stats() {
+    sys_timer_usleep(200000);  // let X go before the game sees buttons again
+    hostMenu.open = false;
+    hostMenu.saveStatsKeyboardPending = true;
+}
+
+static void open_stats_menu() {
+    build_stats_list();
+    hostMenu.current = HOST_MENU_STATS;
+}
+
+static void open_stats_modal() {
+    if (hostMenu.cursor[HOST_MENU_STATS] >= statsCount) {
+        return;
+    }
+    hostMenu.cursor[HOST_MENU_STATS_FILE] = 0;
+    hostMenu.current = HOST_MENU_STATS_FILE;
+}
+
+// The name is copied, so a list rebuilt meanwhile doesn't change the file acted on.
+static void queue_stats_action(HostMenuStatsAction action) {
+    int i = hostMenu.cursor[HOST_MENU_STATS];
+    if (i >= statsCount) {
+        return;
+    }
+    if (hostMenu.statsAction != HOST_MENU_STATS_NONE) {
+        show_status("Busy: another stats action is pending");
+        return;
+    }
+    strcpy(hostMenu.statsActionName, statsNames[statsNamesActive][i]);
+    hostMenu.statsAction = action;
+}
+
+static void load_selected_stats() {
+    queue_stats_action(HOST_MENU_STATS_LOAD);
+    hostMenu.current = HOST_MENU_MAIN;
+}
+
+static void delete_selected_stats() {
+    queue_stats_action(HOST_MENU_STATS_DELETE);
+    hostMenu.current = HOST_MENU_STATS;
+}
+
+// The list and its modal are lobby only like the option that opens them.
+static void close_stale_stats_menu(bool inGame) {
+    if (inGame && (hostMenu.current == HOST_MENU_STATS ||
+                   hostMenu.current == HOST_MENU_STATS_FILE)) {
+        hostMenu.current = HOST_MENU_MAIN;
+    }
+}
+
+static void run_save_stats() {
+    char text[64];
+    uint32_t flags = hostMenu.prestigeUnlocks ? STATS_FILE_PRESTIGE_UNLOCKS : 0;
+    int err = stats_file_save(hostMenu.saveStatsName, hostMenu.saveStatsClan, flags);
+    if (err) {
+        snprintf(text, sizeof(text), "Save failed: %s", stats_file_error_text(err));
+    } else {
+        snprintf(text, sizeof(text), "Stats '%s' saved", hostMenu.saveStatsName);
+    }
+    report_stats_result(text, !err);
+}
+
+// Prestige Unlocks is taken over as saved: stats with prestige items picked through it
+// lose them on the next lobby join without it (see DDL_SetFromString_Hook).
+static void run_load_stats() {
+    char text[64];
+    uint32_t flags;
+    int err = stats_file_load(hostMenu.statsActionName, hostMenu.loadedClanName, &flags);
+    if (err) {
+        snprintf(text, sizeof(text), "Load failed: %s", stats_file_error_text(err));
+        report_stats_result(text, false);
+        return;
+    }
+    // Stats and clan tag have to be visible before the flag that marks them ready.
+    __lwsync();
+    hostMenu.statsLoadPending = true;
+    hostMenu.prestigeUnlocks = flags & STATS_FILE_PRESTIGE_UNLOCKS;
+    prestige_unlocks();
+    snprintf(text, sizeof(text), "Stats '%s' loaded", hostMenu.statsActionName);
+    report_stats_result(text, true);
+}
+
+static void run_delete_stats() {
+    char text[64];
+    int err = stats_file_delete(hostMenu.statsActionName);
+    if (err) {
+        snprintf(text, sizeof(text), "Delete failed: %s", stats_file_error_text(err));
+    } else {
+        snprintf(text, sizeof(text), "Stats '%s' deleted", hostMenu.statsActionName);
+    }
+    show_status(text);
+    build_stats_list();
+}
+
+void host_menu_ui_run_stats_actions(bool inGame) {
+    // Queued actions stay queued until Menu_PaintAll took the loaded stats over.
+    if (hostMenu.statsLoadPending) {
+        return;
+    }
+    if (hostMenu.saveStatsPending) {
+        // Pairs with the one in the keyboard callback: name and clan tag are ready.
+        __lwsync();
+        run_save_stats();
+        hostMenu.saveStatsPending = false;
+    }
+    // Only the menu thread queues and runs these, so no barrier is needed.
+    HostMenuStatsAction action = hostMenu.statsAction;
+    if (action == HOST_MENU_STATS_LOAD && !inGame) {
+        run_load_stats();
+    } else if (action == HOST_MENU_STATS_LOAD) {
+        show_status("Load skipped: stats can only be loaded in the lobby");
+    } else if (action == HOST_MENU_STATS_DELETE) {
+        run_delete_stats();
+    }
+    hostMenu.statsAction = HOST_MENU_STATS_NONE;
+}
+
+// ---------------------------------------------------------------------------
 // Keyboard
 // ---------------------------------------------------------------------------
 
@@ -481,6 +677,36 @@ static void keyboard_callback(int localClientNum, const char16* text, int length
 
 void host_menu_ui_open_name_keyboard() {
     UI_OpenKeyboard(0, keyboardTitle, keyboardPreset, 16, keyboard_callback);
+}
+
+// Runs on the UI thread, so the clan tag is read here rather than in the menu thread.
+static void stats_keyboard_callback(int localClientNum, const char16* text, int length) {
+    if (hostMenu.saveStatsPending) {
+        show_status("Save skipped: previous save still pending");
+        return;
+    }
+    char entered[STATS_FILE_NAME_MAX + 1];
+    int i;
+    for (i = 0; i < length && i < (int)sizeof(entered) - 1 && text[i]; i++) {
+        entered[i] = text[i] > 0x7F ? '_' : (char)text[i];
+    }
+    entered[i] = 0;
+    if (!*entered) {
+        return;
+    }
+
+    stats_file_sanitize_name(entered, hostMenu.saveStatsName);
+    const char* clanName = Dvar_GetString("clanName");
+    snprintf(hostMenu.saveStatsClan, sizeof(hostMenu.saveStatsClan), "%s",
+             clanName ? clanName : "");
+    // Name and clan tag have to be visible before the flag that marks them ready.
+    __lwsync();
+    hostMenu.saveStatsPending = true;
+}
+
+void host_menu_ui_open_stats_keyboard() {
+    UI_OpenKeyboard(0, statsKeyboardTitle, keyboardPreset, STATS_FILE_NAME_MAX,
+                    stats_keyboard_callback);
 }
 
 // ---------------------------------------------------------------------------
@@ -570,6 +796,11 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Prestige", HOST_MENU_TYPE_INT, &hostMenu.prestige, 0, 16,
                set_prestige)
         ->lobbyOnly = true;
+    add_option(HOST_MENU_MAIN, "Save Stats", HOST_MENU_TYPE_ACTION, 0, 0, 0, save_stats)
+        ->lobbyOnly = true;
+    add_option(HOST_MENU_MAIN, "Load Stats", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
+               open_stats_menu)
+        ->lobbyOnly = true;
     add_option(HOST_MENU_MAIN, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, change_name)
         ->lobbyOnly = true;
     add_option(HOST_MENU_MAIN, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, reset_name);
@@ -590,6 +821,16 @@ void host_menu_ui_init() {
     hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_KICK;
     add_option(HOST_MENU_PLAYER, "Kick", HOST_MENU_TYPE_ACTION, 0, 0, 0, kick_selected);
     add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
+
+    hostMenu.title[HOST_MENU_STATS] = "Load Stats";
+    hostMenu.parent[HOST_MENU_STATS] = HOST_MENU_MAIN;  // filled by open_stats_menu
+
+    hostMenu.title[HOST_MENU_STATS_FILE] = "Stats";  // the modal shows the file name
+    hostMenu.parent[HOST_MENU_STATS_FILE] = HOST_MENU_STATS;
+    add_option(HOST_MENU_STATS_FILE, "Load", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               load_selected_stats);
+    add_option(HOST_MENU_STATS_FILE, "Delete", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               delete_selected_stats);
 }
 
 // ---------------------------------------------------------------------------
@@ -623,8 +864,9 @@ void host_menu_ui_handle_input() {
     }
 
     close_stale_player_modal();
-    int m = hostMenu.current;
     bool inGame = Dvar_GetBool("cl_ingame");
+    close_stale_stats_menu(inGame);
+    int m = hostMenu.current;
     HostMenuOption* option = &hostMenu.options[m][hostMenu.cursor[m]];
 
     // The cursor may sit on an option that got hidden since (e.g. the match started).
@@ -951,13 +1193,13 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
     }
 }
 
-// Right below the selected player's row, or above it when it would reach past the bottom
-// of the list box.
-static void draw_player_modal(int party, bool inGame, float listBottom) {
-    int member = hostMenu.cursor[HOST_MENU_KICK];
-    const char* name = player_name(party, inGame, member);
-    float height = visible_option_count(HOST_MENU_PLAYER, inGame) * 16.5f + 40.0f;
-    float rowY = member * 16.5f + 258;
+// The options of modalMenu below the selected row of listMenu, or above it when they
+// would reach past the bottom of the list box. Every row of the list is drawn, so the
+// cursor is the row.
+static void draw_modal(int listMenu, int modalMenu, const char* title, bool inGame,
+                       float listBottom) {
+    float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
+    float rowY = hostMenu.cursor[listMenu] * 16.5f + 258;
     float y = rowY + 6;
     if (y + height > listBottom) {
         y = rowY - 16 - height;
@@ -965,8 +1207,31 @@ static void draw_player_modal(int party, bool inGame, float listBottom) {
 
     draw_shader(560, y, 180, height, modalBackground, whiteMaterial);
     draw_outline(560, y, 180, height, 2, accent);
-    draw_text(name, get_aligned_x(650, 0.45f, name, ALIGN_CENTER), y + 20, 0.45f, accent);
-    draw_options(HOST_MENU_PLAYER, inGame, 570, 730, y + 38);
+    draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), y + 20, 0.45f,
+              accent);
+    draw_options(modalMenu, inGame, 570, 730, y + 38);
+}
+
+static void draw_player_modal(int party, bool inGame, float listBottom) {
+    const char* name = player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK]);
+    draw_modal(HOST_MENU_KICK, HOST_MENU_PLAYER, name, inGame, listBottom);
+}
+
+// Drawn in the given left column row: below the session info while the menu is open,
+// below the open hint while it is closed (Save Stats closes it for the keyboard).
+static void draw_status(int row) {
+    system_time_t time = statusTime;
+    if (!time || sys_time_get_system_time() - time > STATUS_DURATION_US) {
+        return;
+    }
+    // Pairs with the one in show_status: the text is read only after the time that marks
+    // it ready.
+    __lwsync();
+    char text[sizeof(statusText)];
+    memcpy(text, statusText, sizeof(text));
+    text[sizeof(text) - 1] = 0;
+    float step = R_TextHeight(font) * 0.5f + 10;
+    draw_text_box(text, 10, 20 + row * step, 0.5f);
 }
 
 // Builds every row's rank, tag and their widths for the draw loop and returns the list
@@ -1040,15 +1305,20 @@ void host_menu_ui_draw() {
         if (hostMenu.showControls) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
         }
+        draw_status(hostMenu.showControls ? 1 : 0);
         return;
     }
+    draw_status(4);
 
     close_stale_player_modal();
-    int m = hostMenu.current;
     bool inGame = Dvar_GetBool("cl_ingame");
+    close_stale_stats_menu(inGame);
+    int m = hostMenu.current;
     // The player modal is drawn over the player list, so the box keeps showing the list.
     bool players = m == HOST_MENU_KICK || m == HOST_MENU_PLAYER;
-    int boxMenu = players ? HOST_MENU_KICK : m;
+    // The stats modal is drawn over the stats list the same way.
+    bool stats = m == HOST_MENU_STATS || m == HOST_MENU_STATS_FILE;
+    int boxMenu = players ? HOST_MENU_KICK : stats ? HOST_MENU_STATS : m;
     // Clients see the list too, only the host can open the player modal.
     int party = (players && !inGame) ? host_menu_lobby_view_party() : 0;
     bool notHost = players && !inGame && !party;  // not in a lobby
@@ -1145,8 +1415,16 @@ void host_menu_ui_draw() {
         return;
     }
 
-    draw_text_box("\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Exit", 10,
-                  20, 0.5f);
+    draw_text_box(m == HOST_MENU_MAIN
+                      ? "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Exit"
+                      : "\x14\x15 - Scroll | \x01 - Select | \x02 - Back",
+                  10, 20, 0.5f);
     draw_session_info(inGame);
-    draw_options(m, inGame, 510, 790, 258);
+    draw_options(boxMenu, inGame, 510, 790, 258);
+    if (m == HOST_MENU_STATS_FILE) {
+        draw_modal(
+            HOST_MENU_STATS, HOST_MENU_STATS_FILE,
+            hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text,
+            inGame, 200 + height);
+    }
 }

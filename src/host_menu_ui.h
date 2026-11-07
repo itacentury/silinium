@@ -5,8 +5,9 @@
 #include <stdbool.h>
 
 #include "defines.h"
+#include "stats_file.h"
 
-#define HOST_MENU_MAX_MENUS 3
+#define HOST_MENU_MAX_MENUS 5
 #define HOST_MENU_MAX_OPTIONS 30
 #define HOST_MENU_KICK_BAN \
     0x40  // or'd into kickClient and lobbyKickMember, above any client num or member
@@ -23,8 +24,16 @@ typedef enum HostMenuId {
     HOST_MENU_MAIN = 0,
     HOST_MENU_KICK = 1,  // player list
     HOST_MENU_PLAYER =
-        2  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
+        2,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
+    HOST_MENU_STATS = 3,      // saved stats files
+    HOST_MENU_STATS_FILE = 4  // actions for the file selected in HOST_MENU_STATS, a modal
 } HostMenuId;
+
+typedef enum HostMenuStatsAction {
+    HOST_MENU_STATS_NONE,
+    HOST_MENU_STATS_LOAD,
+    HOST_MENU_STATS_DELETE
+} HostMenuStatsAction;
 
 typedef struct HostMenuOption {
     const char* text;
@@ -81,6 +90,21 @@ typedef struct HostMenu {
     bool unbanAllPending;     // set by Square in the player list, run by Menu_PaintAll
     bool lobbyShowGameParty;  // with both parties active, the player list shows GameParty
                               // ("Party") instead of LobbyParty ("Lobby")
+
+    // Save Stats: the option sets saveStatsKeyboardPending, Menu_PaintAll opens the
+    // keyboard, its callback fills name and clan tag and sets saveStatsPending, the menu
+    // thread saves.
+    bool saveStatsKeyboardPending;
+    bool saveStatsPending;
+    char saveStatsName[STATS_FILE_NAME_MAX + 1];
+    char saveStatsClan[STATS_FILE_CLAN_MAX];
+    // Load and Delete from the stats modal, run by the menu thread on the file named.
+    HostMenuStatsAction statsAction;
+    char statsActionName[STATS_FILE_NAME_MAX + 1];
+    // Loaded stats and their clan tag, applied by Menu_PaintAll. Save, Load and Delete
+    // wait while set, save and load share the file buffer.
+    bool statsLoadPending;
+    char loadedClanName[STATS_FILE_CLAN_MAX];
 } HostMenu;
 
 extern HostMenu hostMenu;
@@ -89,6 +113,9 @@ void host_menu_ui_init();
 void host_menu_ui_handle_input();
 void host_menu_ui_draw();
 void host_menu_ui_open_name_keyboard();
+void host_menu_ui_open_stats_keyboard();
+// Runs queued Save/Load/Delete Stats requests, in the menu thread (file access).
+void host_menu_ui_run_stats_actions(bool inGame);
 void host_menu_set_party_dvars(bool connectToOthers, int minPlayers, int pregameTimer,
                                int connectTimeout, int maxTeamDiff);
 void host_menu_set_bounce_dvars(bool depatched);
