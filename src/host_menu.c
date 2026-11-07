@@ -451,6 +451,19 @@ static void send_keyboard_input(void* ent) {
     keyboardState = KEYBOARD_IDLE;
 }
 
+// Drops % and control characters, keeps ^ for color codes: the clan tag is sent to the
+// other consoles in the lobby, and a % there turns into a format specifier wherever they
+// print it with a printf-style function. Writes at most size - 1 characters.
+static void clan_name_filter(const char* clanName, char* out, int size) {
+    int length = 0;
+    for (const char* c = clanName; *c && length < size - 1; c++) {
+        if (*c != '%' && (unsigned char)*c >= 0x20) {
+            out[length++] = *c;
+        }
+    }
+    out[length] = 0;
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
@@ -489,7 +502,11 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     // clan tag also reaches the profile this way is unverified.
     if (hostMenu.clanNamePending) {
         __lwsync();
-        Dvar_SetStringByName("clanName", hostMenu.loadedClanName);
+        // A stats file can hold any 31 bytes. The cap is the largest buffer the game
+        // copies the tag into, longer tags never reach the other consoles in full.
+        char clanName[T5_CgClientClanSize];
+        clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName));
+        Dvar_SetStringByName("clanName", clanName);
         hostMenu.clanNamePending = false;
     }
 
@@ -765,23 +782,18 @@ static int init_host_menu_hooks() {
     return 0;
 }
 
-// Replaces the game's sanitizer, which turns ^ into a space. Only % is dropped: the clan
-// tag is sent to the other consoles in the lobby, and a % there turns into a format
-// specifier wherever they print it with a printf-style function.
+// Replaces the game's sanitizer, which turns ^ into a space (see clan_name_filter).
 void ClanName_Sanitize_Hook() {
     const char* clanName = Dvar_GetString("clanName");
-    if (!clanName || !strchr(clanName, '%')) {
+    if (!clanName) {
         return;
     }
 
     char sanitized[32];
-    int length = 0;
-    for (const char* c = clanName; *c && length < sizeof(sanitized) - 1; c++) {
-        if (*c != '%') {
-            sanitized[length++] = *c;
-        }
+    clan_name_filter(clanName, sanitized, sizeof(sanitized));
+    if (strcmp(sanitized, clanName) == 0) {
+        return;
     }
-    sanitized[length] = 0;
     Dvar_SetStringByName("clanName", sanitized);
 }
 
