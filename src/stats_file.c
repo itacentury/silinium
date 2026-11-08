@@ -13,7 +13,7 @@
 #define STATS_FILE_EXTENSION ".bin"
 #define STATS_FILE_TEMP_EXTENSION ".tmp"
 #define STATS_FILE_VERSION 1
-#define STATS_FILE_RECOVER_MAX 8  // orphaned temporary files recovered per listing
+#define STATS_FILE_RECOVER_MAX 8  // orphaned temporary files handled per listing
 
 // Big endian like the PPU writes it. A later version can append the emblem after the
 // stats.
@@ -365,6 +365,17 @@ static bool intact_file(const char* path) {
     return !err && crc == header.statsCrc;
 }
 
+// Removed instead of kept, so it is logged once and doesn't take one of the
+// STATS_FILE_RECOVER_MAX slots on every listing.
+static void remove_temp_file(const char* tempPath, const char* reason) {
+    CellFsErrno err = cellFsUnlink(tempPath);
+    if (err != CELL_FS_SUCCEEDED) {
+        printf(T5ERROR "Stats: cannot remove '%s' (0x%08X).", tempPath, err);
+        return;
+    }
+    printf(T5WARNING "Stats: removed leftover '%s' (%s).", tempPath, reason);
+}
+
 static void recover_temp_file(const char* name) {
     char path[CELL_FS_MAX_FS_PATH_LENGTH];
     char tempPath[CELL_FS_MAX_FS_PATH_LENGTH];
@@ -372,17 +383,19 @@ static void recover_temp_file(const char* name) {
     temp_file_path(name, tempPath);
     CellFsStat status;
     if (cellFsStat(path, &status) == CELL_FS_SUCCEEDED) {
-        // Interrupted write or failed unlink, the save itself is intact. The next save of
-        // this name truncates it.
-        printf(T5WARNING "Stats: leftover '%s' next to '%s', not recovered.", tempPath,
-               path);
+        // Interrupted write, failed rename or failed unlink in stats_file_save. The save
+        // itself is intact and the failed save was already reported, so the user expects
+        // it.
+        remove_temp_file(tempPath, "a save with this name exists");
+        return;
+    }
+    if (cellFsStat(tempPath, &status) != CELL_FS_SUCCEEDED) {
         return;
     }
     // Power lost before the fsync in stats_file_save. The size can be on disk before all
     // of the data, so only the CRC shows the file is complete.
-    if (cellFsStat(tempPath, &status) != CELL_FS_SUCCEEDED ||
-        status.st_size != sizeof(StatsFile) || !intact_file(tempPath)) {
-        printf(T5WARNING "Stats: '%s' is incomplete, not recovered.", tempPath);
+    if (status.st_size != sizeof(StatsFile) || !intact_file(tempPath)) {
+        remove_temp_file(tempPath, "incomplete");
         return;
     }
     CellFsErrno err = cellFsRename(tempPath, path);
