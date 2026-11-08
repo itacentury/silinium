@@ -76,7 +76,7 @@ The loader always lifts the restrictions on class names and the clan tag: their 
 
 Quick Recovery and Prestige write to your online stats, only in the lobby. Quick Recovery also sets the `rank` stat, which the menus show the level from.
 
-Save, Load and Delete Stats show their result for a few seconds below the host box. With [webMAN MOD](https://github.com/aldostools/webMAN-MOD) installed, Save and Load also show a PS3 notification (sent to webMAN's `/popup.ps3` on `127.0.0.1`; a plugin in the game can't show XMB notifications itself).
+Save, Load and Delete Stats show their result as a PS3 notification when [webMAN MOD](https://github.com/aldostools/webMAN-MOD) is installed (sent to webMAN's `/popup.ps3` on `127.0.0.1`; a plugin in the game can't show XMB notifications itself). Without webMAN the result is shown for a few seconds below the host box instead.
 
 ## Anti-Freeze
 In multiplayer the loader blocks what the "Freeze PS3" options of RTM tools send to other consoles ([src/anti_freeze.c](src/anti_freeze.c)). It is always on and not available in zombies.

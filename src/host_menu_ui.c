@@ -481,17 +481,20 @@ static void show_status(const char* text) {
     statusTime = sys_time_get_system_time();
 }
 
-// In the menu and as a PS3 notification (webMAN only).
+// As a PS3 notification, or in the menu if webMAN didn't take it. Blocks while webMAN is
+// asked, so only the menu thread reports.
 static void report_stats_result(const char* text, bool success) {
-    show_status(text);
     char popup[96];
     snprintf(popup, sizeof(popup), "Silinium: %s", text);
-    if (success) {
-        notify_popup(popup, NOTIFY_ICON_INFO, NOTIFY_SOUND_OK);
-    } else {
-        notify_popup(popup, NOTIFY_ICON_CAUTION, NOTIFY_SOUND_ERROR);
+    bool shown = success ? notify_popup(popup, NOTIFY_ICON_INFO, NOTIFY_SOUND_OK)
+                         : notify_popup(popup, NOTIFY_ICON_CAUTION, NOTIFY_SOUND_ERROR);
+    if (!shown) {
+        show_status(text);
     }
 }
+
+// Set by the keyboard callback on the UI thread, reported by the menu thread.
+static volatile bool saveSkippedPending;
 
 // The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete while
 // the UI thread draws it. The directory is read into the buffer the options don't point
@@ -563,7 +566,7 @@ static void queue_stats_action(HostMenuStatsAction action) {
         return;
     }
     if (hostMenu.statsAction != HOST_MENU_STATS_NONE) {
-        show_status("Busy: another stats action is pending");
+        report_stats_result("Busy: another stats action is pending", false);
         return;
     }
     strcpy(hostMenu.statsActionName, statsNames[statsNamesActive][i]);
@@ -628,11 +631,15 @@ static void run_delete_stats() {
     } else {
         snprintf(text, sizeof(text), "Stats '%s' deleted", hostMenu.statsActionName);
     }
-    show_status(text);
+    report_stats_result(text, !err);
     build_stats_list();
 }
 
 void host_menu_ui_run_stats_actions(bool inGame) {
+    if (saveSkippedPending) {
+        saveSkippedPending = false;
+        report_stats_result("Save skipped: previous save still pending", false);
+    }
     // Queued actions stay queued until Menu_PaintAll took the loaded stats over.
     if (hostMenu.statsLoadPending) {
         return;
@@ -648,7 +655,7 @@ void host_menu_ui_run_stats_actions(bool inGame) {
     if (action == HOST_MENU_STATS_LOAD && !inGame) {
         run_load_stats();
     } else if (action == HOST_MENU_STATS_LOAD) {
-        show_status("Load skipped: stats can only be loaded in the lobby");
+        report_stats_result("Load skipped: stats can only be loaded in the lobby", false);
     } else if (action == HOST_MENU_STATS_DELETE) {
         run_delete_stats();
     }
@@ -682,7 +689,7 @@ void host_menu_ui_open_name_keyboard() {
 // Runs on the UI thread, so the clan tag is read here rather than in the menu thread.
 static void stats_keyboard_callback(int localClientNum, const char16* text, int length) {
     if (hostMenu.saveStatsPending) {
-        show_status("Save skipped: previous save still pending");
+        saveSkippedPending = true;
         return;
     }
     char entered[STATS_FILE_NAME_MAX + 1];
