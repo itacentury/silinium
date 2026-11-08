@@ -170,6 +170,21 @@ static void clear_bits(uint8_t* buffer, int bit, int count) {
     }
 }
 
+// Moves a complete temporary file to the save's path, replacing an existing save.
+static CellFsErrno replace_file(const char* tempPath, const char* path) {
+    CellFsErrno err = cellFsRename(tempPath, path);
+    if (err != CELL_FS_EEXIST) {
+        return err;
+    }
+    // cellFsRename doesn't replace an existing file. Between unlink and rename only the
+    // complete temporary file exists.
+    err = cellFsUnlink(path);
+    if (err != CELL_FS_SUCCEEDED) {
+        return err;
+    }
+    return cellFsRename(tempPath, path);
+}
+
 int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
     if (!valid_name(name)) {
         return STATS_FILE_ERROR_INVALID_NAME;
@@ -223,15 +238,7 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
 
     char path[CELL_FS_MAX_FS_PATH_LENGTH];
     file_path(name, path);
-    err = cellFsRename(tempPath, path);
-    if (err == CELL_FS_EEXIST) {
-        // cellFsRename doesn't replace an existing file. Between unlink and rename only
-        // the complete temporary file exists.
-        err = cellFsUnlink(path);
-        if (err == CELL_FS_SUCCEEDED) {
-            err = cellFsRename(tempPath, path);
-        }
-    }
+    err = replace_file(tempPath, path);
     if (err != CELL_FS_SUCCEEDED) {
         printf(T5ERROR "Save Stats: cannot replace '%s' (0x%08X).", path, err);
         return err;
@@ -382,13 +389,6 @@ static void recover_temp_file(const char* name) {
     file_path(name, path);
     temp_file_path(name, tempPath);
     CellFsStat status;
-    if (cellFsStat(path, &status) == CELL_FS_SUCCEEDED) {
-        // Interrupted write, failed rename or failed unlink in stats_file_save. The save
-        // itself is intact and the failed save was already reported, so the user expects
-        // it.
-        remove_temp_file(tempPath, "a save with this name exists");
-        return;
-    }
     if (cellFsStat(tempPath, &status) != CELL_FS_SUCCEEDED) {
         return;
     }
@@ -398,7 +398,11 @@ static void recover_temp_file(const char* name) {
         remove_temp_file(tempPath, "incomplete");
         return;
     }
-    CellFsErrno err = cellFsRename(tempPath, path);
+    // Complete, so the fsync finished: power was lost before the rename, or the rename or
+    // unlink failed. Finished like stats_file_save does, replacing an older save with
+    // this name, so the user gets the save they asked for. That save may never have
+    // reported an error.
+    CellFsErrno err = replace_file(tempPath, path);
     if (err != CELL_FS_SUCCEEDED) {
         printf(T5ERROR "Stats: cannot recover '%s' (0x%08X).", tempPath, err);
         return;
@@ -406,8 +410,8 @@ static void recover_temp_file(const char* name) {
     printf(T5INFO "Stats: recovered '%s'.", path);
 }
 
-// A save whose final rename failed (or lost power between unlink and rename) leaves only
-// the complete temporary file, which would otherwise not be listed.
+// A save interrupted after its temporary file was complete (power lost before the rename
+// or between unlink and rename, or a failed rename) is finished on the next listing.
 static void recover_temp_files() {
     int fd;
     if (cellFsOpendir(STATS_DIR, &fd) != CELL_FS_SUCCEEDED) {
