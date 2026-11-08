@@ -451,15 +451,20 @@ static void send_keyboard_input(void* ent) {
     keyboardState = KEYBOARD_IDLE;
 }
 
-// Drops % and control characters, keeps ^ for color codes: the clan tag is sent to the
-// other consoles in the lobby, and a % there turns into a format specifier wherever they
-// print it with a printf-style function. Writes at most size - 1 characters.
-static void clan_name_filter(const char* clanName, char* out, int size) {
+// Drops %, keeps ^ for color codes: the clan tag is sent to the other consoles in the
+// lobby, and a % there turns into a format specifier wherever they print it with a
+// printf-style function. Control characters are dropped only on request: the game draws
+// button glyphs with them (\x05, \x11, \x14...), so a tag set through the dvar or GSC may
+// use them on purpose, while a stats file can hold any bytes. Writes at most size - 1
+// characters.
+static void clan_name_filter(const char* clanName, char* out, int size,
+                             bool dropControlCharacters) {
     int length = 0;
     for (const char* c = clanName; *c && length < size - 1; c++) {
-        if (*c != '%' && (unsigned char)*c >= 0x20) {
-            out[length++] = *c;
+        if (*c == '%' || (dropControlCharacters && (unsigned char)*c < 0x20)) {
+            continue;
         }
+        out[length++] = *c;
     }
     out[length] = 0;
 }
@@ -508,7 +513,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         // A stats file can hold any 31 bytes. The cap is the largest buffer the game
         // copies the tag into, longer tags never reach the other consoles in full.
         char clanName[T5_CgClientClanSize];
-        clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName));
+        clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName), true);
         Dvar_SetStringByName("clanName", clanName);
         // The file buffer is released only once it was read.
         __lwsync();
@@ -795,7 +800,7 @@ void ClanName_Sanitize_Hook() {
     }
 
     char sanitized[32];
-    clan_name_filter(clanName, sanitized, sizeof(sanitized));
+    clan_name_filter(clanName, sanitized, sizeof(sanitized), false);
     if (strcmp(sanitized, clanName) == 0) {
         return;
     }
