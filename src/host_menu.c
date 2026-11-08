@@ -499,8 +499,8 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
     int controller = CL_ControllerIndexFromClientNum(0);
     GamerProfile_UpdateDvarsFromProfile(controller);
     // Same buffer as the save and ClanName_Sanitize_Hook. Writing the profile cuts the
-    // tag to its first 4 characters right away (seen on the console), so a longer saved
-    // tag doesn't survive the load.
+    // tag to its first 4 bytes right away (seen on the console, a color code takes 2),
+    // so a longer saved tag doesn't survive the load.
     char clanName[STATS_FILE_CLAN_MAX];
     name_filter(profile->clanName, clanName, sizeof(clanName), true, true);
     Dvar_SetStringByName("clanName", clanName);
