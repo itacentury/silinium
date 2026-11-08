@@ -11,6 +11,7 @@
 
 #define STATS_DIR SCRIPTS_PATH "/stats"
 #define STATS_FILE_EXTENSION ".bin"
+#define STATS_FILE_TEMP_EXTENSION ".tmp"
 #define STATS_FILE_VERSION 1
 
 // Big endian like the PPU writes it. A later version can append the emblem after the
@@ -90,6 +91,10 @@ static bool valid_name(const char* name) {
 
 static void file_path(const char* name, char* out) {
     sprintf(out, STATS_DIR "/%s" STATS_FILE_EXTENSION, name);
+}
+
+static void temp_file_path(const char* name, char* out) {
+    sprintf(out, STATS_DIR "/%s" STATS_FILE_TEMP_EXTENSION, name);
 }
 
 static int make_dir(const char* path) {
@@ -178,19 +183,42 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
                    protectedFields[i].bits);
     }
 
-    char path[CELL_FS_MAX_FS_PATH_LENGTH];
-    file_path(name, path);
+    // Written to a temporary file first, so a failed write (HDD full, power loss) leaves
+    // an existing save with this name intact.
+    char tempPath[CELL_FS_MAX_FS_PATH_LENGTH];
+    temp_file_path(name, tempPath);
     int fd;
-    err = cellFsOpen(path, CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC, &fd,
+    err = cellFsOpen(tempPath, CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC, &fd,
                      NULL, 0);
     if (err != CELL_FS_SUCCEEDED) {
-        printf(T5ERROR "Save Stats: cannot open '%s' (0x%08X).", path, err);
+        printf(T5ERROR "Save Stats: cannot open '%s' (0x%08X).", tempPath, err);
         return err;
     }
     err = write_all(fd, &file, sizeof(file));
+    if (!err) {
+        // On disk before the rename, so the renamed file is never a partial one.
+        err = cellFsFsync(fd);
+    }
     cellFsClose(fd);
     if (err) {
-        printf(T5ERROR "Save Stats: cannot write '%s' (0x%08X).", path, err);
+        printf(T5ERROR "Save Stats: cannot write '%s' (0x%08X).", tempPath, err);
+        cellFsUnlink(tempPath);
+        return err;
+    }
+
+    char path[CELL_FS_MAX_FS_PATH_LENGTH];
+    file_path(name, path);
+    err = cellFsRename(tempPath, path);
+    if (err == CELL_FS_EEXIST) {
+        // cellFsRename doesn't replace an existing file. Between unlink and rename only
+        // the complete temporary file exists.
+        err = cellFsUnlink(path);
+        if (err == CELL_FS_SUCCEEDED) {
+            err = cellFsRename(tempPath, path);
+        }
+    }
+    if (err != CELL_FS_SUCCEEDED) {
+        printf(T5ERROR "Save Stats: cannot replace '%s' (0x%08X).", path, err);
         return err;
     }
     printf(T5INFO "Save Stats: saved '%s'.", path);
