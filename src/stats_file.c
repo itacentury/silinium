@@ -285,7 +285,11 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
     }
     cellFsClose(fd);
     if (err) {
-        printf(T5ERROR "Load Stats: '%s' is not a valid stats file (0x%08X).", path, err);
+        if (err == STATS_FILE_ERROR_FORMAT) {
+            printf(T5ERROR "Load Stats: '%s' is not a valid stats file.", path);
+        } else {
+            printf(T5ERROR "Load Stats: cannot read '%s' (0x%08X).", path, err);
+        }
         return err;
     }
 
