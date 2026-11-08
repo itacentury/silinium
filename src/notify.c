@@ -23,7 +23,8 @@ static bool netResolved;
 // The function an import stub calls, read from the import slot the stub loads like
 // cs_hook_resolve_import_opd does. The stub itself can't be called from the plugin: it
 // saves r2 into the caller's TOC save slot, so the caller would restore the game's TOC
-// instead of its own. NULL if the stub doesn't have the expected form.
+// instead of its own. NULL if the stub doesn't have the expected form or the import is
+// not resolved.
 static popd32 resolve_import(uint32_t stub) {
     uint32_t high = *(uint32_t*)(stub + 4);
     uint32_t low = *(uint32_t*)(stub + 8);
@@ -31,7 +32,11 @@ static popd32 resolve_import(uint32_t stub) {
         (low & 0xFFFF0000) != PPC_LWZ_R12_R12) {
         return NULL;
     }
-    return *(popd32*)(((high & 0xFFFF) << 16) + (short)(low & 0xFFFF));
+    popd32 opd = *(popd32*)(((high & 0xFFFF) << 16) + (short)(low & 0xFFFF));
+    if (!opd || !opd->function) {
+        return NULL;
+    }
+    return opd;
 }
 
 static bool url_safe(char c) {
