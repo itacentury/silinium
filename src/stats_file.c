@@ -12,7 +12,7 @@
 #define STATS_DIR SCRIPTS_PATH "/stats"
 #define STATS_FILE_EXTENSION ".bin"
 #define STATS_FILE_TEMP_EXTENSION ".tmp"
-#define STATS_FILE_VERSION 1
+#define STATS_FILE_VERSION 2      // 2: class names in the header
 #define STATS_FILE_RECOVER_MAX 8  // orphaned temporary files handled per listing
 
 // Big endian like the PPU writes it. A later version can append the emblem after the
@@ -23,7 +23,7 @@ typedef struct StatsFileHeader {
     uint32_t statsSize;  // T5_StatsSize
     uint32_t flags;      // STATS_FILE_*
     uint32_t crc;        // CRC-32 of the header with crc 0, then the stats
-    char clanName[STATS_FILE_CLAN_MAX];
+    StatsFileProfile profile;
 } StatsFileHeader;
 
 static const char statsFileMagic[4] = {'S', 'L', 'S', 'T'};
@@ -192,7 +192,15 @@ static CellFsErrno replace_file(const char* tempPath, const char* path) {
     return cellFsRename(tempPath, path);
 }
 
-int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
+// Strings from another console's file can be unterminated.
+static void terminate_profile(StatsFileProfile* profile) {
+    profile->clanName[sizeof(profile->clanName) - 1] = 0;
+    for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
+        profile->classNames[i][STATS_FILE_CLASS_NAME_MAX - 1] = 0;
+    }
+}
+
+int stats_file_save(const char* name, const StatsFileProfile* profile, uint32_t flags) {
     if (!valid_name(name)) {
         return STATS_FILE_ERROR_INVALID_NAME;
     }
@@ -209,8 +217,8 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
     file.header.version = STATS_FILE_VERSION;
     file.header.statsSize = T5_StatsSize;
     file.header.flags = flags;
-    snprintf(file.header.clanName, sizeof(file.header.clanName), "%s",
-             clanName ? clanName : "");
+    file.header.profile = *profile;
+    terminate_profile(&file.header.profile);
     memcpy(file.stats, stats_buffer(), sizeof(file.stats));
     // Files get shared and load restores these fields from the live stats anyway, so the
     // saver's XUID, console info and tokens never end up in a file.
@@ -260,7 +268,7 @@ static bool valid_header(const StatsFileHeader* header) {
            header->version == STATS_FILE_VERSION && header->statsSize == T5_StatsSize;
 }
 
-int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
+int stats_file_load(const char* name, StatsFileProfile* profile, uint32_t* flags) {
     if (!valid_name(name)) {
         return STATS_FILE_ERROR_INVALID_NAME;
     }
@@ -293,8 +301,8 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
         return err;
     }
 
-    memcpy(clanName, file.header.clanName, STATS_FILE_CLAN_MAX);
-    clanName[STATS_FILE_CLAN_MAX - 1] = 0;
+    *profile = file.header.profile;
+    terminate_profile(profile);
     *flags = file.header.flags;
     printf(T5INFO "Load Stats: loaded '%s'.", path);
     return 0;

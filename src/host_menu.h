@@ -78,6 +78,9 @@ t5nd(void, ClanTag_Format,
 t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
+t5nd(int, CL_ControllerIndexFromClientNum, (int localClientNum));
+t5nd(void, GamerProfile_UpdateDvarsFromProfile, (int controller));
+t5nd(void, GamerProfile_UpdateProfileFromDvars, (int controller, int a2));
 t5nd(void, CG_GameMessage, (int localClientNum, const char* msg));
 t5nd(bool, Sys_IsMainThread, ());
 t5nd(void, Scr_Notify, (void* ent, unsigned int stringValue, unsigned int paramcount));
@@ -130,6 +133,10 @@ typedef enum {
 // as name takes it from the host's cgame client info, which only holds it once the client
 // is in the game.
 void host_menu_report_client(int clientNum, const char* name, HostMenuReport report);
+struct StatsFileProfile;
+// Reads the clan tag and class names from their dvars, for Save Stats. On the UI thread.
+void host_menu_read_profile_names(struct StatsFileProfile* profile);
+
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);

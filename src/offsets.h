@@ -106,6 +106,15 @@
 // clanName sanitizer (^ becomes a space, other characters are dropped), also run when the profile is loaded and saved.
 // Takes no arguments and returns nothing, it reads the dvar and writes it back.
 #define T5_ClanName_Sanitize 0x1C5B18
+// Gamer profile, one per controller at 0x1B12B70 + controller * 0xDD8. It holds the clan tag (+0x27C, 5 bytes) and the
+// class names (+0xC81, 10 of 16 bytes: the dvars customclass1-5 and prestigeclass1-5, dvar table 0xD24C8C; order
+// inferred from the copy at 0x563950). The class name keyboard callback (0x3FEFC0) runs: controller =
+// CL_ControllerIndexFromClientNum(localClientNum), UpdateDvarsFromProfile(controller), set the dvar,
+// UpdateProfileFromDvars(controller, 1). UpdateProfileFromDvars is named by its own log string; the other two names
+// and the meaning of its second argument are inferred, unverified.
+#define T5_CL_ControllerIndexFromClientNum 0x39D640
+#define T5_GamerProfile_UpdateDvarsFromProfile 0x563080 // also sets clanName from the profile
+#define T5_GamerProfile_UpdateProfileFromDvars 0x562090
 #define T5_Dvar_GetString 0x4C7370
 #define T5_Dvar_SetStringByName 0x4CF170
 #define T5_KeyboardInvalidChars_Patch 0x3FF264 // character check passed, original: bne cr1 (0x40860048)

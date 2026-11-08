@@ -594,7 +594,7 @@ static void close_stale_stats_menu(bool inGame) {
 static void run_save_stats() {
     char text[64];
     uint32_t flags = hostMenu.prestigeUnlocks ? STATS_FILE_PRESTIGE_UNLOCKS : 0;
-    int err = stats_file_save(hostMenu.saveStatsName, hostMenu.saveStatsClan, flags);
+    int err = stats_file_save(hostMenu.saveStatsName, &hostMenu.saveStatsProfile, flags);
     if (err) {
         snprintf(text, sizeof(text), "Save failed: %s", stats_file_error_text(err));
     } else {
@@ -608,7 +608,7 @@ static void run_save_stats() {
 static void run_load_stats() {
     char text[64];
     uint32_t flags;
-    int err = stats_file_load(hostMenu.statsActionName, hostMenu.loadedClanName, &flags);
+    int err = stats_file_load(hostMenu.statsActionName, &hostMenu.loadedProfile, &flags);
     if (err) {
         snprintf(text, sizeof(text), "Load failed: %s", stats_file_error_text(err));
         report_stats_result(text, false);
@@ -686,7 +686,8 @@ void host_menu_ui_open_name_keyboard() {
     UI_OpenKeyboard(0, keyboardTitle, keyboardPreset, 16, keyboard_callback);
 }
 
-// Runs on the UI thread, so the clan tag is read here rather than in the menu thread.
+// Runs on the UI thread, so the clan tag and class names are read here rather than in the
+// menu thread.
 static void stats_keyboard_callback(int localClientNum, const char16* text, int length) {
     if (hostMenu.saveStatsPending) {
         saveSkippedPending = true;
@@ -703,10 +704,9 @@ static void stats_keyboard_callback(int localClientNum, const char16* text, int 
     }
 
     stats_file_sanitize_name(entered, hostMenu.saveStatsName);
-    const char* clanName = Dvar_GetString("clanName");
-    snprintf(hostMenu.saveStatsClan, sizeof(hostMenu.saveStatsClan), "%s",
-             clanName ? clanName : "");
-    // Name and clan tag have to be visible before the flag that marks them ready.
+    host_menu_read_profile_names(&hostMenu.saveStatsProfile);
+    // Name, clan tag and class names have to be visible before the flag that marks them
+    // ready.
     __lwsync();
     hostMenu.saveStatsPending = true;
 }

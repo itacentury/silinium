@@ -92,19 +92,19 @@ typedef struct HostMenu {
                               // ("Party") instead of LobbyParty ("Lobby")
 
     // Save Stats: the option sets saveStatsKeyboardPending, Menu_PaintAll opens the
-    // keyboard, its callback fills name and clan tag and sets saveStatsPending, the menu
-    // thread saves.
+    // keyboard, its callback fills name, clan tag and class names and sets
+    // saveStatsPending, the menu thread saves.
     bool saveStatsKeyboardPending;
     bool saveStatsPending;
     char saveStatsName[STATS_FILE_NAME_MAX + 1];
-    char saveStatsClan[STATS_FILE_CLAN_MAX];
+    StatsFileProfile saveStatsProfile;
     // Load and Delete from the stats modal, run by the menu thread on the file named.
     HostMenuStatsAction statsAction;
     char statsActionName[STATS_FILE_NAME_MAX + 1];
-    // Loaded stats and their clan tag, applied by Menu_PaintAll. Save, Load and Delete
-    // wait while set, save and load share the file buffer.
+    // Loaded stats and their clan tag and class names, applied by Menu_PaintAll. Save,
+    // Load and Delete wait while set, save and load share the file buffer.
     bool statsLoadPending;
-    char loadedClanName[STATS_FILE_CLAN_MAX];
+    StatsFileProfile loadedProfile;
 } HostMenu;
 
 extern HostMenu hostMenu;

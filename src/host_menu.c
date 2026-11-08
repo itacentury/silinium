@@ -469,6 +469,48 @@ static void clan_name_filter(const char* clanName, char* out, int size,
     out[length] = 0;
 }
 
+// The dvars of the class names, in the order of the game's dvar table (see offsets.h).
+static const char* const classNameDvars[STATS_FILE_CLASS_COUNT] = {
+    "customclass1",   "customclass2",   "customclass3",   "customclass4",
+    "customclass5",   "prestigeclass1", "prestigeclass2", "prestigeclass3",
+    "prestigeclass4", "prestigeclass5",
+};
+
+static void read_dvar_string(const char* name, char* out, int size) {
+    const char* value = Dvar_GetString(name);
+    snprintf(out, size, "%s", value ? value : "");
+}
+
+void host_menu_read_profile_names(StatsFileProfile* profile) {
+    read_dvar_string("clanName", profile->clanName, sizeof(profile->clanName));
+    for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
+        read_dvar_string(classNameDvars[i], profile->classNames[i],
+                         sizeof(profile->classNames[i]));
+    }
+}
+
+// Sets the loaded clan tag and class names like the game's class name keyboard does, so
+// they reach the gamer profile: the game sets the dvars back from the profile, clanName
+// included (GamerProfile_UpdateDvarsFromProfile). Empty class names keep the current
+// name. Control characters are dropped because a stats file can hold any bytes.
+static void apply_loaded_profile_names(const StatsFileProfile* profile) {
+    int controller = CL_ControllerIndexFromClientNum(0);
+    GamerProfile_UpdateDvarsFromProfile(controller);
+    // Same limit as the save and ClanName_Sanitize_Hook, so a tag survives the round
+    // trip. The profile itself keeps only 4 characters.
+    char clanName[STATS_FILE_CLAN_MAX];
+    clan_name_filter(profile->clanName, clanName, sizeof(clanName), true);
+    Dvar_SetStringByName("clanName", clanName);
+    for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
+        char className[STATS_FILE_CLASS_NAME_MAX];
+        clan_name_filter(profile->classNames[i], className, sizeof(className), true);
+        if (*className) {
+            Dvar_SetStringByName(classNameDvars[i], className);
+        }
+    }
+    GamerProfile_UpdateProfileFromDvars(controller, 1);
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
@@ -505,18 +547,11 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
 
     // The stats buffer and dvars are written on the main thread, where the game's stats
     // code runs, so it never sees half loaded stats. The menu thread only loads the file.
-    // Whether the clan tag also reaches the profile this way is unverified.
     if (hostMenu.statsLoadPending) {
         __lwsync();
         stats_file_apply_loaded();
         hostMenu.prestige = *(uint8_t*)T5_Stats_Prestige;
-        // Same limit as the save and ClanName_Sanitize_Hook, so a tag survives the round
-        // trip. Control characters are dropped because a stats file can hold any bytes.
-        // Other consoles only receive the first T5_CgClientClanSize - 1 characters of any
-        // tag.
-        char clanName[STATS_FILE_CLAN_MAX];
-        clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName), true);
-        Dvar_SetStringByName("clanName", clanName);
+        apply_loaded_profile_names(&hostMenu.loadedProfile);
         // The file buffer is released only once it was read.
         __lwsync();
         hostMenu.statsLoadPending = false;
@@ -753,6 +788,9 @@ static void init_host_menu_offsets() {
     t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
+    t5nmi(CL_ControllerIndexFromClientNum);
+    t5nmi(GamerProfile_UpdateDvarsFromProfile);
+    t5nmi(GamerProfile_UpdateProfileFromDvars);
     t5nmi(CG_GameMessage);
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
