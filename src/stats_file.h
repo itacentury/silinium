@@ -19,13 +19,13 @@
 void stats_file_sanitize_name(const char* text, char* out);
 // Writes the stats buffer with the clan tag and flags. 0 or an error.
 int stats_file_save(const char* name, const char* clanName, uint32_t flags);
-// Reads a file and takes the account and console fields over from the live stats, without
-// touching the stats buffer yet. The clan tag is only returned (clanName holds
-// STATS_FILE_CLAN_MAX bytes). 0 or an error, clanName and *flags are set on success.
+// Reads and checks a file without touching the stats buffer yet. The clan tag is only
+// returned (clanName holds STATS_FILE_CLAN_MAX bytes). 0 or an error, clanName and *flags
+// are set on success.
 int stats_file_load(const char* name, char* clanName, uint32_t* flags);
-// Copies the stats from the last successful load into the stats buffer and marks them
-// dirty. On the main thread, where the game's stats code runs; no save or load may run
-// until it returned, they share the buffer.
+// Copies the stats from the last successful load into the stats buffer, keeping the live
+// account and console fields, and marks them dirty. On the main thread, where the game's
+// stats code runs; no save or load may run until it returned, they share the buffer.
 void stats_file_apply_loaded();
 int stats_file_delete(const char* name);
 // Fills names with up to max saved names (without .bin), returns how many.

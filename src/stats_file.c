@@ -255,13 +255,6 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
         return err;
     }
 
-    // The file's own fields are replaced with the current ones before anything reaches
-    // the game's buffer, so the live stats change in a single copy.
-    for (int i = 0; i < sizeof(protectedFields) / sizeof(*protectedFields); i++) {
-        copy_bits(file.stats, stats_buffer(), T5_Stats_DdlBit + protectedFields[i].bit,
-                  protectedFields[i].bits);
-    }
-
     memcpy(clanName, file.header.clanName, STATS_FILE_CLAN_MAX);
     clanName[STATS_FILE_CLAN_MAX - 1] = 0;
     *flags = file.header.flags;
@@ -272,6 +265,13 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
 void stats_file_apply_loaded() {
     // The game's header stays, only the DDL data is taken over.
     uint8_t* stats = stats_buffer();
+    // The file's own protected fields are replaced with the live ones right before the
+    // copy, on the thread the game updates them on, so no value changed since the load is
+    // written back and the live stats change in a single copy.
+    for (int i = 0; i < sizeof(protectedFields) / sizeof(*protectedFields); i++) {
+        copy_bits(file.stats, stats, T5_Stats_DdlBit + protectedFields[i].bit,
+                  protectedFields[i].bits);
+    }
     memcpy(stats + T5_StatsHeaderSize, file.stats + T5_StatsHeaderSize,
            T5_StatsSize - T5_StatsHeaderSize);
     stats[T5_StatsDirtyOffset] |= T5_StatsDirtyFlag;
