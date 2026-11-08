@@ -451,17 +451,18 @@ static void send_keyboard_input(void* ent) {
     keyboardState = KEYBOARD_IDLE;
 }
 
-// Drops %, keeps ^ for color codes: the clan tag is sent to the other consoles in the
-// lobby, and a % there turns into a format specifier wherever they print it with a
-// printf-style function. Control characters are dropped only on request: the game draws
-// button glyphs with them (\x05, \x11, \x14...), so a tag set through the dvar or GSC may
-// use them on purpose, while a stats file can hold any bytes. Writes at most size - 1
-// characters.
-static void clan_name_filter(const char* clanName, char* out, int size,
-                             bool dropControlCharacters) {
+// Always keeps ^ for color codes. % is dropped only from the clan tag: it is sent to the
+// other consoles in the lobby, and a % there turns into a format specifier wherever they
+// print it with a printf-style function. Class names stay local, so they keep it.
+// Control characters are dropped only on request: the game draws button glyphs with them
+// (\x05, \x11, \x14...), so a tag set through the dvar or GSC may use them on purpose,
+// while a stats file can hold any bytes. Writes at most size - 1 characters.
+static void name_filter(const char* name, char* out, int size, bool dropPercent,
+                        bool dropControlCharacters) {
     int length = 0;
-    for (const char* c = clanName; *c && length < size - 1; c++) {
-        if (*c == '%' || (dropControlCharacters && (unsigned char)*c < 0x20)) {
+    for (const char* c = name; *c && length < size - 1; c++) {
+        if ((dropPercent && *c == '%') ||
+            (dropControlCharacters && (unsigned char)*c < 0x20)) {
             continue;
         }
         out[length++] = *c;
@@ -492,18 +493,19 @@ void host_menu_read_profile_names(StatsFileProfile* profile) {
 // Sets the loaded clan tag and class names like the game's class name keyboard does, so
 // they reach the gamer profile: the game sets the dvars back from the profile, clanName
 // included (GamerProfile_UpdateDvarsFromProfile). Empty class names keep the current
-// name. Control characters are dropped because a stats file can hold any bytes.
+// name. Control characters are dropped because a stats file can hold any bytes, % only
+// from the clan tag (see name_filter).
 static void apply_loaded_profile_names(const StatsFileProfile* profile) {
     int controller = CL_ControllerIndexFromClientNum(0);
     GamerProfile_UpdateDvarsFromProfile(controller);
     // Same limit as the save and ClanName_Sanitize_Hook, so a tag survives the round
     // trip. The profile itself keeps only 4 characters.
     char clanName[STATS_FILE_CLAN_MAX];
-    clan_name_filter(profile->clanName, clanName, sizeof(clanName), true);
+    name_filter(profile->clanName, clanName, sizeof(clanName), true, true);
     Dvar_SetStringByName("clanName", clanName);
     for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
         char className[STATS_FILE_CLASS_NAME_MAX];
-        clan_name_filter(profile->classNames[i], className, sizeof(className), true);
+        name_filter(profile->classNames[i], className, sizeof(className), false, true);
         if (*className) {
             Dvar_SetStringByName(classNameDvars[i], className);
         }
@@ -832,7 +834,7 @@ static int init_host_menu_hooks() {
     return 0;
 }
 
-// Replaces the game's sanitizer, which turns ^ into a space (see clan_name_filter).
+// Replaces the game's sanitizer, which turns ^ into a space (see name_filter).
 void ClanName_Sanitize_Hook() {
     const char* clanName = Dvar_GetString("clanName");
     if (!clanName) {
@@ -840,7 +842,7 @@ void ClanName_Sanitize_Hook() {
     }
 
     char sanitized[STATS_FILE_CLAN_MAX];
-    clan_name_filter(clanName, sanitized, sizeof(sanitized), false);
+    name_filter(clanName, sanitized, sizeof(sanitized), true, false);
     if (strcmp(sanitized, clanName) == 0) {
         return;
     }
