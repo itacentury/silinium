@@ -12,6 +12,7 @@
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
+#include "notify.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -450,6 +451,69 @@ static void send_keyboard_input(void* ent) {
     keyboardState = KEYBOARD_IDLE;
 }
 
+// Always keeps ^ for color codes. % is dropped only from the clan tag: it is sent to the
+// other consoles in the lobby, and a % there turns into a format specifier wherever they
+// print it with a printf-style function. Class names stay local, so they keep it.
+// Control characters are dropped only on request: the game draws button glyphs with them
+// (\x05, \x11, \x14...), so a tag set through the dvar or GSC may use them on purpose,
+// while a stats file can hold any bytes. Writes at most size - 1 characters.
+static void name_filter(const char* name, char* out, int size, bool dropPercent,
+                        bool dropControlCharacters) {
+    int length = 0;
+    for (const char* c = name; *c && length < size - 1; c++) {
+        if ((dropPercent && *c == '%') ||
+            (dropControlCharacters && (unsigned char)*c < 0x20)) {
+            continue;
+        }
+        out[length++] = *c;
+    }
+    out[length] = 0;
+}
+
+// The dvars of the class names, in the order of the game's dvar table (see offsets.h).
+static const char* const classNameDvars[STATS_FILE_CLASS_COUNT] = {
+    "customclass1",   "customclass2",   "customclass3",   "customclass4",
+    "customclass5",   "prestigeclass1", "prestigeclass2", "prestigeclass3",
+    "prestigeclass4", "prestigeclass5",
+};
+
+static void read_dvar_string(const char* name, char* out, int size) {
+    const char* value = Dvar_GetString(name);
+    snprintf(out, size, "%s", value ? value : "");
+}
+
+void host_menu_read_profile_names(StatsFileProfile* profile) {
+    read_dvar_string("clanName", profile->clanName, sizeof(profile->clanName));
+    for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
+        read_dvar_string(classNameDvars[i], profile->classNames[i],
+                         sizeof(profile->classNames[i]));
+    }
+}
+
+// Sets the loaded clan tag and class names like the game's class name keyboard does, so
+// they reach the gamer profile: the game sets the dvars back from the profile, clanName
+// included (GamerProfile_UpdateDvarsFromProfile). Empty class names keep the current
+// name. Control characters are dropped because a stats file can hold any bytes, % only
+// from the clan tag (see name_filter).
+static void apply_loaded_profile_names(const StatsFileProfile* profile) {
+    int controller = CL_ControllerIndexFromClientNum(0);
+    GamerProfile_UpdateDvarsFromProfile(controller);
+    // Same buffer as the save and ClanName_Sanitize_Hook. Writing the profile cuts the
+    // tag to its first 4 bytes right away (seen on the console, a color code takes 2),
+    // so a longer saved tag doesn't survive the load.
+    char clanName[STATS_FILE_CLAN_MAX];
+    name_filter(profile->clanName, clanName, sizeof(clanName), true, true);
+    Dvar_SetStringByName("clanName", clanName);
+    for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
+        char className[STATS_FILE_CLASS_NAME_MAX];
+        name_filter(profile->classNames[i], className, sizeof(className), false, true);
+        if (*className) {
+            Dvar_SetStringByName(classNameDvars[i], className);
+        }
+    }
+    GamerProfile_UpdateProfileFromDvars(controller, 1);
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
@@ -484,6 +548,18 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostSpawned = false;
     }
 
+    // The stats buffer and dvars are written on the main thread, where the game's stats
+    // code runs, so it never sees half loaded stats. The menu thread only loads the file.
+    if (hostMenu.statsLoadPending) {
+        __lwsync();
+        stats_file_apply_loaded();
+        hostMenu.prestige = *(uint8_t*)T5_Stats_Prestige;
+        apply_loaded_profile_names(&hostMenu.loadedProfile);
+        // The file buffer is released only once it was read.
+        __lwsync();
+        hostMenu.statsLoadPending = false;
+    }
+
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
     if (!Dvar_GetBool("cl_ingame")) {
@@ -510,6 +586,10 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         if (hostMenu.changeNamePending) {
             hostMenu.changeNamePending = false;
             host_menu_ui_open_name_keyboard();
+        }
+        if (hostMenu.saveStatsKeyboardPending) {
+            hostMenu.saveStatsKeyboardPending = false;
+            host_menu_ui_open_stats_keyboard();
         }
     } else {
         // The same command as End Game in the pause menu. -1 is the menu index the game
@@ -670,8 +750,10 @@ static void host_menu_thread(uint64_t arg) {
             hostMenu.selectMapPending = false;
             hostMenu.selectGametypePending = false;
             hostMenu.changeNamePending = false;
+            hostMenu.saveStatsKeyboardPending = false;
             hostMenu.lobbyKickMember = -1;
         }
+        host_menu_ui_run_stats_actions(inGame);
         // The list choice only applies while both parties are up; each lobby (and the one
         // after a match) starts on the Lobby list.
         if (inGame || !host_menu_lobby_parties_both_active()) {
@@ -709,10 +791,14 @@ static void init_host_menu_offsets() {
     t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
+    t5nmi(CL_ControllerIndexFromClientNum);
+    t5nmi(GamerProfile_UpdateDvarsFromProfile);
+    t5nmi(GamerProfile_UpdateProfileFromDvars);
     t5nmi(CG_GameMessage);
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
     t5nmi(FindEntityId);
+    notify_init();
 }
 
 static int init_host_menu_hooks() {
@@ -749,23 +835,18 @@ static int init_host_menu_hooks() {
     return 0;
 }
 
-// Replaces the game's sanitizer, which turns ^ into a space. Only % is dropped: the clan
-// tag is sent to the other consoles in the lobby, and a % there turns into a format
-// specifier wherever they print it with a printf-style function.
+// Replaces the game's sanitizer, which turns ^ into a space (see name_filter).
 void ClanName_Sanitize_Hook() {
     const char* clanName = Dvar_GetString("clanName");
-    if (!clanName || !strchr(clanName, '%')) {
+    if (!clanName) {
         return;
     }
 
-    char sanitized[32];
-    int length = 0;
-    for (const char* c = clanName; *c && length < sizeof(sanitized) - 1; c++) {
-        if (*c != '%') {
-            sanitized[length++] = *c;
-        }
+    char sanitized[STATS_FILE_CLAN_MAX];
+    name_filter(clanName, sanitized, sizeof(sanitized), true, false);
+    if (strcmp(sanitized, clanName) == 0) {
+        return;
     }
-    sanitized[length] = 0;
     Dvar_SetStringByName("clanName", sanitized);
 }
 
