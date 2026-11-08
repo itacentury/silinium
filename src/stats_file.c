@@ -22,7 +22,7 @@ typedef struct StatsFileHeader {
     uint32_t version;
     uint32_t statsSize;  // T5_StatsSize
     uint32_t flags;      // STATS_FILE_*
-    uint32_t statsCrc;   // CRC-32 of stats
+    uint32_t crc;        // CRC-32 of the header with crc 0, then the stats
     char clanName[STATS_FILE_CLAN_MAX];
 } StatsFileHeader;
 
@@ -150,6 +150,13 @@ static uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t size) {
     return ~crc;
 }
 
+// The header part of the file CRC; continue it over the stats with crc32_update.
+static uint32_t header_crc(const StatsFileHeader* header) {
+    StatsFileHeader copy = *header;
+    copy.crc = 0;
+    return crc32_update(0, (const uint8_t*)&copy, sizeof(copy));
+}
+
 static void copy_bits(uint8_t* to, const uint8_t* from, int bit, int count) {
     // ddl_read_bits returns an int, so in chunks that stay clear of the sign bit.
     while (count > 0) {
@@ -211,7 +218,8 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
         clear_bits(file.stats, T5_Stats_DdlBit + protectedFields[i].bit,
                    protectedFields[i].bits);
     }
-    file.header.statsCrc = crc32_update(0, file.stats, sizeof(file.stats));
+    file.header.crc =
+        crc32_update(header_crc(&file.header), file.stats, sizeof(file.stats));
 
     // Written to a temporary file first, so a failed write (HDD full, power loss) leaves
     // an existing save with this name intact.
@@ -271,7 +279,8 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
     if (!err) {
         err = read_all(fd, file.stats, sizeof(file.stats));
     }
-    if (!err && crc32_update(0, file.stats, sizeof(file.stats)) != file.header.statsCrc) {
+    if (!err && crc32_update(header_crc(&file.header), file.stats, sizeof(file.stats)) !=
+                    file.header.crc) {
         err = STATS_FILE_ERROR_FORMAT;
     }
     cellFsClose(fd);
@@ -363,7 +372,7 @@ static int check_file(const char* path) {
     if (!err && !valid_header(&header)) {
         err = STATS_FILE_ERROR_FORMAT;
     }
-    uint32_t crc = 0;
+    uint32_t crc = err ? 0 : header_crc(&header);
     uint8_t chunk[1024];
     for (size_t left = sizeof(file.stats); !err && left > 0;) {
         size_t size = left < sizeof(chunk) ? left : sizeof(chunk);
@@ -372,7 +381,7 @@ static int check_file(const char* path) {
         left -= size;
     }
     cellFsClose(fd);
-    if (!err && crc != header.statsCrc) {
+    if (!err && crc != header.crc) {
         err = STATS_FILE_ERROR_FORMAT;
     }
     return err;
