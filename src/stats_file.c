@@ -13,6 +13,7 @@
 #define STATS_FILE_EXTENSION ".bin"
 #define STATS_FILE_TEMP_EXTENSION ".tmp"
 #define STATS_FILE_VERSION 1
+#define STATS_FILE_RECOVER_MAX 8  // orphaned temporary files recovered per listing
 
 // Big endian like the PPU writes it. A later version can append the emblem after the
 // stats.
@@ -309,7 +310,74 @@ static int insert_name(char (*names)[STATS_FILE_NAME_MAX + 1], int count, int ma
     return count < max ? count + 1 : count;
 }
 
+// Cuts the extension off a regular file's name and returns whether it is a stats name
+// with that extension. Files copied over FTP with other names can't be loaded.
+static bool strip_extension(CellFsDirent* entry, const char* extension) {
+    size_t length = strlen(entry->d_name);
+    size_t extensionLength = strlen(extension);
+    if (entry->d_type != CELL_FS_TYPE_REGULAR || length <= extensionLength ||
+        length - extensionLength > STATS_FILE_NAME_MAX ||
+        strcmp(entry->d_name + length - extensionLength, extension) != 0) {
+        return false;
+    }
+    entry->d_name[length - extensionLength] = 0;
+    return valid_name(entry->d_name);
+}
+
+static void recover_temp_file(const char* name) {
+    char path[CELL_FS_MAX_FS_PATH_LENGTH];
+    char tempPath[CELL_FS_MAX_FS_PATH_LENGTH];
+    file_path(name, path);
+    temp_file_path(name, tempPath);
+    CellFsStat status;
+    if (cellFsStat(path, &status) == CELL_FS_SUCCEEDED) {
+        // Interrupted write or failed unlink, the save itself is intact. The next save of
+        // this name truncates it.
+        printf(T5WARNING "Stats: leftover '%s' next to '%s', not recovered.", tempPath,
+               path);
+        return;
+    }
+    // Power lost before the fsync in stats_file_save.
+    if (cellFsStat(tempPath, &status) != CELL_FS_SUCCEEDED ||
+        status.st_size != sizeof(StatsFile)) {
+        printf(T5WARNING "Stats: '%s' is incomplete, not recovered.", tempPath);
+        return;
+    }
+    CellFsErrno err = cellFsRename(tempPath, path);
+    if (err != CELL_FS_SUCCEEDED) {
+        printf(T5ERROR "Stats: cannot recover '%s' (0x%08X).", tempPath, err);
+        return;
+    }
+    printf(T5INFO "Stats: recovered '%s'.", path);
+}
+
+// A save whose final rename failed (or lost power between unlink and rename) leaves only
+// the complete temporary file, which would otherwise not be listed.
+static void recover_temp_files() {
+    int fd;
+    if (cellFsOpendir(STATS_DIR, &fd) != CELL_FS_SUCCEEDED) {
+        return;
+    }
+    // Renamed only after the directory is closed, so the listing isn't changed while it
+    // is read. More files are recovered on the next listing.
+    char names[STATS_FILE_RECOVER_MAX][STATS_FILE_NAME_MAX + 1];
+    int count = 0;
+    CellFsDirent entry;
+    uint64_t read;
+    while (count < STATS_FILE_RECOVER_MAX &&
+           cellFsReaddir(fd, &entry, &read) == CELL_FS_SUCCEEDED && read) {
+        if (strip_extension(&entry, STATS_FILE_TEMP_EXTENSION)) {
+            strcpy(names[count++], entry.d_name);
+        }
+    }
+    cellFsClosedir(fd);
+    for (int i = 0; i < count; i++) {
+        recover_temp_file(names[i]);
+    }
+}
+
 int stats_file_list(char (*names)[STATS_FILE_NAME_MAX + 1], int max) {
+    recover_temp_files();
     int fd;
     if (cellFsOpendir(STATS_DIR, &fd) != CELL_FS_SUCCEEDED) {
         return 0;  // nothing saved yet
@@ -318,16 +386,7 @@ int stats_file_list(char (*names)[STATS_FILE_NAME_MAX + 1], int max) {
     CellFsDirent entry;
     uint64_t read;
     while (cellFsReaddir(fd, &entry, &read) == CELL_FS_SUCCEEDED && read) {
-        size_t length = strlen(entry.d_name);
-        size_t extension = sizeof(STATS_FILE_EXTENSION) - 1;
-        if (entry.d_type != CELL_FS_TYPE_REGULAR || length <= extension ||
-            length - extension > STATS_FILE_NAME_MAX ||
-            strcmp(entry.d_name + length - extension, STATS_FILE_EXTENSION) != 0) {
-            continue;
-        }
-        entry.d_name[length - extension] = 0;
-        // Files copied over FTP with other names can't be loaded, so they aren't listed.
-        if (valid_name(entry.d_name)) {
+        if (strip_extension(&entry, STATS_FILE_EXTENSION)) {
             count = insert_name(names, count, max, entry.d_name);
         }
     }
