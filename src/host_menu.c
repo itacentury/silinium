@@ -498,8 +498,9 @@ void host_menu_read_profile_names(StatsFileProfile* profile) {
 static void apply_loaded_profile_names(const StatsFileProfile* profile) {
     int controller = CL_ControllerIndexFromClientNum(0);
     GamerProfile_UpdateDvarsFromProfile(controller);
-    // Same limit as the save and ClanName_Sanitize_Hook, so a tag survives the round
-    // trip. The profile itself keeps only 4 characters.
+    // Same buffer as the save and ClanName_Sanitize_Hook. Writing the profile cuts the
+    // tag to its first 4 characters right away (seen on the console), so a longer saved
+    // tag doesn't survive the load.
     char clanName[STATS_FILE_CLAN_MAX];
     name_filter(profile->clanName, clanName, sizeof(clanName), true, true);
     Dvar_SetStringByName("clanName", clanName);
