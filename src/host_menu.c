@@ -510,9 +510,11 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         __lwsync();
         stats_file_apply_loaded();
         hostMenu.prestige = *(uint8_t*)T5_Stats_Prestige;
-        // A stats file can hold any 31 bytes. The cap is the largest buffer the game
-        // copies the tag into, longer tags never reach the other consoles in full.
-        char clanName[T5_CgClientClanSize];
+        // Same limit as the save and ClanName_Sanitize_Hook, so a tag survives the round
+        // trip. Control characters are dropped because a stats file can hold any bytes.
+        // Other consoles only receive the first T5_CgClientClanSize - 1 characters of any
+        // tag.
+        char clanName[STATS_FILE_CLAN_MAX];
         clan_name_filter(hostMenu.loadedClanName, clanName, sizeof(clanName), true);
         Dvar_SetStringByName("clanName", clanName);
         // The file buffer is released only once it was read.
@@ -799,7 +801,7 @@ void ClanName_Sanitize_Hook() {
         return;
     }
 
-    char sanitized[32];
+    char sanitized[STATS_FILE_CLAN_MAX];
     clan_name_filter(clanName, sanitized, sizeof(sanitized), false);
     if (strcmp(sanitized, clanName) == 0) {
         return;
