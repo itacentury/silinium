@@ -237,8 +237,8 @@
 #define T5_PlayerStat_Version 308
 #define T5_PlayerStat_WeeklyTimestamp 309
 
-// Import stubs of the game's sys_net functions (data/mp/imports.csv in bo1-re), for the webMAN notification. Called
-// like T5_PadGetData, so the plugin doesn't import sys_net itself.
+// Import stubs of the game's sys_net functions (data/mp/imports.csv in bo1-re), for the webMAN notification, so the
+// plugin doesn't import sys_net itself. Not called directly: notify_init resolves the functions from their import slots.
 #define T5_Net_socket 0x8C62B8
 #define T5_Net_connect 0x8C6130
 #define T5_Net_send 0x8C63D0

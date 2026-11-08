@@ -9,7 +9,8 @@
 
 struct sockaddr;
 
-// The game's sys_net imports, named apart from the SDK's declarations.
+// The game's sys_net imports, named apart from the SDK's declarations. Point to the
+// resolved libnet functions, not to the game's stubs (see notify_init).
 t5nd(int, Net_socket, (int domain, int type, int protocol));
 t5nd(int, Net_connect, (int s, const struct sockaddr* name, unsigned int nameLength));
 t5nd(int, Net_send, (int s, const void* message, size_t length, int flags));

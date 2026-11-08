@@ -15,6 +15,25 @@
 // that calls notify_popup also handles pad input.
 #define WEBMAN_TIMEOUT_MS 250
 
+#define PPC_ORIS_R12_R12 0x658C0000
+#define PPC_LWZ_R12_R12 0x818C0000
+
+static bool netResolved;
+
+// The function an import stub calls, read from the import slot the stub loads like
+// cs_hook_resolve_import_opd does. The stub itself can't be called from the plugin: it
+// saves r2 into the caller's TOC save slot, so the caller would restore the game's TOC
+// instead of its own. NULL if the stub doesn't have the expected form.
+static popd32 resolve_import(uint32_t stub) {
+    uint32_t high = *(uint32_t*)(stub + 4);
+    uint32_t low = *(uint32_t*)(stub + 8);
+    if ((high & 0xFFFF0000) != PPC_ORIS_R12_R12 ||
+        (low & 0xFFFF0000) != PPC_LWZ_R12_R12) {
+        return NULL;
+    }
+    return *(popd32*)(((high & 0xFFFF) << 16) + (short)(low & 0xFFFF));
+}
+
 static bool url_safe(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
            c == '-' || c == '_' || c == '.' || c == '~';
@@ -52,6 +71,9 @@ static void set_timeouts(int s) {
 }
 
 bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
+    if (!netResolved) {
+        return false;
+    }
     static bool warned;
     char encoded[256];
     url_encode(text, encoded, sizeof(encoded));
@@ -106,10 +128,15 @@ bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
 }
 
 void notify_init() {
-    t5nmi(Net_socket);
-    t5nmi(Net_connect);
-    t5nmi(Net_send);
-    t5nmi(Net_recv);
-    t5nmi(Net_setsockopt);
-    t5nmi(Net_socketclose);
+    Net_socket = (Net_socket_t)resolve_import(T5_Net_socket);
+    Net_connect = (Net_connect_t)resolve_import(T5_Net_connect);
+    Net_send = (Net_send_t)resolve_import(T5_Net_send);
+    Net_recv = (Net_recv_t)resolve_import(T5_Net_recv);
+    Net_setsockopt = (Net_setsockopt_t)resolve_import(T5_Net_setsockopt);
+    Net_socketclose = (Net_socketclose_t)resolve_import(T5_Net_socketclose);
+    netResolved = Net_socket && Net_connect && Net_send && Net_recv && Net_setsockopt &&
+                  Net_socketclose;
+    if (!netResolved) {
+        printf(T5WARNING "sys_net imports not resolved, PS3 notifications are disabled.");
+    }
 }
