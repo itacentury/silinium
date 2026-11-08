@@ -12,7 +12,7 @@
 
 // Errors besides the negative CellFsErrno codes.
 #define STATS_FILE_ERROR_INVALID_NAME -1
-#define STATS_FILE_ERROR_FORMAT -2  // not a stats file of this version and size
+#define STATS_FILE_ERROR_FORMAT -2  // not an intact stats file of this version and size
 
 // Turns text into a file name: lowercase, anything but a-z 0-9 _ - becomes _, at most
 // STATS_FILE_NAME_MAX characters. out must hold STATS_FILE_NAME_MAX + 1 bytes.

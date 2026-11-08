@@ -22,6 +22,7 @@ typedef struct StatsFileHeader {
     uint32_t version;
     uint32_t statsSize;  // T5_StatsSize
     uint32_t flags;      // STATS_FILE_*
+    uint32_t statsCrc;   // CRC-32 of stats
     char clanName[STATS_FILE_CLAN_MAX];
 } StatsFileHeader;
 
@@ -137,6 +138,18 @@ static int read_all(int fd, void* data, uint64_t size) {
     return 0;
 }
 
+// Standard CRC-32 (zlib), chainable: pass the previous result to continue over more data.
+static uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t size) {
+    crc = ~crc;
+    for (size_t i = 0; i < size; i++) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; bit++) {
+            crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        }
+    }
+    return ~crc;
+}
+
 static void copy_bits(uint8_t* to, const uint8_t* from, int bit, int count) {
     // ddl_read_bits returns an int, so in chunks that stay clear of the sign bit.
     while (count > 0) {
@@ -183,6 +196,7 @@ int stats_file_save(const char* name, const char* clanName, uint32_t flags) {
         clear_bits(file.stats, T5_Stats_DdlBit + protectedFields[i].bit,
                    protectedFields[i].bits);
     }
+    file.header.statsCrc = crc32_update(0, file.stats, sizeof(file.stats));
 
     // Written to a temporary file first, so a failed write (HDD full, power loss) leaves
     // an existing save with this name intact.
@@ -249,6 +263,9 @@ int stats_file_load(const char* name, char* clanName, uint32_t* flags) {
     }
     if (!err) {
         err = read_all(fd, file.stats, sizeof(file.stats));
+    }
+    if (!err && crc32_update(0, file.stats, sizeof(file.stats)) != file.header.statsCrc) {
+        err = STATS_FILE_ERROR_FORMAT;
     }
     cellFsClose(fd);
     if (err) {
@@ -324,6 +341,30 @@ static bool strip_extension(CellFsDirent* entry, const char* extension) {
     return valid_name(entry->d_name);
 }
 
+// Streams the stats through a stack buffer instead of the shared file buffer, which may
+// still hold a load waiting for stats_file_apply_loaded.
+static bool intact_file(const char* path) {
+    int fd;
+    if (cellFsOpen(path, CELL_FS_O_RDONLY, &fd, NULL, 0) != CELL_FS_SUCCEEDED) {
+        return false;
+    }
+    StatsFileHeader header;
+    int err = read_all(fd, &header, sizeof(header));
+    if (!err && !valid_header(&header)) {
+        err = STATS_FILE_ERROR_FORMAT;
+    }
+    uint32_t crc = 0;
+    uint8_t chunk[1024];
+    for (size_t left = sizeof(file.stats); !err && left > 0;) {
+        size_t size = left < sizeof(chunk) ? left : sizeof(chunk);
+        err = read_all(fd, chunk, size);
+        crc = crc32_update(crc, chunk, size);
+        left -= size;
+    }
+    cellFsClose(fd);
+    return !err && crc == header.statsCrc;
+}
+
 static void recover_temp_file(const char* name) {
     char path[CELL_FS_MAX_FS_PATH_LENGTH];
     char tempPath[CELL_FS_MAX_FS_PATH_LENGTH];
@@ -337,9 +378,10 @@ static void recover_temp_file(const char* name) {
                path);
         return;
     }
-    // Power lost before the fsync in stats_file_save.
+    // Power lost before the fsync in stats_file_save. The size can be on disk before all
+    // of the data, so only the CRC shows the file is complete.
     if (cellFsStat(tempPath, &status) != CELL_FS_SUCCEEDED ||
-        status.st_size != sizeof(StatsFile)) {
+        status.st_size != sizeof(StatsFile) || !intact_file(tempPath)) {
         printf(T5WARNING "Stats: '%s' is incomplete, not recovered.", tempPath);
         return;
     }
