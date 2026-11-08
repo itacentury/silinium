@@ -349,14 +349,17 @@ static bool strip_extension(CellFsDirent* entry, const char* extension) {
 }
 
 // Streams the stats through a stack buffer instead of the shared file buffer, which may
-// still hold a load waiting for stats_file_apply_loaded.
-static bool intact_file(const char* path) {
+// still hold a load waiting for stats_file_apply_loaded. Returns 0 if the file is intact,
+// STATS_FILE_ERROR_FORMAT if it is not a complete stats file, otherwise the file system
+// error.
+static int check_file(const char* path) {
     int fd;
-    if (cellFsOpen(path, CELL_FS_O_RDONLY, &fd, NULL, 0) != CELL_FS_SUCCEEDED) {
-        return false;
+    int err = cellFsOpen(path, CELL_FS_O_RDONLY, &fd, NULL, 0);
+    if (err != CELL_FS_SUCCEEDED) {
+        return err;
     }
     StatsFileHeader header;
-    int err = read_all(fd, &header, sizeof(header));
+    err = read_all(fd, &header, sizeof(header));
     if (!err && !valid_header(&header)) {
         err = STATS_FILE_ERROR_FORMAT;
     }
@@ -369,7 +372,10 @@ static bool intact_file(const char* path) {
         left -= size;
     }
     cellFsClose(fd);
-    return !err && crc == header.statsCrc;
+    if (!err && crc != header.statsCrc) {
+        err = STATS_FILE_ERROR_FORMAT;
+    }
+    return err;
 }
 
 // Removed instead of kept, so it is logged once and doesn't take one of the
@@ -394,15 +400,23 @@ static void recover_temp_file(const char* name) {
     }
     // Power lost before the fsync in stats_file_save. The size can be on disk before all
     // of the data, so only the CRC shows the file is complete.
-    if (status.st_size != sizeof(StatsFile) || !intact_file(tempPath)) {
+    int err = status.st_size == sizeof(StatsFile) ? check_file(tempPath)
+                                                  : STATS_FILE_ERROR_FORMAT;
+    if (err == STATS_FILE_ERROR_FORMAT) {
         remove_temp_file(tempPath, "incomplete");
+        return;
+    }
+    // A read error says nothing about the file, and it may be the only copy of the save:
+    // kept for the next listing.
+    if (err) {
+        printf(T5ERROR "Stats: cannot read '%s' (0x%08X).", tempPath, err);
         return;
     }
     // Complete, so the fsync finished: power was lost before the rename, or the rename or
     // unlink failed. Finished like stats_file_save does, replacing an older save with
     // this name, so the user gets the save they asked for. That save may never have
     // reported an error.
-    CellFsErrno err = replace_file(tempPath, path);
+    err = replace_file(tempPath, path);
     if (err != CELL_FS_SUCCEEDED) {
         printf(T5ERROR "Stats: cannot recover '%s' (0x%08X).", tempPath, err);
         return;
