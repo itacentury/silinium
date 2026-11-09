@@ -64,6 +64,38 @@ int host_menu_lobby_party() {
     return party && party_is_local_host(party) ? party : 0;
 }
 
+// The party copies the name into the local member only when it's added, and the host
+// sends it to everyone in partystate. The host index is unverified, so the slot must
+// still hold the old name.
+static void rename_local_party_member(int party, const char* oldName, const char* name) {
+    if (!party_is_local_host(party)) {
+        return;
+    }
+    int member = *(int*)(party + T5_PartyHostIndexOffset);
+    if (member < 0 || member >= T5_PartyMaxMembers || !PARTY_MEMBER_USED(party, member) ||
+        strcmp(PARTY_MEMBER_NAME(party, member), oldName) != 0) {
+        return;
+    }
+    snprintf((char*)PARTY_MEMBER_NAME(party, member), T5_PartyMemberNameSize, "%s", name);
+}
+
+void host_menu_set_local_name(const char* name) {
+    char oldName[T5_PartyMemberNameSize];
+    snprintf(oldName, sizeof(oldName), "%s", (const char*)T5_PlayerName2);
+
+    strcpy((char*)T5_PlayerName1, name);
+    strcpy((char*)T5_PlayerName2, name);
+
+    rename_local_party_member(T5_LobbyParty, oldName, name);
+    rename_local_party_member(T5_GameParty, oldName, name);
+
+    // The userinfo takes the name from PlayerName2; the flag makes the client send it
+    // again, the server then updates the name for everyone.
+    if (Dvar_GetBool("cl_ingame")) {
+        *(int*)T5_DvarModifiedFlags |= T5_DvarFlagUserinfo;
+    }
+}
+
 #define PARTY_REMOVE_COOLDOWN_US (1000 * 1000)
 
 typedef struct {
@@ -559,6 +591,18 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostMenu.statsLoadPending = false;
     }
 
+    if (hostMenu.changeNamePending) {
+        hostMenu.changeNamePending = false;
+        host_menu_ui_open_name_keyboard();
+    }
+    if (hostMenu.resetNamePending) {
+        hostMenu.resetNamePending = false;
+        if (hostMenu.originalName[0]) {
+            host_menu_set_local_name(hostMenu.originalName);
+        }
+        hostMenu.originalName[0] = 0;
+    }
+
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
     if (!Dvar_GetBool("cl_ingame")) {
@@ -581,10 +625,6 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         if (hostMenu.selectGametypePending) {
             hostMenu.selectGametypePending = false;
             Menus_OpenByName(0, uiContext, "select_game_mode");
-        }
-        if (hostMenu.changeNamePending) {
-            hostMenu.changeNamePending = false;
-            host_menu_ui_open_name_keyboard();
         }
         if (hostMenu.saveStatsKeyboardPending) {
             hostMenu.saveStatsKeyboardPending = false;

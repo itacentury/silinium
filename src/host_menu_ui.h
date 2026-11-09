@@ -59,6 +59,7 @@ typedef struct HostMenu {
     bool open;
     bool showControls;
     bool changeNamePending;
+    bool resetNamePending;  // set by Reset Name, run by Menu_PaintAll
     bool selectMapPending;
     bool selectGametypePending;
     bool endGamePending;

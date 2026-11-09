@@ -134,6 +134,9 @@ typedef enum {
 // is in the game.
 void host_menu_report_client(int clientNum, const char* name, HostMenuReport report);
 struct StatsFileProfile;
+// Renames the local player: in the hosted parties' member lists and, in game, through the
+// userinfo. On the UI thread, party state is only changed there.
+void host_menu_set_local_name(const char* name);
 // Reads the clan tag and class names from their dvars, for Save Stats. On the UI thread.
 void host_menu_read_profile_names(struct StatsFileProfile* profile);
 

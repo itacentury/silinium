@@ -363,13 +363,7 @@ static void change_name() {
     hostMenu.changeNamePending = true;
 }
 
-static void reset_name() {
-    if (hostMenu.originalName[0]) {
-        strcpy((char*)T5_PlayerName1, hostMenu.originalName);
-        strcpy((char*)T5_PlayerName2, hostMenu.originalName);
-    }
-    hostMenu.originalName[0] = 0;
-}
+static void reset_name() { hostMenu.resetNamePending = true; }
 
 static void open_player_menu() { hostMenu.current = HOST_MENU_KICK; }
 
@@ -678,8 +672,7 @@ static void keyboard_callback(int localClientNum, const char16* text, int length
         return;
     }
 
-    strcpy((char*)T5_PlayerName1, name);
-    strcpy((char*)T5_PlayerName2, name);
+    host_menu_set_local_name(name);
 }
 
 void host_menu_ui_open_name_keyboard() {
@@ -808,8 +801,8 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Load Stats", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
                open_stats_menu)
         ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, change_name)
-        ->lobbyOnly = true;
+    add_option(HOST_MENU_MAIN, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               change_name);
     add_option(HOST_MENU_MAIN, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, reset_name);
     add_option(HOST_MENU_MAIN, "End Game", HOST_MENU_TYPE_ACTION, 0, 0, 0, end_game)
         ->inGameOnly = true;

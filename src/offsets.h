@@ -182,8 +182,15 @@
 // it's full: name with MSG_WriteString, clan tag with MSG_WriteData. Only called by the host's partystate sender
 // (0x208DB0, "%ipartystate"), at 0x209404, 0x209538 and 0x2096FC.
 #define T5_Party_WriteMembers 0x204820
+// Local player 0. PlayerName1 is the SceNpId the userinfo sends as "npid" (online id first, 0x24 bytes per local
+// client); PlayerName2 is the name the userinfo builder (0x3A73C0, via 0x68BF48) sends as "name" and the party copies
+// into the local member when it's added (0x207BD0).
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
+// dvar_modifiedFlags: Dvar_SetVariant ORs the flags of a changed dvar in (0x4C8788). While connected the client frame
+// (0x1CDE70) sends its userinfo to the server when T5_DvarFlagUserinfo is set, then clears it (0x1C7B48).
+#define T5_DvarModifiedFlags 0x18F019C
+#define T5_DvarFlagUserinfo 0x2
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int
 #define T5_DvarPtr_BBA19C 0xBBA19C // bool dvar, default true (probably jump_slowdownEnable)
 #define T5_DvarPtr_BBA1A4 0xBBA1A4 // float dvar, default 300 (probably bg_fallDamageMaxHeight)
