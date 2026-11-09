@@ -31,6 +31,8 @@
     (*(uint64_t*)(PARTY_MEMBER(party, i) + T5_PartyMemberXuidOffset))
 #define PARTY_MEMBER_NAME(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
+#define PARTY_MEMBER_NAME_BUFFER(party, i) \
+    ((char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
 #define PARTY_MEMBER_CLAN(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanOffset))
 #define PARTY_MEMBER_CLAN_FEATURE(party, i) \

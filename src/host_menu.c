@@ -76,7 +76,7 @@ static bool rename_local_party_member(int party, const char* oldName, const char
         strcmp(PARTY_MEMBER_NAME(party, member), oldName) != 0) {
         return false;
     }
-    snprintf((char*)PARTY_MEMBER_NAME(party, member), T5_PartyMemberNameSize, "%s", name);
+    snprintf(PARTY_MEMBER_NAME_BUFFER(party, member), T5_PartyMemberNameSize, "%s", name);
     return true;
 }
 
