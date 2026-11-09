@@ -590,11 +590,18 @@ static bool mapSyncHosted;
 static char syncedMap[64];
 static char syncedGametype[64];
 
+static void store_synced_party_map() {
+    const char* map = Dvar_GetString("ui_mapname");
+    const char* gametype = Dvar_GetString("ui_gametype");
+    snprintf(syncedMap, sizeof(syncedMap), "%s", map ? map : "");
+    snprintf(syncedGametype, sizeof(syncedGametype), "%s", gametype ? gametype : "");
+}
+
+// The current selection counts as synced, so partystate only goes out on a real change.
 static void arm_party_map_sync() {
     mapSyncArmed = true;
     mapSyncHosted = false;
-    syncedMap[0] = 0;
-    syncedGametype[0] = 0;
+    store_synced_party_map();
 }
 
 static void sync_party_map() {
@@ -603,9 +610,10 @@ static void sync_party_map() {
     }
     bool lobbyHosted = party_is_local_host(T5_LobbyParty);
     bool gameHosted = party_is_local_host(T5_GameParty);
-    // Party_UpdateState does nothing then; nothing is marked synced, so it is sent once a
-    // party is up. If a hosted party was already seen, the host left that lobby (e.g. to
-    // the main menu) and the sync must not carry over to the next one.
+    // Party_UpdateState does nothing then; a change made meanwhile is not marked synced,
+    // so it is sent once a party is up. If a hosted party was already seen, the host left
+    // that lobby (e.g. to the main menu) and the sync must not carry over to the next
+    // one.
     if (!lobbyHosted && !gameHosted) {
         if (mapSyncHosted) {
             mapSyncArmed = false;
