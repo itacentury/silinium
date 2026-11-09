@@ -8,6 +8,7 @@
 
 #include <cell/pad.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <types.h>
 
 #include "defines.h"
@@ -26,6 +27,8 @@
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
 #define PARTY_MEMBER_USED(party, i) (*(unsigned char*)PARTY_MEMBER(party, i) > 2)
+#define PARTY_MEMBER_XUID(party, i) \
+    (*(uint64_t*)(PARTY_MEMBER(party, i) + T5_PartyMemberXuidOffset))
 #define PARTY_MEMBER_NAME(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
 #define PARTY_MEMBER_CLAN(party, i) \
@@ -70,6 +73,7 @@ t5nd(unsigned int, SL_GetString, (const char* str, unsigned int user, unsigned i
 t5nd(void*, R_RegisterFont, (const char* name, int imageTrack));
 t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
 t5nd(void, Party_KickMember, (int party, int memberIndex, const char* reason));
+t5nd(int, Live_IsLocalXuid, (uint64_t xuid));
 t5nd(void, Party_UpdateState, (int party));
 t5nd(void, Party_BanName, (const char* name));
 t5nd(int, Party_IsBanned, (const char* name));

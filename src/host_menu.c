@@ -121,8 +121,13 @@ static PartyRemoval* party_removal(int party, int member) {
 // removed is skipped for a second. The cooldown is kept per slot, so several members
 // waiting to be freed don't reset each other's. The name is compared so another player
 // taking the slot in that second is still removed.
+// The kick also removes every other slot at the member's netadr, the host's included, so
+// players on this console are never kicked, like the stock kickPlayer does.
 static void remove_party_member(int party, int member, const char* reason) {
     static bool logged;
+    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
+        return;
+    }
     PartyRemoval* removal = party_removal(party, member);
     if (removal) {
         const char* name = PARTY_MEMBER_NAME(party, member);
@@ -229,8 +234,9 @@ static void restore_bans() {
 // since, the slot holds someone else. The party only has to still be hosted by us, not
 // shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
 // list party joins are checked against, which banClient fills too and both parties share.
-// Only LobbyParty joins are checked against it, so enforce_game_party_bans covers
-// GameParty.
+// A kick on LobbyParty also removes the member from GameParty if we host it. Only
+// LobbyParty joins are checked against the list, so enforce_game_party_bans covers
+// rejoins of GameParty.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (!party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
@@ -874,6 +880,7 @@ static void init_host_menu_offsets() {
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
     t5nmi(Party_KickMember);
+    t5nmi(Live_IsLocalXuid);
     t5nmi(Party_UpdateState);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);

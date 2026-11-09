@@ -54,9 +54,14 @@
 #define T5_Material_RegisterHandle 0x7458D8
 // (party, memberIndex, reason), name inferred. The stock kick: used by the kickPlayer UI script (0x44ADF8) and wager
 // kicks. Sends "%ikicked %s" to the member, then removes every member at its netadr (guests on the same console) with
-// 0x208BD8 (party, memberIndex, notify 0, reason). 0x208BD8 with notify 1 would send "endparty <reason>" instead, and
-// on LobbyParty also removes the member's XUID from the linked GameParty (LobbyParty + 0x57E0, set at 0x1E8B04).
+// 0x208BD8 (party, memberIndex, notify 0, reason). That loop does not skip the host's slot, so the stock kickPlayer
+// refuses local XUIDs first (0x44AE80). 0x208BD8 removes the member's XUID from the linked party as well
+// (LobbyParty + 0x57E0 = GameParty, set at 0x1E8B04) if we host it, for either notify value: notify 1 only sends
+// "endparty <reason>" first (0x208D00), then joins the same path at 0x208D60.
 #define T5_Party_KickMember 0x20DA18
+// (xuid), 1 if the XUID is one of the 4 local users' (table at 0x2000A10, stride 0x48, XUID at +0x28). Name inferred,
+// whether the table only holds signed-in users is unverified.
+#define T5_Live_IsLocalXuid 0x68BFC8
 // (party), the xupdatepartystate command (0x1D02C0, with LobbyParty). Returns unless the party is active and the
 // local player hosts it (0x1E7068), then copies ui_mapname / ui_gametype into the party (0x1EAE70 / 0x1EAE38) and
 // sends partystate, which carries both to the members. Name inferred.
@@ -175,6 +180,7 @@
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name, +0x5C clan tag
 #define T5_PartyMemberSize 0x220
+#define T5_PartyMemberXuidOffset 0x10 // uint64, read by 0x208D84 and looked up in the linked party with 0x1E68E0
 #define T5_PartyMaxMembers 18 // members of T5_PartyMemberSize at T5_PartyMembersOffset
 #define T5_PartyMemberNameOffset 0x18
 #define T5_PartyMemberNameSize 0x20 // next field at +0x38
