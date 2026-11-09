@@ -53,6 +53,10 @@
 // names.
 #define T5_Material_RegisterHandle 0x7458D8
 #define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
+// (party), the xupdatepartystate command (0x1D02C0, with LobbyParty). Returns unless the party is active and the
+// local player hosts it (0x1E7068), then copies ui_mapname / ui_gametype into the party (0x1EAE70 / 0x1EAE38) and
+// sends partystate, which carries both to the members. Name inferred.
+#define T5_Party_UpdateState 0x207770
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0

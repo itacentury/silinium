@@ -545,6 +545,26 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
     GamerProfile_UpdateProfileFromDvars(controller, 1);
 }
 
+// The game's select_map / select_game_mode menus only set ui_mapname / ui_gametype; the
+// members only see them once the host sends partystate again. Stock lobby menus do that
+// on menu load, which the menus opened by the host menu skip.
+static char syncedMap[64];
+static char syncedGametype[64];
+
+static void sync_party_map() {
+    const char* map = Dvar_GetString("ui_mapname");
+    const char* gametype = Dvar_GetString("ui_gametype");
+    if (!map || !gametype ||
+        (!strcmp(map, syncedMap) && !strcmp(gametype, syncedGametype))) {
+        return;
+    }
+    snprintf(syncedMap, sizeof(syncedMap), "%s", map);
+    snprintf(syncedGametype, sizeof(syncedGametype), "%s", gametype);
+    // No-op for a party the local player doesn't host.
+    Party_UpdateState(T5_LobbyParty);
+    Party_UpdateState(T5_GameParty);
+}
+
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     static bool unbanAllWarned;
     Menu_PaintAll_Trampoline(a1, uiContext);
@@ -626,11 +646,15 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             hostMenu.selectGametypePending = false;
             Menus_OpenByName(0, uiContext, "select_game_mode");
         }
+        sync_party_map();
         if (hostMenu.saveStatsKeyboardPending) {
             hostMenu.saveStatsKeyboardPending = false;
             host_menu_ui_open_stats_keyboard();
         }
     } else {
+        // Resend once in the next lobby, the parties are set up again after a match.
+        syncedMap[0] = 0;
+        syncedGametype[0] = 0;
         // The same command as End Game in the pause menu. -1 is the menu index the game
         // sends for a menu that isn't a script menu.
         if (hostMenu.endGamePending) {
@@ -824,6 +848,7 @@ static void init_host_menu_offsets() {
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
     t5nmi(Party_RemoveMember);
+    t5nmi(Party_UpdateState);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);
     t5nmi(ClanTag_Format);
