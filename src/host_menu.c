@@ -107,7 +107,9 @@ void host_menu_set_local_name(const char* name) {
     }
 
     // The userinfo takes the name from PlayerName2; the flag makes the client send it
-    // again, the server then updates the name for everyone.
+    // again, the server then updates the name for everyone. The |= is not atomic: it is
+    // only safe because the keyboard callback and Menu_PaintAll presumably run on the
+    // same thread as the client frame (0x1CDE70) that clears the flag (unverified).
     if (Dvar_GetBool("cl_ingame")) {
         *(int*)T5_DvarModifiedFlags |= DVAR_USERINFO;
     }
