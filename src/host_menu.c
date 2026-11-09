@@ -266,6 +266,11 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
     if (strncmp(memberName, name, sizeof(hostMenu.lobbyKickName) - 1) != 0) {
         return;
     }
+    // remove_party_member never kicks players on this console, so a ban here would only
+    // take up a list entry for the whole session.
+    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
+        return;
+    }
     if (ban) {
         if (!Party_IsBanned(memberName)) {
             Party_BanName(memberName);

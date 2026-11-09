@@ -440,6 +440,11 @@ static void queue_kick(bool ban) {
         !PARTY_MEMBER_USED(party, member)) {
         return;
     }
+    // The kick removes every slot at the member's netadr, so a split-screen player on
+    // this console can't be kicked without the host.
+    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
+        return;
+    }
     hostMenu.lobbyKickParty = party;
     strncpy(hostMenu.lobbyKickName, PARTY_MEMBER_NAME(party, member),
             sizeof(hostMenu.lobbyKickName) - 1);
