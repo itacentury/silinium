@@ -64,19 +64,32 @@ int host_menu_lobby_party() {
     return party && party_is_local_host(party) ? party : 0;
 }
 
-// The party copies the name into the local member only when it's added, and the host
-// sends it to everyone in partystate. The host index is unverified, so the slot must
-// still hold the old name.
-static void rename_local_party_member(int party, const char* oldName, const char* name) {
+// The party copies the name into the local member only when it's added; members only
+// see the new one with the next partystate (see send_party_rename). The host index is
+// unverified, so the slot must still hold the old name.
+static bool rename_local_party_member(int party, const char* oldName, const char* name) {
     if (!party_is_local_host(party)) {
-        return;
+        return false;
     }
     int member = *(int*)(party + T5_PartyHostIndexOffset);
     if (member < 0 || member >= T5_PartyMaxMembers || !PARTY_MEMBER_USED(party, member) ||
         strcmp(PARTY_MEMBER_NAME(party, member), oldName) != 0) {
-        return;
+        return false;
     }
     snprintf((char*)PARTY_MEMBER_NAME(party, member), T5_PartyMemberNameSize, "%s", name);
+    return true;
+}
+
+// Party_UpdateState also copies ui_mapname / ui_gametype into the party before sending.
+// In a private match those are the stock map / mode selection the stock lobby menus send
+// on load anyway; in other lobbies they may not be what the party advertises, so the
+// name only shows up with the next partystate there. That xblive_privatematch marks the
+// private match on 1.13 is unverified; without the dvar nothing is sent.
+static void send_party_rename(int party) {
+    if (Dvar_GetBool("cl_ingame") || !Dvar_GetBool("xblive_privatematch")) {
+        return;
+    }
+    Party_UpdateState(party);
 }
 
 void host_menu_set_local_name(const char* name) {
@@ -86,8 +99,12 @@ void host_menu_set_local_name(const char* name) {
     strcpy((char*)T5_PlayerName1, name);
     strcpy((char*)T5_PlayerName2, name);
 
-    rename_local_party_member(T5_LobbyParty, oldName, name);
-    rename_local_party_member(T5_GameParty, oldName, name);
+    if (rename_local_party_member(T5_LobbyParty, oldName, name)) {
+        send_party_rename(T5_LobbyParty);
+    }
+    if (rename_local_party_member(T5_GameParty, oldName, name)) {
+        send_party_rename(T5_GameParty);
+    }
 
     // The userinfo takes the name from PlayerName2; the flag makes the client send it
     // again, the server then updates the name for everyone.
