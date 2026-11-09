@@ -202,9 +202,8 @@
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 // dvar_modifiedFlags: Dvar_SetVariant ORs the flags of a changed dvar in (0x4C8788). While connected the client frame
-// (0x1CDE70) sends its userinfo to the server when T5_DvarFlagUserinfo is set, then clears it (0x1C7B48).
+// (0x1CDE70) sends its userinfo to the server when DVAR_USERINFO is set, then clears it (0x1C7B48).
 #define T5_DvarModifiedFlags 0x18F019C
-#define T5_DvarFlagUserinfo 0x2
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int
 #define T5_DvarPtr_BBA19C 0xBBA19C // bool dvar, default true (probably jump_slowdownEnable)
 #define T5_DvarPtr_BBA1A4 0xBBA1A4 // float dvar, default 300 (probably bg_fallDamageMaxHeight)

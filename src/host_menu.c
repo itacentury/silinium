@@ -109,7 +109,7 @@ void host_menu_set_local_name(const char* name) {
     // The userinfo takes the name from PlayerName2; the flag makes the client send it
     // again, the server then updates the name for everyone.
     if (Dvar_GetBool("cl_ingame")) {
-        *(int*)T5_DvarModifiedFlags |= T5_DvarFlagUserinfo;
+        *(int*)T5_DvarModifiedFlags |= DVAR_USERINFO;
     }
 }
 
