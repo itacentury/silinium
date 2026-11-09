@@ -7,7 +7,7 @@
 #include "defines.h"
 #include "stats_file.h"
 
-#define HOST_MENU_MAX_MENUS 5
+#define HOST_MENU_MAX_MENUS 7
 #define HOST_MENU_MAX_OPTIONS 30
 #define HOST_MENU_KICK_BAN \
     0x40  // or'd into kickClient and lobbyKickMember, above any client num or member
@@ -25,8 +25,11 @@ typedef enum HostMenuId {
     HOST_MENU_KICK = 1,  // player list
     HOST_MENU_PLAYER =
         2,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
-    HOST_MENU_STATS = 3,      // saved stats files
-    HOST_MENU_STATS_FILE = 4  // actions for the file selected in HOST_MENU_STATS, a modal
+    HOST_MENU_STATS = 3,  // saved stats files
+    HOST_MENU_STATS_FILE =
+        4,  // actions for the file selected in HOST_MENU_STATS, a modal
+    HOST_MENU_ACCOUNT = 5,
+    HOST_MENU_PATCHES = 6
 } HostMenuId;
 
 typedef enum HostMenuStatsAction {

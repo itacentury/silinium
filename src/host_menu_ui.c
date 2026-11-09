@@ -367,6 +367,10 @@ static void reset_name() { hostMenu.resetNamePending = true; }
 
 static void open_player_menu() { hostMenu.current = HOST_MENU_KICK; }
 
+static void open_account_menu() { hostMenu.current = HOST_MENU_ACCOUNT; }
+
+static void open_patches_menu() { hostMenu.current = HOST_MENU_PATCHES; }
+
 // Only the host can act on players: in game the host runs the listen server, in the lobby
 // it hosts the lobby's party.
 static bool can_manage_players(bool inGame) {
@@ -569,7 +573,7 @@ static void queue_stats_action(HostMenuStatsAction action) {
 
 static void load_selected_stats() {
     queue_stats_action(HOST_MENU_STATS_LOAD);
-    hostMenu.current = HOST_MENU_MAIN;
+    hostMenu.current = HOST_MENU_ACCOUNT;
 }
 
 static void delete_selected_stats() {
@@ -581,7 +585,7 @@ static void delete_selected_stats() {
 static void close_stale_stats_menu(bool inGame) {
     if (inGame && (hostMenu.current == HOST_MENU_STATS ||
                    hostMenu.current == HOST_MENU_STATS_FILE)) {
-        hostMenu.current = HOST_MENU_MAIN;
+        hostMenu.current = HOST_MENU_ACCOUNT;
     }
 }
 
@@ -781,33 +785,45 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_MAIN, "Select Gametype", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                select_gametype)
         ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Depatch Bounces", HOST_MENU_TYPE_BOOL,
-               &hostMenu.depatchBounces, 0, 0, depatch_bounces);
-    add_option(HOST_MENU_MAIN, "Disable DLC", HOST_MENU_TYPE_BOOL, &hostMenu.disableDlc,
-               0, 0, disable_dlc);
-    add_option(HOST_MENU_MAIN, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
-               &hostMenu.antiGodClasses, 0, 0, anti_god_classes)
-        ->visible = anti_god_classes_visible;
-    add_option(HOST_MENU_MAIN, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
-               host_menu_write_recovery)
-        ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Prestige Unlocks", HOST_MENU_TYPE_BOOL,
-               &hostMenu.prestigeUnlocks, 0, 0, prestige_unlocks);
-    add_option(HOST_MENU_MAIN, "Prestige", HOST_MENU_TYPE_INT, &hostMenu.prestige, 0, 16,
-               set_prestige)
-        ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Save Stats", HOST_MENU_TYPE_ACTION, 0, 0, 0, save_stats)
-        ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Load Stats", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
-               open_stats_menu)
-        ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
-               change_name);
-    add_option(HOST_MENU_MAIN, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0, reset_name);
     add_option(HOST_MENU_MAIN, "End Game", HOST_MENU_TYPE_ACTION, 0, 0, 0, end_game)
         ->inGameOnly = true;
+    add_option(HOST_MENU_MAIN, "Patches", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
+               open_patches_menu);
+    add_option(HOST_MENU_MAIN, "Account Settings", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
+               open_account_menu);
     add_option(HOST_MENU_MAIN, "Player Menu", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
                open_player_menu);
+
+    hostMenu.title[HOST_MENU_PATCHES] = "Patches";
+    hostMenu.parent[HOST_MENU_PATCHES] = HOST_MENU_MAIN;
+    add_option(HOST_MENU_PATCHES, "Depatch Bounces", HOST_MENU_TYPE_BOOL,
+               &hostMenu.depatchBounces, 0, 0, depatch_bounces);
+    add_option(HOST_MENU_PATCHES, "Disable DLC", HOST_MENU_TYPE_BOOL,
+               &hostMenu.disableDlc, 0, 0, disable_dlc);
+    add_option(HOST_MENU_PATCHES, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
+               &hostMenu.antiGodClasses, 0, 0, anti_god_classes)
+        ->visible = anti_god_classes_visible;
+
+    hostMenu.title[HOST_MENU_ACCOUNT] = "Account Settings";
+    hostMenu.parent[HOST_MENU_ACCOUNT] = HOST_MENU_MAIN;
+    add_option(HOST_MENU_ACCOUNT, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               host_menu_write_recovery)
+        ->lobbyOnly = true;
+    add_option(HOST_MENU_ACCOUNT, "Prestige Unlocks", HOST_MENU_TYPE_BOOL,
+               &hostMenu.prestigeUnlocks, 0, 0, prestige_unlocks);
+    add_option(HOST_MENU_ACCOUNT, "Prestige", HOST_MENU_TYPE_INT, &hostMenu.prestige, 0,
+               16, set_prestige)
+        ->lobbyOnly = true;
+    add_option(HOST_MENU_ACCOUNT, "Save Stats", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               save_stats)
+        ->lobbyOnly = true;
+    add_option(HOST_MENU_ACCOUNT, "Load Stats", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
+               open_stats_menu)
+        ->lobbyOnly = true;
+    add_option(HOST_MENU_ACCOUNT, "Change Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               change_name);
+    add_option(HOST_MENU_ACCOUNT, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+               reset_name);
 
     hostMenu.title[HOST_MENU_KICK] = "Players";
     hostMenu.parent[HOST_MENU_KICK] = HOST_MENU_MAIN;
@@ -823,7 +839,7 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
 
     hostMenu.title[HOST_MENU_STATS] = "Load Stats";
-    hostMenu.parent[HOST_MENU_STATS] = HOST_MENU_MAIN;  // filled by open_stats_menu
+    hostMenu.parent[HOST_MENU_STATS] = HOST_MENU_ACCOUNT;  // filled by open_stats_menu
 
     hostMenu.title[HOST_MENU_STATS_FILE] = "Stats";  // the modal shows the file name
     hostMenu.parent[HOST_MENU_STATS_FILE] = HOST_MENU_STATS;
