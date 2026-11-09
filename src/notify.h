@@ -58,5 +58,8 @@ void notify_init();
 // timeout of 250 ms each, connect timeout unverified), not for the render thread.
 // Returns whether webMAN took the request.
 bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound);
+// Like notify_popup, but never logs a failure; for retries whose early failures are
+// expected.
+bool notify_popup_quiet(const char* text, NotifyIcon icon, NotifySound sound);
 
 #endif /* NOTIFY_H */
