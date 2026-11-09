@@ -113,7 +113,10 @@ static PartyRemoval* party_removal(int party, int member) {
     return &lastRemovals[party == T5_GameParty][member];
 }
 
-// Whether Party_RemoveMember frees the slot right away is unverified. If it doesn't, the
+// Goes through the stock kick: Party_RemoveMember with notify sends "endparty" instead,
+// and with the host's own party in the lobby that dropped every party member along with
+// the kicked player (seen in game, the exact chain is unverified).
+// Whether the kick frees the slot right away is unverified. If it doesn't, the
 // banned member would be removed (and sent "endparty") every frame, so a slot just
 // removed is skipped for a second. The cooldown is kept per slot, so several members
 // waiting to be freed don't reset each other's. The name is compared so another player
@@ -132,10 +135,10 @@ static void remove_party_member(int party, int member, const char* reason) {
         removal->name[sizeof(removal->name) - 1] = 0;
         removal->time = now;
     }
-    Party_RemoveMember(party, member, 1, reason);
+    Party_KickMember(party, member, reason);
     if (!logged) {
         logged = true;
-        printf(T5INFO "Party_RemoveMember: slot %d still used afterwards: %d.", member,
+        printf(T5INFO "Party_KickMember: slot %d still used afterwards: %d.", member,
                PARTY_MEMBER_USED(party, member));
     }
 }
@@ -847,7 +850,7 @@ static void init_host_menu_offsets() {
     t5nmi(R_TextWidth);
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
-    t5nmi(Party_RemoveMember);
+    t5nmi(Party_KickMember);
     t5nmi(Party_UpdateState);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);

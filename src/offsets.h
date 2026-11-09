@@ -52,7 +52,11 @@
 // DB_FindXAssetHeader(material, name, errorIfMissing 1, wait forever): a miss creates a default entry, only for fixed
 // names.
 #define T5_Material_RegisterHandle 0x7458D8
-#define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
+// (party, memberIndex, reason), name inferred. The stock kick: used by the kickPlayer UI script (0x44ADF8) and wager
+// kicks. Sends "%ikicked %s" to the member, then removes every member at its netadr (guests on the same console) with
+// 0x208BD8 (party, memberIndex, notify 0, reason). 0x208BD8 with notify 1 would send "endparty <reason>" instead, and
+// on LobbyParty also removes the member's XUID from the linked GameParty (LobbyParty + 0x57E0, set at 0x1E8B04).
+#define T5_Party_KickMember 0x20DA18
 // (party), the xupdatepartystate command (0x1D02C0, with LobbyParty). Returns unless the party is active and the
 // local player hosts it (0x1E7068), then copies ui_mapname / ui_gametype into the party (0x1EAE70 / 0x1EAE38) and
 // sends partystate, which carries both to the members. Name inferred.

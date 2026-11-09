@@ -69,8 +69,7 @@ t5nd(int, R_TextWidth, (const char* text, int maxChars, void* font));
 t5nd(unsigned int, SL_GetString, (const char* str, unsigned int user, unsigned int inst));
 t5nd(void*, R_RegisterFont, (const char* name, int imageTrack));
 t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
-t5nd(void, Party_RemoveMember,
-     (int party, int memberIndex, int notify, const char* reason));
+t5nd(void, Party_KickMember, (int party, int memberIndex, const char* reason));
 t5nd(void, Party_UpdateState, (int party));
 t5nd(void, Party_BanName, (const char* name));
 t5nd(int, Party_IsBanned, (const char* name));
