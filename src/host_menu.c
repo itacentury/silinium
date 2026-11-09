@@ -134,7 +134,7 @@ static PartyRemoval* party_removal(int party, int member) {
 // and with the host's own party in the lobby that dropped every party member along with
 // the kicked player (seen in game, the exact chain is unverified).
 // Whether the kick frees the slot right away is unverified. If it doesn't, the
-// banned member would be removed (and sent "endparty") every frame, so a slot just
+// banned member would be removed (and sent "kicked") every frame, so a slot just
 // removed is skipped for a second. The cooldown is kept per slot, so several members
 // waiting to be freed don't reset each other's. The name is compared so another player
 // taking the slot in that second is still removed.
