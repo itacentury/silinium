@@ -18,7 +18,11 @@ static bool modPathResolved = false;
 // non-host compiles them only for the checksum check, and only while sv_running is false
 // (CG_RegisterGraphics). Traced in MP, inferred for ZM.
 static bool is_server_running() {
-    dvar_s* svRunning = Dvar_FindVar("sv_running");
+    // Dvars are never moved or freed once registered.
+    static dvar_s* svRunning = NULL;
+    if (!svRunning) {
+        svRunning = Dvar_FindVar("sv_running");
+    }
     return svRunning && svRunning->current.enabled;
 }
 
@@ -33,6 +37,9 @@ char* Scr_LoadRawFile_FastFile_Hook(scriptInstance_t inst, const char* filename,
 
         if (*modPath) {
             printf(T5INFO "Active mod: '%s'.", loader.currentModName);
+            // Assumes the first script of a load comes after SV_SpawnServer on the host;
+            // a CSC loaded earlier would log this wrongly. Only the log is affected,
+            // every file checks sv_running again.
             if (!is_server_running()) {
                 printf(T5INFO "Not hosting, server scripts are not replaced.");
             }
