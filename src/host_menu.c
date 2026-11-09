@@ -12,7 +12,6 @@
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
-#include "notify.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -798,7 +797,6 @@ static void init_host_menu_offsets() {
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
     t5nmi(FindEntityId);
-    notify_init();
 }
 
 static int init_host_menu_hooks() {

@@ -3,11 +3,25 @@
 #include <sys/prx.h>
 #include <sys/timer.h>
 
+#include "notify.h"
 #include "t5.h"
 #include "utils.h"
 
 SYS_MODULE_INFO(Silinium, 0, 1, 1);
 SYS_MODULE_START(start);
+
+// The launcher runs right after the modules are loaded, possibly before the game has
+// initialized its network, so the first attempts may fail (unverified on console).
+#define LOADED_NOTIFY_ATTEMPTS 10
+
+static void notify_loaded() {
+    for (int attempt = 0; attempt < LOADED_NOTIFY_ATTEMPTS; attempt++) {
+        if (notify_popup("Silinium loaded", NOTIFY_ICON_INFO, NOTIFY_SOUND_NONE)) {
+            return;
+        }
+        sys_timer_sleep(1);
+    }
+}
 
 void launcher() {
     sys_prx_get_module_list_t pInfo;
@@ -23,6 +37,10 @@ void launcher() {
 
     if (init_game() == 0) {
         printf(T5INFO "Silinium ready.");
+        // Notifications are MP only, the sys_net stubs have no ZM offsets.
+        if (isMultiplayer) {
+            notify_loaded();
+        }
     }
 
     sys_ppu_thread_exit(0);
