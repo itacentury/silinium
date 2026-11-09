@@ -39,6 +39,8 @@ Create a folder in `/dev_hdd0/tmp/Silinium/mp` or `/dev_hdd0/tmp/Silinium/zm`. B
 
 Files in the mod folder **replace the game scripts (GSC/CSC) with the same path**, like InfinityOps does with `/dev_hdd0/tmp/raw`. For example `/dev_hdd0/tmp/Silinium/mp/welcome/maps/mp/gametypes/_clientids.gsc` replaces `maps/mp/gametypes/_clientids.gsc`. Only scripts the game loads through `Scr_LoadRawFile_FastFile` are replaced; other rawfiles such as `.cfg` files, string tables or menus are not. The game loads and starts the replaced scripts itself, so there is no `main.gsc` entry point anymore. New files are loaded too when a replaced script includes them.
 
+Server scripts (GSC) are only replaced in games you host. When you join someone else's game, your console compiles them only to check the checksum against the host's and never runs them, so the stock scripts are kept there and a broken or untabled mod can't stop you from joining. Client scripts (CSC) run on every console and are always replaced.
+
 The game requests scripts by their canonical name (lowercase, with `/` as separator) and the PS3 HDD is case-sensitive, so folder and file names in the mod must be lowercase.
 
 The tmp directory has an example for each mode: MP replaces `maps/mp/gametypes/_clientids.gsc`, ZM replaces `maps/_zombiemode_user.gsc` (an empty stub in the stock game that every zombies map calls; this example is not yet tested on console).

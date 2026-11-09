@@ -14,6 +14,14 @@
 static char modPath[CELL_FS_MAX_FS_PATH_LENGTH];
 static bool modPathResolved = false;
 
+// The host sets sv_running in SV_SpawnServer before it compiles the server scripts. A
+// non-host compiles them only for the checksum check, and only while sv_running is false
+// (CG_RegisterGraphics). Traced in MP, inferred for ZM.
+static bool is_server_running() {
+    dvar_s* svRunning = Dvar_FindVar("sv_running");
+    return svRunning && svRunning->current.enabled;
+}
+
 char* Scr_LoadRawFile_FastFile_Hook(scriptInstance_t inst, const char* filename,
                                     const char* extFilename, const char* codePos,
                                     bool archive) {
@@ -25,9 +33,18 @@ char* Scr_LoadRawFile_FastFile_Hook(scriptInstance_t inst, const char* filename,
 
         if (*modPath) {
             printf(T5INFO "Active mod: '%s'.", loader.currentModName);
+            if (!is_server_running()) {
+                printf(T5INFO "Not hosting, server scripts are not replaced.");
+            }
         } else {
             printf(T5INFO "No mod active.");
         }
+    }
+
+    // A non-host never runs the server scripts; stock ones keep its checksum valid.
+    if (inst == SCRIPTINSTANCE_SERVER && !is_server_running()) {
+        return Scr_LoadRawFile_FastFile_Trampoline(inst, filename, extFilename, codePos,
+                                                   archive);
     }
 
     // Any file of the active mod with the same path as the game file replaces the
@@ -88,8 +105,9 @@ void Scr_GetChecksum_Hook(scrChecksum_t* checksum, scriptInstance_t inst) {
     bool modActive = *modPath != 0;
     modPathResolved = false;  // re-resolve on the next script load
 
-    // Only server checksums are verified, and vanilla scripts already have the right one.
-    if (inst != SCRIPTINSTANCE_SERVER || !modActive) {
+    // Only server checksums are verified, and vanilla scripts already have the right one
+    // (a non-host compiles them unmodified).
+    if (inst != SCRIPTINSTANCE_SERVER || !modActive || !is_server_running()) {
         return;
     }
 
