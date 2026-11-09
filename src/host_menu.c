@@ -582,13 +582,17 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
 // members only see them once the host sends partystate again. Stock lobby menus do that
 // on menu load, which the menus opened by the host menu skip. Only armed once the host
 // menu opened one of them in this lobby, so stock flows (public lobbies, the stock
-// private-match menus) never send partystate from here.
+// private-match menus) never send partystate from here. Disarmed once the match starts or
+// the hosted lobby it belongs to is gone.
 static bool mapSyncArmed;
+// Set once a hosted party was seen since arming, so leaving that lobby disarms the sync.
+static bool mapSyncHosted;
 static char syncedMap[64];
 static char syncedGametype[64];
 
 static void arm_party_map_sync() {
     mapSyncArmed = true;
+    mapSyncHosted = false;
     syncedMap[0] = 0;
     syncedGametype[0] = 0;
 }
@@ -600,10 +604,15 @@ static void sync_party_map() {
     bool lobbyHosted = party_is_local_host(T5_LobbyParty);
     bool gameHosted = party_is_local_host(T5_GameParty);
     // Party_UpdateState does nothing then; nothing is marked synced, so it is sent once a
-    // party is up.
+    // party is up. If a hosted party was already seen, the host left that lobby (e.g. to
+    // the main menu) and the sync must not carry over to the next one.
     if (!lobbyHosted && !gameHosted) {
+        if (mapSyncHosted) {
+            mapSyncArmed = false;
+        }
         return;
     }
+    mapSyncHosted = true;
     const char* map = Dvar_GetString("ui_mapname");
     const char* gametype = Dvar_GetString("ui_gametype");
     if (!map || !gametype ||
