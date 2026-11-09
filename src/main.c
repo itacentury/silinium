@@ -31,7 +31,8 @@ static void notify_loaded() {
         }
         sys_timer_sleep(1);
     }
-    printf(T5WARNING "No webMAN on 127.0.0.1, the loaded notification was not shown.");
+    printf(T5WARNING
+           "Could not reach webMAN on 127.0.0.1, the loaded notification was not shown.");
 }
 
 void launcher() {
