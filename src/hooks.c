@@ -16,7 +16,9 @@ static bool modPathResolved = false;
 
 // The host sets sv_running in SV_SpawnServer before it compiles the server scripts. A
 // non-host compiles them only for the checksum check, and only while sv_running is false
-// (CG_RegisterGraphics). Traced in MP, inferred for ZM.
+// (CG_RegisterGraphics). Traced in MP, inferred for ZM. A host through migration takes
+// the same path (NetMsg_migrateto queues "map <mapname> 1 1"); traced in MP, untested on
+// console.
 static bool is_server_running() {
     // Dvars are never moved or freed once registered.
     static dvar_s* svRunning = NULL;
