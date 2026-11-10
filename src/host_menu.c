@@ -1,5 +1,6 @@
 #include "host_menu.h"
 
+#include <cell/atomic.h>
 #include <ppu_intrinsics.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -448,8 +449,16 @@ static void show_game_messages() {
 
 // callkeyboard: requested on the server thread, opened on the UI thread, and the text is
 // sent back on the server thread. Each step only runs in the state the previous one left.
-enum { KEYBOARD_IDLE, KEYBOARD_REQUESTED, KEYBOARD_OPEN, KEYBOARD_ENTERED };
-static volatile int keyboardState;
+// In game Change Name holds the same state (KEYBOARD_NAME): a second UI_OpenKeyboard most
+// likely replaces the open keyboard's callback, so only one of them may be up at a time.
+enum {
+    KEYBOARD_IDLE,
+    KEYBOARD_REQUESTED,
+    KEYBOARD_OPEN,
+    KEYBOARD_ENTERED,
+    KEYBOARD_NAME
+};
+static volatile uint32_t keyboardState;
 static char16 keyboardTitle[64];
 static int keyboardClient;
 static char keyboardText[65];
@@ -472,8 +481,23 @@ bool host_menu_request_keyboard(const char* title, int clientNum) {
     keyboardClient = clientNum;
     // Title and client have to be visible before the state that marks them ready.
     __lwsync();
-    keyboardState = KEYBOARD_REQUESTED;
-    return true;
+    // The UI thread may have taken the keyboard for Change Name since the check above.
+    return cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_IDLE,
+                                      KEYBOARD_REQUESTED) == KEYBOARD_IDLE;
+}
+
+// In the lobby there is no callkeyboard, so the name keyboard doesn't take the state.
+static void open_name_keyboard(bool inGame) {
+    if (inGame && cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_IDLE,
+                                             KEYBOARD_NAME) != KEYBOARD_IDLE) {
+        printf(T5INFO "Change Name skipped, a script keyboard is open.");
+        return;
+    }
+    host_menu_ui_open_name_keyboard();
+}
+
+void host_menu_name_keyboard_closed() {
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
 }
 
 static void keyboard_input_callback(int localClientNum, const char16* text, int length) {
@@ -683,9 +707,10 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostMenu.statsLoadPending = false;
     }
 
+    bool inGame = Dvar_GetBool("cl_ingame");
     if (hostMenu.changeNamePending) {
         hostMenu.changeNamePending = false;
-        host_menu_ui_open_name_keyboard();
+        open_name_keyboard(inGame);
     }
     if (hostMenu.resetNamePending) {
         hostMenu.resetNamePending = false;
@@ -697,7 +722,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
 
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
-    if (!Dvar_GetBool("cl_ingame")) {
+    if (!inGame) {
         int kick = hostMenu.lobbyKickMember;
         if (kick != -1) {
             // Pairs with the one in queue_kick: party and name are read only after the

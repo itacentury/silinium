@@ -150,5 +150,7 @@ void host_menu_read_profile_names(struct StatsFileProfile* profile);
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);
+// Called from the Change Name keyboard's callback, lets callkeyboard open again.
+void host_menu_name_keyboard_closed();
 
 #endif /* HOST_MENU_H */

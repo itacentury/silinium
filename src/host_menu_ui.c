@@ -673,6 +673,7 @@ void host_menu_ui_run_stats_actions(bool inGame) {
 // ---------------------------------------------------------------------------
 
 static void keyboard_callback(int localClientNum, const char16* text, int length) {
+    host_menu_name_keyboard_closed();
     char name[17];
     int i;
     for (i = 0; i < length && i < (int)sizeof(name) - 1 && text[i]; i++) {
