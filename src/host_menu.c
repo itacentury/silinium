@@ -605,12 +605,10 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
 // The game's select_map / select_game_mode menus only set ui_mapname / ui_gametype; the
 // members only see them once the host sends partystate again. Stock lobby menus do that
 // on menu load, which the menus opened by the host menu skip. Only armed once the host
-// menu opened one of them in this lobby, so stock flows (public lobbies, the stock
-// private-match menus) never send partystate from here. Disarmed once the match starts or
-// the hosted lobby it belongs to is gone.
+// menu opened one of them while a party is hosted, so stock flows (public lobbies, the
+// stock private-match menus) never send partystate from here. Disarmed once the match
+// starts or the hosted lobby it belongs to is gone.
 static bool mapSyncArmed;
-// Set once a hosted party was seen since arming, so leaving that lobby disarms the sync.
-static bool mapSyncHosted;
 static char syncedMap[64];
 static char syncedGametype[64];
 
@@ -622,9 +620,13 @@ static void store_synced_party_map() {
 }
 
 // The current selection counts as synced, so partystate only goes out on a real change.
+// Without a hosted party the baseline would belong to no lobby and could send partystate
+// in the next one the player hosts.
 static void arm_party_map_sync() {
+    if (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty)) {
+        return;
+    }
     mapSyncArmed = true;
-    mapSyncHosted = false;
     store_synced_party_map();
 }
 
@@ -634,17 +636,12 @@ static void sync_party_map() {
     }
     bool lobbyHosted = party_is_local_host(T5_LobbyParty);
     bool gameHosted = party_is_local_host(T5_GameParty);
-    // Party_UpdateState does nothing then; a change made meanwhile is not marked synced,
-    // so it is sent once a party is up. If a hosted party was already seen, the host left
-    // that lobby (e.g. to the main menu) and the sync must not carry over to the next
-    // one.
+    // The host left the lobby (e.g. to the main menu); the sync must not carry over to
+    // the next one.
     if (!lobbyHosted && !gameHosted) {
-        if (mapSyncHosted) {
-            mapSyncArmed = false;
-        }
+        mapSyncArmed = false;
         return;
     }
-    mapSyncHosted = true;
     const char* map = Dvar_GetString("ui_mapname");
     const char* gametype = Dvar_GetString("ui_gametype");
     if (!map || !gametype ||
@@ -653,6 +650,8 @@ static void sync_party_map() {
     }
     snprintf(syncedMap, sizeof(syncedMap), "%s", map);
     snprintf(syncedGametype, sizeof(syncedGametype), "%s", gametype);
+    // Unlike send_party_rename not limited to private matches: the host picked this map /
+    // mode on purpose through the host menu, so advertising it is intended in any lobby.
     if (lobbyHosted) {
         Party_UpdateState(T5_LobbyParty);
     }
