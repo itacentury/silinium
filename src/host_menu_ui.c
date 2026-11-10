@@ -356,10 +356,13 @@ static bool anti_god_classes_visible(bool inGame) { return anti_god_class_availa
 
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
 
+// The keyboard only works while the menu is closed, so it is opened by Menu_PaintAll.
 static void change_name() {
     if (!hostMenu.originalName[0]) {
         strcpy(hostMenu.originalName, (char*)T5_PlayerName2);
     }
+    sys_timer_usleep(200000);  // let X go before the game sees buttons again
+    hostMenu.open = false;
     hostMenu.changeNamePending = true;
 }
 
