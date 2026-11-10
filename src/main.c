@@ -20,6 +20,9 @@ SYS_MODULE_START(start);
 #define LOADED_NOTIFY_DEADLINE_US (15 * 1000 * 1000)
 
 static void notify_loaded() {
+    if (!notify_available()) {
+        return;
+    }
     system_time_t startTime = sys_time_get_system_time();
     for (int attempt = 0; attempt < LOADED_NOTIFY_ATTEMPTS; attempt++) {
         if (notify_popup_quiet("Silinium loaded", NOTIFY_ICON_INFO, NOTIFY_SOUND_NONE)) {

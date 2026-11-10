@@ -154,3 +154,5 @@ void notify_init() {
         printf(T5WARNING "sys_net imports not resolved, PS3 notifications are disabled.");
     }
 }
+
+bool notify_available() { return netResolved; }

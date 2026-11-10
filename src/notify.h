@@ -50,6 +50,9 @@ typedef enum {
 
 // MP only, the stubs have no ZM offsets.
 void notify_init();
+// Whether notify_init resolved the sys_net imports; without them no notification can be
+// sent.
+bool notify_available();
 // Shows text as a PS3 (XMB) notification through webMAN's /popup.ps3 on 127.0.0.1. The
 // notification lives in the VSH process, which a plugin in the game can't call, so
 // without webMAN nothing is shown. webMAN drops the icon while a game is running
