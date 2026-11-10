@@ -352,7 +352,9 @@ static void anti_god_classes() {
 }
 
 // Without its hooks the check would run on stats that were never fixed.
-static bool anti_god_classes_visible(bool inGame) { return anti_god_class_available(); }
+static bool anti_god_classes_visible(const HostMenuOption* option, bool inGame) {
+    return anti_god_class_available();
+}
 
 static void set_prestige() { host_menu_write_prestige(hostMenu.prestige); }
 
@@ -380,6 +382,21 @@ static bool can_manage_players(bool inGame) {
     return inGame ? Dvar_GetBool("sv_running") : host_menu_lobby_party() != 0;
 }
 
+// Whether slot i holds someone: a client num in game, a member index of party in the
+// lobby.
+static bool player_slot_used(int party, bool inGame, int i) {
+    if (inGame) {
+        return CG_CLIENTINFO_BASE && *CG_CLIENT_NAME(i);
+    }
+    return party && PARTY_MEMBER_USED(party, i);
+}
+
+// The player list only shows occupied slots. The option index is the slot.
+static bool player_slot_visible(const HostMenuOption* option, bool inGame) {
+    int party = inGame ? 0 : host_menu_lobby_view_party();
+    return player_slot_used(party, inGame, option - hostMenu.options[HOST_MENU_KICK]);
+}
+
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
@@ -388,7 +405,7 @@ static void open_player_modal() {
         return;
     }
     if (inGame) {
-        if (!CG_CLIENTINFO_BASE || !*CG_CLIENT_NAME(member)) {
+        if (!player_slot_used(0, true, member)) {
             return;
         }
         printf(T5INFO "Player menu: slot %i (%s), local client %i (%s).", member,
@@ -396,7 +413,7 @@ static void open_player_modal() {
         hostMenu.playerModalParty = 0;
     } else {
         int party = host_menu_lobby_party();
-        if (!party || !PARTY_MEMBER_USED(party, member)) {
+        if (!player_slot_used(party, false, member)) {
             return;
         }
         hostMenu.playerModalParty = party;
@@ -408,14 +425,17 @@ static void open_player_modal() {
 
 // The modal's slot is a member index in the lobby and a client num in game, so it can't
 // survive the switch. The same slot in the other party is someone else, so it also closes
-// when the shown party changes (one of the two went away), and when host rights are lost.
+// when the shown party changes (one of the two went away), when host rights are lost and
+// when the player leaves (the row it was drawn at is gone).
 static void close_stale_player_modal() {
     if (hostMenu.current != HOST_MENU_PLAYER) {
         return;
     }
     bool inGame = Dvar_GetBool("cl_ingame");
     if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame) ||
-        (!inGame && host_menu_lobby_view_party() != hostMenu.playerModalParty)) {
+        (!inGame && host_menu_lobby_view_party() != hostMenu.playerModalParty) ||
+        !player_slot_used(hostMenu.playerModalParty, inGame,
+                          hostMenu.cursor[HOST_MENU_KICK])) {
         hostMenu.current = HOST_MENU_KICK;
     }
 }
@@ -741,7 +761,7 @@ static HostMenuOption* add_option(HostMenuId m, const char* text, HostMenuOption
 
 static bool option_visible(const HostMenuOption* option, bool inGame) {
     return !(option->lobbyOnly && inGame) && !(option->inGameOnly && !inGame) &&
-           (!option->visible || option->visible(inGame));
+           (!option->visible || option->visible(option, inGame));
 }
 
 static int visible_option_count(int m, bool inGame) {
@@ -754,6 +774,17 @@ static int visible_option_count(int m, bool inGame) {
     return count;
 }
 
+// The row the cursor's option is drawn in: the visible options before it.
+static int visible_row(int m, bool inGame) {
+    int row = 0;
+    for (int i = 0; i < hostMenu.cursor[m]; i++) {
+        if (option_visible(&hostMenu.options[m][i], inGame)) {
+            row++;
+        }
+    }
+    return row;
+}
+
 // Moves the cursor by step (+1/-1) until it lands on a visible option, wrapping around.
 static void move_cursor(int m, int step, bool inGame) {
     for (int n = 0; n < hostMenu.optionCount[m]; n++) {
@@ -764,6 +795,24 @@ static void move_cursor(int m, int step, bool inGame) {
             hostMenu.cursor[m] = 0;
         }
         if (option_visible(&hostMenu.options[m][hostMenu.cursor[m]], inGame)) {
+            return;
+        }
+    }
+}
+
+// Moves the cursor off an option that got hidden: to the next visible one below, or the
+// last one above when there is none below. No wrap, so a player leaving from the last row
+// doesn't send the cursor to the top. Stays put when nothing is visible.
+static void move_cursor_off_hidden(int m, bool inGame) {
+    for (int i = hostMenu.cursor[m] + 1; i < hostMenu.optionCount[m]; i++) {
+        if (option_visible(&hostMenu.options[m][i], inGame)) {
+            hostMenu.cursor[m] = i;
+            return;
+        }
+    }
+    for (int i = hostMenu.cursor[m] - 1; i >= 0; i--) {
+        if (option_visible(&hostMenu.options[m][i], inGame)) {
+            hostMenu.cursor[m] = i;
             return;
         }
     }
@@ -838,7 +887,8 @@ void host_menu_ui_init() {
     hostMenu.parent[HOST_MENU_KICK] = HOST_MENU_MAIN;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         add_option(HOST_MENU_KICK, "", HOST_MENU_TYPE_ACTION, 0, 0, 0,
-                   open_player_modal);  // names are drawn live
+                   open_player_modal)  // names are drawn live
+            ->visible = player_slot_visible;
     }
 
     hostMenu.title[HOST_MENU_PLAYER] =
@@ -894,9 +944,10 @@ void host_menu_ui_handle_input() {
     int m = hostMenu.current;
     HostMenuOption* option = &hostMenu.options[m][hostMenu.cursor[m]];
 
-    // The cursor may sit on an option that got hidden since (e.g. the match started).
+    // The cursor may sit on an option that got hidden since (e.g. the match started, or
+    // the selected player left).
     if (!option_visible(option, inGame)) {
-        move_cursor(m, 1, inGame);
+        move_cursor_off_hidden(m, inGame);
         option = &hostMenu.options[m][hostMenu.cursor[m]];
     }
 
@@ -955,14 +1006,12 @@ void host_menu_ui_handle_input() {
 // Drawing (called from the Menu_PaintAll hook)
 // ---------------------------------------------------------------------------
 
+// Only for slots player_slot_used accepts, the list doesn't show the others.
 static const char* player_name(int party, bool inGame, int i) {
-    const char* name = "Not In Game";
-    if (inGame && CG_CLIENTINFO_BASE) {
-        name = CG_CLIENT_NAME(i);
-    } else if (party) {
-        name = PARTY_MEMBER_USED(party, i) ? PARTY_MEMBER_NAME(party, i) : "";
+    if (inGame) {
+        return CG_CLIENTINFO_BASE ? CG_CLIENT_NAME(i) : "";
     }
-    return *name ? name : "No Client Connected";
+    return PARTY_MEMBER_NAME(party, i);
 }
 
 // Size of the buffer ClanTag_Format writes to, like the lobby list's.
@@ -993,6 +1042,11 @@ static char playerIconsMap[64];
 static int playerListWidth;
 // The party the list showed last frame (0 in game), so the width is refit on a change.
 static int playerListParty;
+
+// The player list box is at least this many rows high, so the Kick/Ban modal (73 high)
+// fits below the first row: 258 + 6 + 73 <= rows * 16.5 + 248 needs 6 rows. With fewer
+// it would flip upward over the box's top edge and title.
+#define PLAYER_LIST_MIN_ROWS 6
 
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
@@ -1219,12 +1273,11 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
 }
 
 // The options of modalMenu below the selected row of listMenu, or above it when they
-// would reach past the bottom of the list box. Every row of the list is drawn, so the
-// cursor is the row.
+// would reach past the bottom of the list box.
 static void draw_modal(int listMenu, int modalMenu, const char* title, bool inGame,
                        float listBottom) {
     float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
-    float rowY = hostMenu.cursor[listMenu] * 16.5f + 258;
+    float rowY = visible_row(listMenu, inGame) * 16.5f + 258;
     float y = rowY + 6;
     if (y + height > listBottom) {
         y = rowY - 16 - height;
@@ -1292,6 +1345,9 @@ static int build_player_rows(int party, bool inGame) {
 
     float widest = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (!player_slot_used(party, inGame, i)) {
+            continue;
+        }
         float w = (*playerLevels[i] ? playerRankColumn : 0) + playerTagWidths[i] +
                   R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
         if (w > widest) {
@@ -1349,7 +1405,11 @@ void host_menu_ui_draw() {
     bool notHost = players && !inGame && !party;  // not in a lobby
     bool viewOnly = players && !notHost && !can_manage_players(inGame);
 
-    float height = (notHost ? 1 : visible_option_count(boxMenu, inGame)) * 16.5f + 48.0f;
+    int rows = notHost ? 1 : visible_option_count(boxMenu, inGame);
+    if (players && !notHost && rows < PLAYER_LIST_MIN_ROWS) {
+        rows = PLAYER_LIST_MIN_ROWS;
+    }
+    float height = rows * 16.5f + 48.0f;
     // The player list grows around the center at 650, so titles and the modal stay
     // centered. It keeps its widest width until the list is left, so names don't shift
     // sideways when a long-named player leaves.
@@ -1411,15 +1471,23 @@ void host_menu_ui_draw() {
             draw_text("Not in a lobby", 510, 258, 0.5f, white);
             return;
         }
+        if (!visible_option_count(HOST_MENU_KICK, inGame)) {
+            draw_text("No players", left + 10, 258, 0.5f, white);
+            return;
+        }
         // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn
-        // the selected name white.
+        // the selected name white. Only occupied slots get a row.
+        int row = 0;
         for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+            if (!player_slot_used(party, inGame, i)) {
+                continue;
+            }
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
-            float y = i * 16.5f + 258;
+            float y = row++ * 16.5f + 258;
             float x = left + 10;
             // On player rows icon, level and tag/name each start at a fixed x, also
-            // without an icon, so the names form one straight column. Empty slots have no
-            // level and start at the left edge.
+            // without an icon, so the names form one straight column. Players without a
+            // level start at the left edge.
             if (*playerLevels[i]) {
                 if (playerRankIcons[i]) {
                     draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,

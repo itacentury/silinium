@@ -45,9 +45,10 @@ typedef struct HostMenuOption {
     signed char min;
     signed char max;
     void (*func)(void);
-    bool lobbyOnly;                // hidden while in game
-    bool inGameOnly;               // hidden while in lobby
-    bool (*visible)(bool inGame);  // extra condition for showing it, 0 = none
+    bool lobbyOnly;   // hidden while in game
+    bool inGameOnly;  // hidden while in lobby
+    // Extra condition for showing it, 0 = none.
+    bool (*visible)(const struct HostMenuOption* option, bool inGame);
 } HostMenuOption;
 
 typedef struct HostMenu {
