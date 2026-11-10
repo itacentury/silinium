@@ -885,7 +885,6 @@ static void host_menu_thread(uint64_t arg) {
         else {
             hostMenu.selectMapPending = false;
             hostMenu.selectGametypePending = false;
-            hostMenu.changeNamePending = false;
             hostMenu.saveStatsKeyboardPending = false;
             hostMenu.lobbyKickMember = -1;
         }
