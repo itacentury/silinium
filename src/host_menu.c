@@ -511,12 +511,17 @@ void host_menu_name_keyboard_closed() {
 // leave every later keyboard pending and a callkeyboard script without its answer.
 #define KEYBOARD_UNLOAD_TIMEOUT_US (2 * 1000 * 1000)
 
+// A longer gap between two polls means nobody waited in between (no request pending, or a
+// hitch): the wait starts over instead of counting the gap as unload time.
+#define KEYBOARD_POLL_GAP_US (300 * 1000)
+
 // Unloading (3) is not closed: its OSKDIALOG_UNLOADED still follows and sets 0, also
 // under a keyboard opened in between, and a new dialog most likely can't be loaded before
 // that. Open (1) never times out, the player may still be typing. Only called on the UI
 // thread.
 static bool game_keyboard_closed() {
     static system_time_t closingSince;
+    static system_time_t lastPoll;
     static bool warned;
     int state = *(volatile int*)T5_KeyboardState;
     if (state == T5_KeyboardStateClosed || state == T5_KeyboardStateOpen) {
@@ -526,8 +531,11 @@ static bool game_keyboard_closed() {
     }
 
     system_time_t now = sys_time_get_system_time();
-    if (!closingSince) {
+    bool waitInterrupted = now - lastPoll > KEYBOARD_POLL_GAP_US;
+    lastPoll = now;
+    if (!closingSince || waitInterrupted) {
         closingSince = now;
+        warned = false;
         return false;
     }
     if (now - closingSince < KEYBOARD_UNLOAD_TIMEOUT_US) {
