@@ -1043,10 +1043,11 @@ static int playerListWidth;
 // The party the list showed last frame (0 in game), so the width is refit on a change.
 static int playerListParty;
 
-// The player list box is at least this many rows high, so the Kick/Ban modal (73 high)
-// fits below the first row: 258 + 6 + 73 <= rows * 16.5 + 248 needs 6 rows. With fewer
-// it would flip upward over the box's top edge and title.
-#define PLAYER_LIST_MIN_ROWS 6
+// The player list box is at least this many rows high. Flipped upward, the Kick/Ban modal
+// (73 high) only clears the list title from row 5 on, so rows 0-4 must fit it below:
+// row 4 needs 258 + 4 * 16.5 + 6 + 73 <= rows * 16.5 + 248, i.e. 10 rows. With fewer it
+// would flip upward over the box's top edge and titles.
+#define PLAYER_LIST_MIN_ROWS 10
 
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
