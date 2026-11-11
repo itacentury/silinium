@@ -265,9 +265,6 @@ static const char* dvar_string(const char* name) {
 // Unknown names are shown as they are.
 static const char* lookup_name(const DisplayName* names, int count,
                                const char* internal) {
-    if (!*internal) {
-        return "-";
-    }
     for (int i = 0; i < count; i++) {
         if (!strcmp(names[i].internal, internal)) {
             return names[i].display;
@@ -514,9 +511,9 @@ static void reset_name() { hostMenu.resetNamePending = true; }
 
 // Both options are lobby only, so these show the picks for the next match.
 static void map_value_text(char* out, int size) {
-    snprintf(
-        out, size, "%s",
-        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(false)));
+    const char* map =
+        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(false));
+    snprintf(out, size, "%s", *map ? map : "-");
 }
 
 // The internal name uppercased, "tdm" -> "TDM".
@@ -1324,17 +1321,32 @@ static void host_clan_tag(bool inGame, const char* host, char* out) {
     }
 }
 
-// The info line "host - map - gametype" into line, the host's clan tag into tag (drawn
-// apart, so its ^7 doesn't recolor the rest). Returns the width of both together.
+// Appends part to the " - " separated line at *length, skipping empty parts.
+static void append_info_part(char* line, int size, int* length, const char* part) {
+    if (!*part || *length >= size) {
+        return;
+    }
+    *length +=
+        snprintf(line + *length, size - *length, "%s%s", *length ? " - " : "", part);
+}
+
+// The info line "host - map - gametype" into line, leaving out empty parts, the host's
+// clan tag into tag (drawn apart, so its ^7 doesn't recolor the rest). Returns the width
+// of both together.
 static float build_info_line(bool inGame, char* tag, char* line, int size) {
     const char* host = dvar_string("party_hostname");
     tag[0] = 0;
     if (*host) {
         host_clan_tag(inGame, host, tag);
     }
-    snprintf(
-        line, size, "%s - %s - %s", *host ? host : "-",
-        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(inGame)),
+    line[0] = 0;
+    int length = 0;
+    append_info_part(line, size, &length, host);
+    append_info_part(
+        line, size, &length,
+        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(inGame)));
+    append_info_part(
+        line, size, &length,
         lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
                     session_gametype(inGame)));
     return (*tag ? text_width(tag, INFO_SCALE) : 0) + text_width(line, INFO_SCALE);
