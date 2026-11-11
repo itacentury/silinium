@@ -639,9 +639,12 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
 // members only see them once the host sends partystate again. Stock lobby menus do that
 // on menu load, which the menus opened by the host menu skip. Only armed while the menu
 // the host menu opened is still open and a party is hosted, so stock flows (public
-// lobbies, the stock private-match menus) never send partystate from here. NULL while
-// disarmed.
-static void* mapSyncMenu;
+// lobbies, the stock private-match menus) never send partystate from here. Every select
+// menu the host menu opened is bound on its own, so a second one (Select Gametype over
+// Select Map) doesn't end the sync while the first is still open. Disarmed while no
+// bound menu is left; the stack never holds more menus than its max.
+static void* mapSyncMenus[T5_UiMenuStackMax];
+static int mapSyncMenuCount;
 static char syncedMap[64];
 static char syncedGametype[64];
 
@@ -663,23 +666,58 @@ static bool ui_menu_is_open(void* uiContext, const void* menu) {
     return false;
 }
 
+static bool map_sync_menu_is_bound(const void* menu) {
+    for (int i = 0; i < mapSyncMenuCount; i++) {
+        if (mapSyncMenus[i] == menu) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void clear_party_map_sync() { mapSyncMenuCount = 0; }
+
+static void prune_closed_map_sync_menus(void* uiContext) {
+    int kept = 0;
+    for (int i = 0; i < mapSyncMenuCount; i++) {
+        if (ui_menu_is_open(uiContext, mapSyncMenus[i])) {
+            mapSyncMenus[kept++] = mapSyncMenus[i];
+        }
+    }
+    mapSyncMenuCount = kept;
+}
+
 // Binds the sync to the menu Menus_OpenByName just pushed. If the stack did not grow
 // (menu not found, or the stack layout is wrong), the sync is not armed at all, so it
-// can never stay bound to a lobby menu. The current selection counts as synced, so
-// partystate only goes out on a real change. Without a hosted party the baseline would
-// belong to no lobby and could send partystate in the next one the player hosts.
+// can never stay bound to a lobby menu. The first new entry is bound, not the top: a
+// menu the select menu's onOpen opens would sit above it. That relies on
+// Menus_OpenByName pushing the menu before running onOpen, as in CoD4 (unverified).
+// The current selection counts as synced when the sync arms, so partystate only goes
+// out on a real change; arming a second menu keeps the baseline, so a change made in the
+// first is not swallowed. Without a hosted party the baseline would belong to no lobby
+// and could send partystate in the next one the player hosts.
 static void arm_party_map_sync(void* uiContext, int openMenuCountBefore) {
     if (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty)) {
         return;
     }
     int count = UI_OPEN_MENU_COUNT(uiContext);
-    if (count <= openMenuCountBefore || count > T5_UiMenuStackMax) {
+    if (openMenuCountBefore < 0 || count <= openMenuCountBefore ||
+        count > T5_UiMenuStackMax) {
         printf(T5WARNING "Menu stack did not grow (%i -> %i), party map sync not armed.",
                openMenuCountBefore, count);
         return;
     }
-    mapSyncMenu = UI_MENU_STACK_ENTRY(uiContext, count - 1);
-    store_synced_party_map();
+    void* menu = UI_MENU_STACK_ENTRY(uiContext, openMenuCountBefore);
+    if (map_sync_menu_is_bound(menu)) {
+        return;
+    }
+    if (mapSyncMenuCount >= (int)(sizeof(mapSyncMenus) / sizeof(*mapSyncMenus))) {
+        return;
+    }
+    if (!mapSyncMenuCount) {
+        store_synced_party_map();
+    }
+    mapSyncMenus[mapSyncMenuCount++] = menu;
 }
 
 static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
@@ -701,7 +739,7 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
 }
 
 static void sync_party_map(void* uiContext) {
-    if (!mapSyncMenu) {
+    if (!mapSyncMenuCount) {
         return;
     }
     bool lobbyHosted = party_is_local_host(T5_LobbyParty);
@@ -709,15 +747,13 @@ static void sync_party_map(void* uiContext) {
     // The host left the lobby (e.g. to the main menu); the sync must not carry over to
     // the next one.
     if (!lobbyHosted && !gameHosted) {
-        mapSyncMenu = NULL;
+        clear_party_map_sync();
         return;
     }
     // Before the close check, so a selection made in the frame the menu closes still
     // goes out.
     send_party_map_if_changed(lobbyHosted, gameHosted);
-    if (!ui_menu_is_open(uiContext, mapSyncMenu)) {
-        mapSyncMenu = NULL;
-    }
+    prune_closed_map_sync_menus(uiContext);
 }
 
 void Menu_PaintAll_Hook(void* a1, void* uiContext) {
@@ -814,7 +850,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         }
     } else {
         // The sync belongs to the lobby the menu was opened in.
-        mapSyncMenu = NULL;
+        clear_party_map_sync();
         // The same command as End Game in the pause menu. -1 is the menu index the game
         // sends for a menu that isn't a script menu.
         if (hostMenu.endGamePending) {
