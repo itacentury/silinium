@@ -643,10 +643,8 @@ static char syncedMap[64];
 static char syncedGametype[64];
 
 static void store_synced_party_map() {
-    const char* map = Dvar_GetString("ui_mapname");
-    const char* gametype = Dvar_GetString("ui_gametype");
-    snprintf(syncedMap, sizeof(syncedMap), "%s", map ? map : "");
-    snprintf(syncedGametype, sizeof(syncedGametype), "%s", gametype ? gametype : "");
+    read_dvar_string("ui_mapname", syncedMap, sizeof(syncedMap));
+    read_dvar_string("ui_gametype", syncedGametype, sizeof(syncedGametype));
 }
 
 static bool ui_menu_is_open(void* uiContext, const void* menu) {
@@ -688,8 +686,7 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
         (!strcmp(map, syncedMap) && !strcmp(gametype, syncedGametype))) {
         return;
     }
-    snprintf(syncedMap, sizeof(syncedMap), "%s", map);
-    snprintf(syncedGametype, sizeof(syncedGametype), "%s", gametype);
+    store_synced_party_map();
     // Unlike send_party_rename not limited to private matches: the host picked this map /
     // mode on purpose through the host menu, so advertising it is intended in any lobby.
     if (lobbyHosted) {
