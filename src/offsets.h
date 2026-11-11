@@ -215,8 +215,8 @@
 #define T5_Party_WriteMembers 0x204820
 // Local player 0. PlayerName1 is the SceNpId the userinfo sends as "npid" (online id first, 0x24 bytes per local
 // client); PlayerName2 is the name the userinfo builder (0x3A73C0, via 0x68BF48) sends as "name" and the party copies
-// into the local member when it's added (0x207BD0). A rename only writes PlayerName2: writing PlayerName1 would change
-// the npid the server knows a connected client by.
+// into the local member when it's added (0x207BD0). A rename writes both; whether changing the npid while connected to
+// a server breaks anything is untested on console.
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
 // dvar_modifiedFlags: Dvar_SetVariant ORs the flags of a changed dvar in (0x4C8788). While connected the client frame
