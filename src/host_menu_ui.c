@@ -1196,6 +1196,8 @@ static const char* player_name(int party, bool inGame, int i) {
 // The player list's tags and their widths (scaled to ROW_SCALE), built once per frame by
 // build_player_rows.
 static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
+// The tags without color codes, drawn in the row color under the selection bar.
+static char playerPlainTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
 static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
 // Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
 static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
@@ -1227,6 +1229,31 @@ static int playerListParty;
 #define RANK_ICON_MAX_RANK 49
 #define RANK_ICON_MAX_PRESTIGE 15
 
+// Copies text without its ^0-^9 color codes and embedded icons into out (outSize bytes,
+// NUL-terminated). Reads at most size bytes of text, so it is safe on fixed-size fields
+// without a NUL.
+static void strip_color_codes(const char* text, int size, char* out, int outSize) {
+    int length = 0;
+    for (int c = 0; c < size && text[c] && length < outSize - 1; c++) {
+        bool caret = text[c] == '^' && c + 1 < size;
+        if (caret && text[c + 1] >= '0' && text[c + 1] <= '9') {
+            c++;
+            continue;
+        }
+        // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
+        // as a whole.
+        if (caret && (text[c + 1] == 1 || text[c + 1] == 2)) {
+            if (c + 4 >= size) {
+                break;
+            }
+            c += 4 + (unsigned char)text[c + 4];
+            continue;
+        }
+        out[length++] = text[c];
+    }
+    out[length] = 0;
+}
+
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
 // player's own color codes are dropped too. out must hold CLAN_TAG_MAX bytes.
@@ -1239,28 +1266,8 @@ static void player_clan_tag(int party, bool inGame, int i, char* out) {
         }
         // Reads stay within the tag field. The field is 8 bytes like the lobby's, so in
         // game the tag only loses its color codes and icons, not visible characters.
-        const char* tag = CG_CLIENT_CLAN(i);
-        const int size = T5_CgClientClanSize;
         char clan[T5_CgClientClanSize];
-        int length = 0;
-        for (int c = 0; c < size && tag[c] && length < (int)sizeof(clan) - 1; c++) {
-            bool caret = tag[c] == '^' && c + 1 < size;
-            if (caret && tag[c + 1] >= '0' && tag[c + 1] <= '9') {
-                c++;
-                continue;
-            }
-            // Embedded icon (^\x01 / ^\x02, width, height, name length, name) is dropped
-            // as a whole.
-            if (caret && (tag[c + 1] == 1 || tag[c + 1] == 2)) {
-                if (c + 4 >= size) {
-                    break;
-                }
-                c += 4 + (unsigned char)tag[c + 4];
-                continue;
-            }
-            clan[length++] = tag[c];
-        }
-        clan[length] = 0;
+        strip_color_codes(CG_CLIENT_CLAN(i), T5_CgClientClanSize, clan, sizeof(clan));
         if (*clan) {
             sprintf(out, "[%s]", clan);
         }
@@ -1755,6 +1762,7 @@ static int build_player_rows(int party, bool inGame) {
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         char* tag = playerTags[i];
         player_clan_tag(party, inGame, i, tag);
+        strip_color_codes(tag, CLAN_TAG_MAX, playerPlainTags[i], CLAN_TAG_MAX);
         playerTagWidths[i] = *tag ? text_width(tag, ROW_SCALE) : 0;
         build_player_rank(party, inGame, i);
         if (*playerLevels[i]) {
@@ -1799,7 +1807,9 @@ static void draw_player_list(const PanelLayout* layout, float left, int party,
         draw_shader(left, barTop, layout->width, ROW_HEIGHT, selection, whiteMaterial);
     }
     // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn the
-    // selected name white. Only occupied slots get a row.
+    // selected name white. The colored tag crossfades to its plain copy as the bar covers
+    // the row: its color codes override the row color, so it wouldn't go dark otherwise.
+    // Only occupied slots get a row.
     int row = 0;
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         if (!player_slot_used(party, inGame, i)) {
@@ -1809,8 +1819,9 @@ static void draw_player_list(const PanelLayout* layout, float left, int party,
         if (rowTop + ROW_HEIGHT > bottom + 0.5f) {
             break;
         }
+        float overlap = bar_overlap(barRow, row++);
         float color[4];
-        mix_color(color, white, selectedText, bar_overlap(barRow, row++));
+        mix_color(color, white, selectedText, overlap);
         float y = text_baseline(rowTop, ROW_HEIGHT, ROW_SCALE);
         float x = left + PANEL_PADDING;
         // On player rows icon, level and tag/name each start at a fixed x, also without
@@ -1826,7 +1837,15 @@ static void draw_player_list(const PanelLayout* layout, float left, int party,
             x += playerRankColumn;
         }
         if (*playerTags[i]) {
-            draw_text(playerTags[i], x, y, ROW_SCALE, color);
+            float faded[4] = {color[0], color[1], color[2], color[3]};
+            if (overlap < 1) {
+                faded[3] = color[3] * (1 - overlap);
+                draw_text(playerTags[i], x, y, ROW_SCALE, faded);
+            }
+            if (overlap > 0) {
+                faded[3] = color[3] * overlap;
+                draw_text(playerPlainTags[i], x, y, ROW_SCALE, faded);
+            }
             x += playerTagWidths[i];
         }
         draw_text(player_name(party, inGame, i), x, y, ROW_SCALE, color);
