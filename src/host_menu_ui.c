@@ -1476,9 +1476,12 @@ static void draw_header(const PanelLayout* layout, const char* tag, const char* 
         float labelRight = labelX + tabWidth[i];
         float lineRight = lineX + lineWidth;
         float coveredRight = labelRight < lineRight ? labelRight : lineRight;
+        float coverage = 0;
+        if (tabWidth[i] > 0) {
+            coverage = clamp01((coveredRight - coveredLeft) / tabWidth[i]);
+        }
         float color[4];
-        mix_color(color, mutedColor, white,
-                  clamp01((coveredRight - coveredLeft) / tabWidth[i]));
+        mix_color(color, mutedColor, white, coverage);
         draw_text(hostMenu.title[tabs[i]], labelX, tabY, TAB_SCALE, color);
     }
     draw_shader(lineX, dividerY - TAB_UNDERLINE, lineWidth, TAB_UNDERLINE, selection,
