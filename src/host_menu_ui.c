@@ -22,7 +22,7 @@ static int savedPlaylistMax[64];
 static char playlistRuleBuffer[64][0x100];
 
 static const float white[4] = {1, 1, 1, 1};
-static const float border[4] = {0.9882f, 0.6667f, 0.4549f, 0.2f};
+static const float border[4] = {0.4549f, 0.7765f, 0.9882f, 0.2f};
 static const float modalBackground[4] = {0, 0, 0, 0.85f};
 static const float textBoxBackground[4] = {0, 0, 0, 0.2f};
 static const float panelBackground[4] = {0, 0, 0, 0.86f};
@@ -435,21 +435,27 @@ static void prestige_unlocks() {
     }
 }
 
-static void select_map() {
-    sys_timer_usleep(200000);  // let X go before the game sees buttons again
+// Starts the close fade right away, but hides the buttons from the game until the
+// pressed one is let go.
+static void close_menu() {
+    hostMenu.closing = true;
+    sys_timer_usleep(200000);
     hostMenu.open = false;
+    hostMenu.closing = false;
+}
+
+static void select_map() {
+    close_menu();
     hostMenu.selectMapPending = true;
 }
 
 static void select_gametype() {
-    sys_timer_usleep(200000);  // let X go before the game sees buttons again
-    hostMenu.open = false;
+    close_menu();
     hostMenu.selectGametypePending = true;
 }
 
 static void end_game() {
-    sys_timer_usleep(200000);  // let X go before the game sees buttons again
-    hostMenu.open = false;
+    close_menu();
     hostMenu.endGamePending = true;
 }
 
@@ -545,12 +551,12 @@ static bool player_slot_used(int party, bool inGame, int i) {
 // The player list only shows occupied slots. The option index is the slot.
 static bool player_slot_visible(const HostMenuOption* option, bool inGame) {
     int party = inGame ? 0 : host_menu_lobby_view_party();
-    return player_slot_used(party, inGame, option - hostMenu.options[HOST_MENU_KICK]);
+    return player_slot_used(party, inGame, option - hostMenu.options[HOST_MENU_PLAYERS]);
 }
 
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
-    int member = hostMenu.cursor[HOST_MENU_KICK];
+    int member = hostMenu.cursor[HOST_MENU_PLAYERS];
     bool inGame = Dvar_GetBool("cl_ingame");
     if (!can_manage_players(inGame)) {
         return;
@@ -592,13 +598,13 @@ static void close_stale_player_modal() {
     if (inGame != hostMenu.playerModalInGame || !can_manage_players(inGame) ||
         (!inGame && host_menu_lobby_view_party() != hostMenu.playerModalParty) ||
         !player_slot_used(hostMenu.playerModalParty, inGame,
-                          hostMenu.cursor[HOST_MENU_KICK])) {
-        hostMenu.current = HOST_MENU_KICK;
+                          hostMenu.cursor[HOST_MENU_PLAYERS])) {
+        hostMenu.current = HOST_MENU_PLAYERS;
     }
 }
 
 static void queue_kick(bool ban) {
-    int member = hostMenu.cursor[HOST_MENU_KICK];
+    int member = hostMenu.cursor[HOST_MENU_PLAYERS];
     bool inGame = Dvar_GetBool("cl_ingame");
     if (!can_manage_players(inGame)) {
         return;
@@ -633,12 +639,12 @@ static void queue_kick(bool ban) {
 
 static void kick_selected() {
     queue_kick(false);
-    hostMenu.current = HOST_MENU_KICK;
+    hostMenu.current = HOST_MENU_PLAYERS;
 }
 
 static void ban_selected() {
     queue_kick(true);
-    hostMenu.current = HOST_MENU_KICK;
+    hostMenu.current = HOST_MENU_PLAYERS;
 }
 
 // ---------------------------------------------------------------------------
@@ -647,7 +653,7 @@ static void ban_selected() {
 
 #define STATUS_DURATION_US (4 * 1000 * 1000)
 
-// Result of the last stats action, shown below the session info for a few seconds.
+// Result of the last stats action, shown in the top left for a few seconds.
 // Written by the menu thread and drawn by the UI thread, which copies it bounded, so a
 // text being rewritten can't be read past its end.
 static char statusText[64];
@@ -678,20 +684,20 @@ static void report_stats_result(const char* text, bool success) {
 // Set by the keyboard callback on the UI thread, reported by the menu thread.
 static volatile bool saveSkippedPending;
 
-// The list of HOST_MENU_STATS, rebuilt each time it is opened and after a delete while
-// the UI thread draws it. The directory is read into the buffer the options don't point
-// to, then the options are switched over row by row, so each drawn row is a complete old
-// or new name. The buffer written was last shown two rebuilds ago.
+// The list of HOST_MENU_STATS_LIST, rebuilt each time it is opened and after a delete
+// while the UI thread draws it. The directory is read into the buffer the options don't
+// point to, then the options are switched over row by row, so each drawn row is a
+// complete old or new name. The buffer written was last shown two rebuilds ago.
 #define STATS_LIST_MAX 20
 static char statsNames[2][STATS_LIST_MAX][STATS_FILE_NAME_MAX + 1];
-static int statsNamesActive;  // buffer the options of HOST_MENU_STATS point into
+static int statsNamesActive;  // buffer the options of HOST_MENU_STATS_LIST point into
 static int statsCount;
 
 static void open_stats_modal();
 
 // In place instead of add_option, so the drawn option count never drops to 0 meanwhile.
 static void set_stats_option(int i, const char* text, void (*func)(void)) {
-    HostMenuOption* option = &hostMenu.options[HOST_MENU_STATS][i];
+    HostMenuOption* option = &hostMenu.options[HOST_MENU_STATS_LIST][i];
     option->text = text;
     option->type = HOST_MENU_TYPE_ACTION;
     option->value = 0;
@@ -712,29 +718,28 @@ static void build_stats_list() {
         set_stats_option(0, "No Saved Stats", nothing);
     }
     __lwsync();
-    hostMenu.optionCount[HOST_MENU_STATS] = count ? count : 1;
+    hostMenu.optionCount[HOST_MENU_STATS_LIST] = count ? count : 1;
     statsNamesActive = next;
     statsCount = count;
-    int last = hostMenu.optionCount[HOST_MENU_STATS] - 1;
-    if (hostMenu.cursor[HOST_MENU_STATS] > last) {
-        hostMenu.cursor[HOST_MENU_STATS] = last;
+    int last = hostMenu.optionCount[HOST_MENU_STATS_LIST] - 1;
+    if (hostMenu.cursor[HOST_MENU_STATS_LIST] > last) {
+        hostMenu.cursor[HOST_MENU_STATS_LIST] = last;
     }
 }
 
 // The keyboard only works while the menu is closed, so it is opened by Menu_PaintAll.
 static void save_stats() {
-    sys_timer_usleep(200000);  // let X go before the game sees buttons again
-    hostMenu.open = false;
+    close_menu();
     hostMenu.saveStatsKeyboardPending = true;
 }
 
 static void open_stats_menu() {
     build_stats_list();
-    hostMenu.current = HOST_MENU_STATS;
+    hostMenu.current = HOST_MENU_STATS_LIST;
 }
 
 static void open_stats_modal() {
-    if (hostMenu.cursor[HOST_MENU_STATS] >= statsCount) {
+    if (hostMenu.cursor[HOST_MENU_STATS_LIST] >= statsCount) {
         return;
     }
     hostMenu.cursor[HOST_MENU_STATS_FILE] = 0;
@@ -743,7 +748,7 @@ static void open_stats_modal() {
 
 // The name is copied, so a list rebuilt meanwhile doesn't change the file acted on.
 static void queue_stats_action(HostMenuStatsAction action) {
-    int i = hostMenu.cursor[HOST_MENU_STATS];
+    int i = hostMenu.cursor[HOST_MENU_STATS_LIST];
     if (i >= statsCount) {
         return;
     }
@@ -762,12 +767,12 @@ static void load_selected_stats() {
 
 static void delete_selected_stats() {
     queue_stats_action(HOST_MENU_STATS_DELETE);
-    hostMenu.current = HOST_MENU_STATS;
+    hostMenu.current = HOST_MENU_STATS_LIST;
 }
 
 // The list and its modal are lobby only like the option that opens them.
 static void close_stale_stats_menu(bool inGame) {
-    if (inGame && (hostMenu.current == HOST_MENU_STATS ||
+    if (inGame && (hostMenu.current == HOST_MENU_STATS_LIST ||
                    hostMenu.current == HOST_MENU_STATS_FILE)) {
         hostMenu.current = HOST_MENU_ACCOUNT;
     }
@@ -965,7 +970,7 @@ static void move_cursor_off_hidden(int m, bool inGame) {
 
 // The tabs in the order of the tab bar, menus without a parent.
 static const HostMenuId tabs[] = {HOST_MENU_MAIN, HOST_MENU_PATCHES, HOST_MENU_ACCOUNT,
-                                  HOST_MENU_KICK};
+                                  HOST_MENU_PLAYERS};
 #define TAB_COUNT ((int)(sizeof(tabs) / sizeof(*tabs)))
 
 static bool is_tab(int m) { return hostMenu.parent[m] == -1; }
@@ -1047,21 +1052,22 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_ACCOUNT, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                reset_name);
 
-    init_tab(HOST_MENU_KICK, "PLAYERS");
+    init_tab(HOST_MENU_PLAYERS, "PLAYERS");
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-        add_option(HOST_MENU_KICK, "", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+        add_option(HOST_MENU_PLAYERS, "", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                    open_player_modal)  // names are drawn live
             ->visible = player_slot_visible;
     }
 
-    hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_KICK;
+    hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_PLAYERS;
     add_option(HOST_MENU_PLAYER, "Kick", HOST_MENU_TYPE_ACTION, 0, 0, 0, kick_selected);
     add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
 
-    hostMenu.title[HOST_MENU_STATS] = "LOAD STATS";
-    hostMenu.parent[HOST_MENU_STATS] = HOST_MENU_ACCOUNT;  // filled by open_stats_menu
+    hostMenu.title[HOST_MENU_STATS_LIST] = "LOAD STATS";
+    hostMenu.parent[HOST_MENU_STATS_LIST] =
+        HOST_MENU_ACCOUNT;  // filled by open_stats_menu
 
-    hostMenu.parent[HOST_MENU_STATS_FILE] = HOST_MENU_STATS;
+    hostMenu.parent[HOST_MENU_STATS_FILE] = HOST_MENU_STATS_LIST;
     add_option(HOST_MENU_STATS_FILE, "Load", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                load_selected_stats);
     add_option(HOST_MENU_STATS_FILE, "Delete", HOST_MENU_TYPE_ACTION, 0, 0, 0,
@@ -1075,13 +1081,13 @@ void host_menu_ui_init() {
 // Triangle switches between the lobby's two parties, only in the list itself (the modal
 // acts on a member of the shown one).
 static bool can_switch_lists(int m, bool inGame) {
-    return m == HOST_MENU_KICK && !inGame && host_menu_lobby_parties_both_active();
+    return m == HOST_MENU_PLAYERS && !inGame && host_menu_lobby_parties_both_active();
 }
 
 // Square clears the ban list, only in the list itself and only while it holds a name. Not
 // limited to the host: in game the list is still the one the lobby checks afterwards.
 static bool can_unban_all(int m, bool inGame) {
-    return m == HOST_MENU_KICK && (inGame || host_menu_lobby_view_party()) &&
+    return m == HOST_MENU_PLAYERS && (inGame || host_menu_lobby_view_party()) &&
            host_menu_ban_count() > 0;
 }
 
@@ -1140,8 +1146,7 @@ void host_menu_ui_handle_input() {
         sys_timer_usleep(200000);
     } else if (digital2 & CELL_PAD_CTRL_CIRCLE) {
         if (is_tab(m)) {
-            sys_timer_usleep(200000);
-            hostMenu.open = false;
+            close_menu();
         } else {
             hostMenu.current = hostMenu.parent[m];
             sys_timer_usleep(150000);
@@ -1213,8 +1218,8 @@ static int playerIconPrestiges[HOST_MENU_MAX_CLIENTS];
 // so the cache is dropped when either changes.
 static bool playerIconsInGame;
 static char playerIconsMap[64];
-// The player list box's widest width since the list was entered or its party changed,
-// 0 outside the list. Only the draw code touches these.
+// The panel's widest width in the player list since the list was entered or its party
+// changed, 0 outside the list. Only the draw code touches these.
 static int playerListWidth;
 // The party the list showed last frame (0 in game), so the width is refit on a change.
 static int playerListParty;
@@ -1724,8 +1729,10 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
     if (!modalClosing) {
         const char* title =
             shownModal == HOST_MENU_PLAYER
-                ? player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK])
-                : hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]]
+                ? player_name(party, inGame, hostMenu.cursor[HOST_MENU_PLAYERS])
+                : hostMenu
+                      .options[HOST_MENU_STATS_LIST]
+                              [hostMenu.cursor[HOST_MENU_STATS_LIST]]
                       .text;
         snprintf(modalTitle, sizeof(modalTitle), "%s", title);
     }
@@ -1733,7 +1740,7 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
                (1 - alpha) * ANIM_MODAL_SLIDE, barRow);
 }
 
-// Drawn in the given left column row: below the session info while the menu is open,
+// Drawn in the given left column row: the top row while the menu is open,
 // below the open hint while it is closed (Save Stats closes it for the keyboard).
 static void draw_status(int row) {
     system_time_t time = statusTime;
@@ -1805,9 +1812,9 @@ static int build_player_rows(int party, bool inGame) {
 static void draw_player_list(const PanelLayout* layout, float left, int party,
                              bool inGame, bool notHost, float barRow) {
     float bottom = layout->footerTop - LIST_PADDING;
-    const char* empty = notHost                                         ? "Not in a lobby"
-                        : !visible_option_count(HOST_MENU_KICK, inGame) ? "No players"
-                                                                        : 0;
+    const char* empty = notHost ? "Not in a lobby"
+                        : !visible_option_count(HOST_MENU_PLAYERS, inGame) ? "No players"
+                                                                           : 0;
     if (empty) {
         draw_text(empty, left + PANEL_PADDING,
                   text_baseline(layout->listTop, ROW_HEIGHT, ROW_SCALE), ROW_SCALE,
@@ -1873,7 +1880,7 @@ static void build_controls(int m, bool inGame, bool notHost, bool viewOnly, char
     }
     // The R1 glyph is unknown, so the tab keys are spelled out.
     const char* exitHint = "\x02 Exit  L1/R1 Tab";
-    if (m != HOST_MENU_KICK) {
+    if (m != HOST_MENU_PLAYERS) {
         snprintf(out, size, "\x14\x15\x16\x17 Scroll/Rotate  \x01 Select  %s", exitHint);
         return;
     }
@@ -1919,10 +1926,10 @@ static void draw_panel(float alpha, float slide) {
     int m = hostMenu.current;
     // The player modal is drawn over the player list, so the panel keeps showing the
     // list.
-    bool players = m == HOST_MENU_KICK || m == HOST_MENU_PLAYER;
+    bool players = m == HOST_MENU_PLAYERS || m == HOST_MENU_PLAYER;
     // The stats modal is drawn over the stats list the same way.
-    bool stats = m == HOST_MENU_STATS || m == HOST_MENU_STATS_FILE;
-    int boxMenu = players ? HOST_MENU_KICK : stats ? HOST_MENU_STATS : m;
+    bool stats = m == HOST_MENU_STATS_LIST || m == HOST_MENU_STATS_FILE;
+    int boxMenu = players ? HOST_MENU_PLAYERS : stats ? HOST_MENU_STATS_LIST : m;
     // Clients see the list too, only the host can open the player modal.
     int party = (players && !inGame) ? host_menu_lobby_view_party() : 0;
     bool notHost = players && !inGame && !party;  // not in a lobby
@@ -2026,7 +2033,7 @@ void host_menu_ui_draw() {
     }
 
     frameTime = sys_time_get_system_time();
-    bool open = hostMenu.open;
+    bool open = hostMenu.open && !hostMenu.closing;
     if (open != shownOpen) {
         shownOpen = open;
         // Reopening mid-fade continues from the alpha on screen, which is measured with
