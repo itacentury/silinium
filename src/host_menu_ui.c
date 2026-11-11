@@ -410,6 +410,9 @@ static void open_player_modal() {
         if (!player_slot_used(0, true, member)) {
             return;
         }
+        if (member == CG_CLIENTNUM) {
+            return;
+        }
         hostMenu.playerModalParty = 0;
     } else {
         int party = host_menu_lobby_party();
@@ -419,7 +422,6 @@ static void open_player_modal() {
         // The kick removes every slot at the member's netadr, so a split-screen player on
         // this console can't be kicked without the host.
         if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
-            show_status("Players on this console can't be kicked");
             return;
         }
         hostMenu.playerModalParty = party;
