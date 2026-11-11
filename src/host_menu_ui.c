@@ -410,8 +410,6 @@ static void open_player_modal() {
         if (!player_slot_used(0, true, member)) {
             return;
         }
-        printf(T5INFO "Player menu: slot %i (%s), local client %i (%s).", member,
-               CG_CLIENT_NAME(member), CG_CLIENTNUM, (char*)T5_PlayerName2);
         hostMenu.playerModalParty = 0;
     } else {
         int party = host_menu_lobby_party();
