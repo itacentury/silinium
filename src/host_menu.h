@@ -49,6 +49,8 @@
 #define SV_CLIENTS (*(int*)T5_SvClients)  // 0 while no server runs
 #define SV_CLIENT(i) (SV_CLIENTS + (i) * T5_ClientSize)
 #define SV_CLIENT_NUM(client) (((int)(client) - SV_CLIENTS) / T5_ClientSize)
+#define SV_CLIENT_IN_USE(i) \
+    (*(int*)(SV_CLIENT(i) + T5_ClientStateOffset) >= T5_ClientStateConnected)
 
 #define HOST_MENU_MAX_CLIENTS 18
 

@@ -451,6 +451,10 @@ static void show_game_messages() {
 // sent back on the server thread. Each step only runs in the state the previous one left.
 // In game Change Name holds the same state (KEYBOARD_NAME): a second UI_OpenKeyboard most
 // likely replaces the open keyboard's callback, so only one of them may be up at a time.
+// The game calls the callback on cancel too (text NULL, length 0), but not if the
+// keyboard failed to open or ended with an unexpected result, so the state is also
+// released once the game's keyboard is closed, and when the client of a callkeyboard
+// left.
 enum {
     KEYBOARD_IDLE,
     KEYBOARD_REQUESTED,
@@ -498,6 +502,32 @@ static void open_name_keyboard(bool inGame) {
 
 void host_menu_name_keyboard_closed() {
     cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
+}
+
+static bool game_keyboard_open() {
+    int state = *(volatile int*)T5_KeyboardState;
+    return state == T5_KeyboardStateOpen || state == T5_KeyboardStateFinished;
+}
+
+// The game runs the callback before it leaves the finished state, so a callback that did
+// run has already moved the state on and the swaps don't match.
+static void release_closed_keyboard() {
+    if (game_keyboard_open()) {
+        return;
+    }
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_OPEN, KEYBOARD_IDLE);
+}
+
+// An open keyboard stays up on the host's console; once its text is entered it is dropped
+// here.
+static void drop_keyboard_of_left_client() {
+    uint32_t state = keyboardState;
+    if ((state != KEYBOARD_REQUESTED && state != KEYBOARD_ENTERED) || !SV_CLIENTS ||
+        SV_CLIENT_IN_USE(keyboardClient)) {
+        return;
+    }
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, state, KEYBOARD_IDLE);
 }
 
 static void keyboard_input_callback(int localClientNum, const char16* text, int length) {
@@ -761,6 +791,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             Cbuf_AddText(0, buffer);
         }
         show_game_messages();
+        release_closed_keyboard();
         open_requested_keyboard();
     }
     host_menu_ui_draw();
@@ -885,6 +916,7 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         hostMenu.antiGodClassCheckPending = false;
         anti_god_class_check_clients();
     }
+    drop_keyboard_of_left_client();
     send_keyboard_input(ent);
     anti_god_class_client_frame(ent);
     ClientEndFrame_Trampoline(ent, a2);

@@ -44,6 +44,14 @@
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
 #define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it, folds only A-Z
 #define T5_UI_OpenKeyboard 0x56A118
+// int, the keyboard's state (meanings inferred from the disassembly): UI_OpenKeyboard sets 1 only if
+// cellOskDialogLoadAsync succeeded, otherwise the callback never runs. The sysutil callback (0x56A070) sets 2 on
+// OSKDIALOG_FINISHED and 0 on OSKDIALOG_UNLOADED. The per-frame update (0x56A270) unloads the dialog in state 2, calls
+// the callback with the text for result 0 and with (NULL, 0) for results 1-3 (cancel, abort, no text), not at all for
+// other results, then sets 3.
+#define T5_KeyboardState 0x1B2942C
+#define T5_KeyboardStateOpen 1
+#define T5_KeyboardStateFinished 2
 #define T5_Dvar_GetBool 0x4C7BF0
 #define T5_R_TextHeight 0x734340
 #define T5_R_TextWidth 0x734570
