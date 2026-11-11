@@ -397,6 +397,8 @@ static bool player_slot_visible(const HostMenuOption* option, bool inGame) {
     return player_slot_used(party, inGame, option - hostMenu.options[HOST_MENU_KICK]);
 }
 
+static void show_status(const char* text);
+
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
@@ -414,6 +416,12 @@ static void open_player_modal() {
     } else {
         int party = host_menu_lobby_party();
         if (!player_slot_used(party, false, member)) {
+            return;
+        }
+        // The kick removes every slot at the member's netadr, so a split-screen player on
+        // this console can't be kicked without the host.
+        if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
+            show_status("Players on this console can't be kicked");
             return;
         }
         hostMenu.playerModalParty = party;
@@ -461,11 +469,6 @@ static void queue_kick(bool ban) {
     int party = hostMenu.playerModalParty;
     if (!party || host_menu_lobby_party() != party || hostMenu.lobbyKickMember != -1 ||
         !PARTY_MEMBER_USED(party, member)) {
-        return;
-    }
-    // The kick removes every slot at the member's netadr, so a split-screen player on
-    // this console can't be kicked without the host.
-    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
         return;
     }
     hostMenu.lobbyKickParty = party;
