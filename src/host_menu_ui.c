@@ -123,18 +123,6 @@ static void* arrowMaterial;
 // Drawing
 // ---------------------------------------------------------------------------
 
-typedef enum TextAlign { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT } TextAlign;
-
-static float get_aligned_x(float x, float scale, const char* text, TextAlign align) {
-    if (align == ALIGN_CENTER) {
-        return x - (R_TextWidth(text, 0x7FFFFFFF, font) / 2) * scale;
-    }
-    if (align == ALIGN_RIGHT) {
-        return x - R_TextWidth(text, 0x7FFFFFFF, font) * scale;
-    }
-    return x;
-}
-
 // Animation durations in µs and slide distances in screen units, start values to tune on
 // a console.
 #define ANIM_OPEN_US 160000
