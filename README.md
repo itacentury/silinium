@@ -101,9 +101,10 @@ In multiplayer the loader blocks what the "Freeze PS3" options of RTM tools send
 |---|---|
 | A host sends `C <n>` with an invalid weapon (e.g. `C 2026`, `C 44444444444`). The game looks the weapon up without a bounds check. | Server commands with a weapon outside the weapon table are dropped. |
 | A host sends `d <index> …` with a configstring index outside the 2754 configstrings. | Dropped. |
+| Any party member sends the out-of-band packet `relay <n>` to another console with a party member index outside the 18 members (e.g. `relay -1234567`). The game uses the index without a bounds check. | Dropped. |
 | Chat or a player name with a text icon (`^` followed by the byte 1 or 2). The game reads the next bytes as a pointer to the icon's material, so text from another console points to garbage and every console that draws it freezes. | Text icons with a pointer that isn't a loaded material are removed before the text is drawn (chat, kill feed and the other message windows, names, lobby list, scoreboard…). Text icons are removed from server commands, the rest of the command still runs. As host, chat with a text icon isn't sent on to the other players, and text icons are removed from player names and clan tags before they're sent to them, in game and in the lobby, so it also protects players without the loader. |
 
-The protection targets what the known freeze options send (`C`, `d` and text icons). Other server commands with an unchecked index aren't covered.
+The protection targets what the known freeze options send (`C`, `d`, `relay` and text icons). Other commands or packets with an unchecked index aren't covered.
 
 Each block is logged as `Anti-Freeze: dropped …` in the console output.
 
