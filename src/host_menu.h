@@ -43,6 +43,10 @@
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
 #define PARTY_BAN_NAME(i) \
     ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
+#define UI_OPEN_MENU_COUNT(uiContext) \
+    (*(int*)((char*)(uiContext) + T5_UiOpenMenuCountOffset))
+#define UI_MENU_STACK_ENTRY(uiContext, i) \
+    (*(void**)((char*)(uiContext) + T5_UiMenuStackOffset + (i) * T5_UiMenuStackEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
 #define G_ENTITY_NUM(ent) (((int)(ent) - T5_GEntities) / T5_GEntitySize)

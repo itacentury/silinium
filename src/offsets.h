@@ -39,6 +39,14 @@
 // Host menu (MP only), names of the game functions are inferred from usage
 #define T5_Cbuf_AddText 0x399CC8
 #define T5_Menus_OpenByName 0x45EC08
+// Open menu stack in the UI context Menu_PaintAll gets: entries of T5_UiMenuStackEntrySize at T5_UiMenuStackOffset,
+// the first word is the menuDef_t* (0x465624 loads it and reads +0xB4 from it), the count at T5_UiOpenMenuCountOffset
+// bounds the loop (0x4653F4, 0x46540C). 16 entries end right at the count, as in CoD4's UiContext (menuStack[16],
+// openMenuCount); the names and that Menus_OpenByName pushes onto the top are taken from CoD4 (unverified).
+#define T5_UiMenuStackOffset 0x14F8
+#define T5_UiMenuStackEntrySize 8
+#define T5_UiMenuStackMax 16
+#define T5_UiOpenMenuCountOffset 0x1578
 #define T5_R_AddCmdDrawStretchPic 0x751940
 #define T5_R_AddCmdDrawText 0x754410
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
