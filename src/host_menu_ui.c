@@ -134,14 +134,108 @@ static float get_aligned_x(float x, float scale, const char* text, TextAlign ali
     return x;
 }
 
-static void draw_shader(float x, float y, float w, float h, const float* color,
-                        void* material) {
-    R_AddCmdDrawStretchPic(x, y, w, h, 0, 0, 1, 1, color, material);
+// Animation durations in µs and slide distances in screen units, start values to tune on
+// a console.
+#define ANIM_OPEN_US 160000
+#define ANIM_CLOSE_US 120000
+#define ANIM_SCROLL_US 100000  // below the 150 ms scroll repeat, so it settles in time
+#define ANIM_PAGE_US 140000    // tab switch, submenu in/out, panel resize, tab underline
+#define ANIM_MODAL_US 120000
+#define ANIM_TOGGLE_US 100000
+#define ANIM_STATUS_IN_US 150000
+#define ANIM_STATUS_OUT_US 300000
+#define ANIM_OPEN_SLIDE 8.0f   // the panel rises by this into place
+#define ANIM_PAGE_SLIDE 12.0f  // a new page's rows come in from this far left or right
+#define ANIM_MODAL_SLIDE 6.0f
+
+// Time of the frame being drawn, read once per frame so all animations agree.
+static system_time_t frameTime;
+// Multiplied into the alpha of everything draw_shader and draw_text draw.
+static float drawAlpha = 1;
+
+// 0..1 over duration µs from start.
+static float anim_progress(system_time_t start, int duration) {
+    system_time_t elapsed = frameTime - start;
+    if (elapsed >= (system_time_t)duration) {
+        return 1;
+    }
+    return elapsed > 0 ? (float)elapsed / duration : 0;
 }
 
+// Fast start, soft landing.
+static float ease_out(float t) {
+    float inverse = 1 - t;
+    return 1 - inverse * inverse * inverse;
+}
+
+static float clamp01(float value) {
+    if (value < 0) {
+        return 0;
+    }
+    if (value > 1) {
+        return 1;
+    }
+    return value;
+}
+
+// A value easing from `from` to `to`, started at `start`.
+typedef struct Tween {
+    float from;
+    float to;
+    system_time_t start;
+} Tween;
+
+static float tween_value(const Tween* tween, int duration) {
+    float t = ease_out(anim_progress(tween->start, duration));
+    return tween->from + (tween->to - tween->from) * t;
+}
+
+// Eases to target from wherever the tween is now, so a new target mid-way doesn't jump.
+static void tween_to(Tween* tween, float target, int duration) {
+    if (tween->to == target) {
+        return;
+    }
+    tween->from = tween_value(tween, duration);
+    tween->to = target;
+    tween->start = frameTime;
+}
+
+static void tween_snap(Tween* tween, float value) {
+    tween->from = value;
+    tween->to = value;
+    tween->start = 0;
+}
+
+// Set for the first frame after the menu opened: everything starts where it is instead of
+// sliding over from where it was when the menu closed.
+static bool snapAnimations;
+
+static float tween_follow(Tween* tween, float target, int duration) {
+    if (snapAnimations) {
+        tween_snap(tween, target);
+    } else {
+        tween_to(tween, target, duration);
+    }
+    return tween_value(tween, duration);
+}
+
+static void mix_color(float* out, const float* a, const float* b, float t) {
+    for (int i = 0; i < 4; i++) {
+        out[i] = a[i] + (b[i] - a[i]) * t;
+    }
+}
+
+static void draw_shader(float x, float y, float w, float h, const float* color,
+                        void* material) {
+    float faded[4] = {color[0], color[1], color[2], color[3] * drawAlpha};
+    R_AddCmdDrawStretchPic(x, y, w, h, 0, 0, 1, 1, faded, material);
+}
+
+// Whether the ^ color codes in a text keep the alpha passed here is unverified.
 static void draw_text(const char* text, float x, float y, float scale,
                       const float* color) {
-    R_AddCmdDrawText(text, 0x7FFFFFFF, font, x, y, scale, scale, 0, color, 0);
+    float faded[4] = {color[0], color[1], color[2], color[3] * drawAlpha};
+    R_AddCmdDrawText(text, 0x7FFFFFFF, font, x, y, scale, scale, 0, faded, 0);
 }
 
 // Rectangle border, drawn inside x, y, w, h.
@@ -1321,11 +1415,12 @@ typedef struct PanelLayout {
     float bottom;
 } PanelLayout;
 
-static PanelLayout panel_layout(float width, int rows) {
+// rows may be fractional while the panel resizes, slide moves it down while it fades.
+static PanelLayout panel_layout(float width, float rows, float slide) {
     PanelLayout layout;
     layout.width = width;
     layout.left = PANEL_CENTER_X - width / 2;
-    layout.top = PANEL_TOP;
+    layout.top = PANEL_TOP + slide;
     layout.tabsTop = layout.top + TITLE_HEIGHT + INFO_HEIGHT;
     layout.listTop = layout.tabsTop + TAB_HEIGHT + 1 + LIST_PADDING;
     layout.footerTop = layout.listTop + rows * ROW_HEIGHT + LIST_PADDING;
@@ -1376,21 +1471,37 @@ static void draw_header(const PanelLayout* layout, const char* tag, const char* 
     }
     draw_text(info, infoX, infoY, INFO_SCALE, valueColor);
 
-    // Only the normal font is registered, so the active tab is white instead of bold.
+    // Tab positions relative to the panel's left edge, so a resizing panel doesn't make
+    // the underline lag behind.
+    float tabX[TAB_COUNT];
+    float tabWidth[TAB_COUNT];
+    for (int i = 0; i < TAB_COUNT; i++) {
+        tabX[i] = x - layout->left;
+        tabWidth[i] = text_width(hostMenu.title[tabs[i]], TAB_SCALE);
+        x += tabWidth[i] + TAB_GAP;
+    }
+    static Tween underlineX;
+    static Tween underlineWidth;
+    float lineX = layout->left + tween_follow(&underlineX, tabX[activeTab], ANIM_PAGE_US);
+    float lineWidth = tween_follow(&underlineWidth, tabWidth[activeTab], ANIM_PAGE_US);
+
+    // Only the normal font is registered, so the active tab is white instead of bold. A
+    // label turns white as far as the gliding underline covers it.
     float tabY = text_baseline(layout->tabsTop, TAB_HEIGHT, TAB_SCALE);
     float dividerY = layout->tabsTop + TAB_HEIGHT;
     for (int i = 0; i < TAB_COUNT; i++) {
-        const char* label = hostMenu.title[tabs[i]];
-        float w = text_width(label, TAB_SCALE);
-        if (i == activeTab) {
-            draw_text(label, x, tabY, TAB_SCALE, white);
-            draw_shader(x, dividerY - TAB_UNDERLINE, w, TAB_UNDERLINE, selection,
-                        whiteMaterial);
-        } else {
-            draw_text(label, x, tabY, TAB_SCALE, mutedColor);
-        }
-        x += w + TAB_GAP;
+        float labelX = layout->left + tabX[i];
+        float coveredLeft = labelX > lineX ? labelX : lineX;
+        float labelRight = labelX + tabWidth[i];
+        float lineRight = lineX + lineWidth;
+        float coveredRight = labelRight < lineRight ? labelRight : lineRight;
+        float color[4];
+        mix_color(color, mutedColor, white,
+                  clamp01((coveredRight - coveredLeft) / tabWidth[i]));
+        draw_text(hostMenu.title[tabs[i]], labelX, tabY, TAB_SCALE, color);
     }
+    draw_shader(lineX, dividerY - TAB_UNDERLINE, lineWidth, TAB_UNDERLINE, selection,
+                whiteMaterial);
     draw_shader(layout->left, dividerY, layout->width, 1, divider, whiteMaterial);
 }
 
@@ -1406,16 +1517,53 @@ static void draw_footer(const PanelLayout* layout, const char* controls,
               mutedColor);
 }
 
-// On: border, gap and a filled core. Off: only the border. Dark on the selection bar,
-// where blue would vanish.
-static void draw_toggle(float x, float y, bool on, bool selected) {
-    const float* color = selected ? selectedText : on ? selection : toggleOff;
-    draw_outline(x, y, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_BORDER, color);
-    if (on) {
-        float inset = TOGGLE_BORDER * 2;
-        draw_shader(x + inset, y + inset, TOGGLE_SIZE - inset * 2,
-                    TOGGLE_SIZE - inset * 2, color, whiteMaterial);
+// The value each toggle showed last frame and when it last flipped, so a flip eases the
+// core in or out. toggleKnown is false until the first draw has read the values.
+static bool shownToggle[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
+static system_time_t toggleTime[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
+static bool toggleKnown;
+
+// 0 (off) .. 1 (on), easing after a flip.
+static float toggle_amount(int m, int i, bool on) {
+    if (!toggleKnown) {
+        for (int menu = 0; menu < HOST_MENU_MAX_MENUS; menu++) {
+            for (int option = 0; option < hostMenu.optionCount[menu]; option++) {
+                HostMenuOption* o = &hostMenu.options[menu][option];
+                if (o->type == HOST_MENU_TYPE_BOOL) {
+                    shownToggle[menu][option] = *(bool*)o->value;
+                }
+            }
+        }
+        toggleKnown = true;
     }
+    if (on != shownToggle[m][i]) {
+        shownToggle[m][i] = on;
+        toggleTime[m][i] = frameTime;
+    }
+    float t = ease_out(anim_progress(toggleTime[m][i], ANIM_TOGGLE_US));
+    return on ? t : 1 - t;
+}
+
+// On: border, gap and a filled core. Off: only the border. Dark on the selection bar,
+// where blue would vanish. on and selected are 0..1 while they animate; the core grows
+// from the center.
+static void draw_toggle(float x, float y, float on, float selected) {
+    float color[4];
+    mix_color(color, toggleOff, selection, on);
+    mix_color(color, color, selectedText, selected);
+    draw_outline(x, y, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_BORDER, color);
+    if (on > 0) {
+        float inset = TOGGLE_BORDER * 2;
+        float core = (TOGGLE_SIZE - inset * 2) * on;
+        float offset = (TOGGLE_SIZE - core) / 2;
+        draw_shader(x + offset, y + offset, core, core, color, whiteMaterial);
+    }
+}
+
+// How much the selection bar at barRow covers row: 1 when it sits on it, 0 a row away.
+static float bar_overlap(float barRow, int row) {
+    float distance = barRow - row;
+    return clamp01(1 - (distance < 0 ? -distance : distance));
 }
 
 // Row of the cursor among the visible options of menu m.
@@ -1430,8 +1578,14 @@ static int cursor_row(int m, bool inGame) {
 }
 
 // The visible options of menu m as rows of a list spanning left..left + width, the first
-// row's top at top.
-static void draw_options(int m, bool inGame, float left, float width, float top) {
+// row's top at top. The selection bar sits at barRow (fractional while it slides), rows
+// reaching below bottom are left out (the panel is still growing).
+static void draw_options(int m, bool inGame, float left, float width, float top,
+                         float barRow, float bottom) {
+    float barTop = top + barRow * ROW_HEIGHT;
+    if (visible_option_count(m, inGame) && barTop + ROW_HEIGHT <= bottom + 0.5f) {
+        draw_shader(left, barTop, width, ROW_HEIGHT, selection, whiteMaterial);
+    }
     float right = left + width - PANEL_PADDING;
     int row = 0;
     for (int i = 0; i < hostMenu.optionCount[m]; i++) {
@@ -1441,11 +1595,14 @@ static void draw_options(int m, bool inGame, float left, float width, float top)
         }
 
         float rowTop = top + row * ROW_HEIGHT;
-        bool selected = hostMenu.cursor[m] == i;
-        if (selected) {
-            draw_shader(left, rowTop, width, ROW_HEIGHT, selection, whiteMaterial);
+        if (rowTop + ROW_HEIGHT > bottom + 0.5f) {
+            break;
         }
-        const float* textColor = selected ? selectedText : white;
+        bool selected = hostMenu.cursor[m] == i;
+        // Text darkens as far as the bar slides under it, so it never goes dark on dark.
+        float covered = bar_overlap(barRow, row);
+        float textColor[4];
+        mix_color(textColor, white, selectedText, covered);
         float y = text_baseline(rowTop, ROW_HEIGHT, ROW_SCALE);
         draw_text(option->text, left + PANEL_PADDING, y, ROW_SCALE, textColor);
 
@@ -1461,7 +1618,7 @@ static void draw_options(int m, bool inGame, float left, float width, float top)
                 break;
             case HOST_MENU_TYPE_BOOL:
                 draw_toggle(right - TOGGLE_SIZE, rowTop + (ROW_HEIGHT - TOGGLE_SIZE) / 2,
-                            *(bool*)option->value, selected);
+                            toggle_amount(m, i, *(bool*)option->value), covered);
                 break;
             default:
                 break;
@@ -1471,8 +1628,9 @@ static void draw_options(int m, bool inGame, float left, float width, float top)
         }
 
         if (*value) {
-            draw_text(value, right - text_width(value, ROW_SCALE), y, ROW_SCALE,
-                      selected ? selectedText : valueColor);
+            float color[4];
+            mix_color(color, valueColor, selectedText, covered);
+            draw_text(value, right - text_width(value, ROW_SCALE), y, ROW_SCALE, color);
         }
         row++;
     }
@@ -1480,8 +1638,10 @@ static void draw_options(int m, bool inGame, float left, float width, float top)
 
 // The options of modalMenu below the selected row of listMenu, or above it when they
 // would reach past the bottom of the panel.
+// alpha and slide (pushed down by it) animate it in and out, barRow is its selection bar.
 static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
-                       const char* title, bool inGame) {
+                       const char* title, bool inGame, float alpha, float slide,
+                       float barRow) {
     float height = TOGGLE_BORDER + MODAL_TITLE_HEIGHT +
                    visible_option_count(modalMenu, inGame) * ROW_HEIGHT + LIST_PADDING +
                    TOGGLE_BORDER;
@@ -1490,8 +1650,11 @@ static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
     if (y + height > layout->bottom) {
         y = rowTop - height;
     }
+    y += slide;
     float left = PANEL_CENTER_X - MODAL_WIDTH / 2;
 
+    float panelAlpha = drawAlpha;
+    drawAlpha *= alpha;
     draw_shader(left, y, MODAL_WIDTH, height, modalBackground, whiteMaterial);
     draw_outline(left, y, MODAL_WIDTH, height, TOGGLE_BORDER, selection);
     draw_text(title, PANEL_CENTER_X - text_width(title, MODAL_TITLE_SCALE) / 2,
@@ -1499,19 +1662,56 @@ static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
               MODAL_TITLE_SCALE, white);
     // Inside the border, so the selection bar doesn't cover it.
     draw_options(modalMenu, inGame, left + TOGGLE_BORDER, MODAL_WIDTH - TOGGLE_BORDER * 2,
-                 y + TOGGLE_BORDER + MODAL_TITLE_HEIGHT);
+                 y + TOGGLE_BORDER + MODAL_TITLE_HEIGHT, barRow, y + height);
+    drawAlpha = panelAlpha;
 }
 
-static void draw_player_modal(const PanelLayout* layout, int party, bool inGame) {
-    const char* name = player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK]);
-    draw_modal(layout, HOST_MENU_KICK, HOST_MENU_PLAYER, name, inGame);
+// The modal over the list it was opened from: fades in when it opens, and out when it is
+// left while that list is still shown. Its selection bar slides like the list's.
+static int shownModal = -1;
+static bool modalClosing;
+static system_time_t modalTime;
+static Tween modalBar;
+
+static void draw_modal_animated(const PanelLayout* layout, int m, int party,
+                                bool inGame) {
+    bool modal = m == HOST_MENU_PLAYER || m == HOST_MENU_STATS_FILE;
+    if (modal && (m != shownModal || modalClosing)) {
+        shownModal = m;
+        modalClosing = false;
+        modalTime = frameTime;
+        tween_snap(&modalBar, cursor_row(m, inGame));
+    } else if (!modal && shownModal != -1 && !modalClosing) {
+        modalClosing = true;
+        modalTime = frameTime;
+    }
+    if (shownModal == -1) {
+        return;
+    }
+    int listMenu = hostMenu.parent[shownModal];
+    float t = ease_out(anim_progress(modalTime, ANIM_MODAL_US));
+    if (modalClosing && (t >= 1 || m != listMenu)) {
+        shownModal = -1;
+        return;
+    }
+
+    float alpha = modalClosing ? 1 - t : t;
+    float barRow =
+        tween_follow(&modalBar, cursor_row(shownModal, inGame), ANIM_SCROLL_US);
+    const char* title =
+        shownModal == HOST_MENU_PLAYER
+            ? player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK])
+            : hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text;
+    draw_modal(layout, listMenu, shownModal, title, inGame, alpha,
+               (1 - alpha) * ANIM_MODAL_SLIDE, barRow);
 }
 
 // Drawn in the given left column row: below the session info while the menu is open,
 // below the open hint while it is closed (Save Stats closes it for the keyboard).
 static void draw_status(int row) {
     system_time_t time = statusTime;
-    if (!time || sys_time_get_system_time() - time > STATUS_DURATION_US) {
+    system_time_t age = frameTime - time;
+    if (!time || age > STATUS_DURATION_US) {
         return;
     }
     // Pairs with the one in show_status: the text is read only after the time that marks
@@ -1521,7 +1721,11 @@ static void draw_status(int row) {
     memcpy(text, statusText, sizeof(text));
     text[sizeof(text) - 1] = 0;
     float step = R_TextHeight(font) * 0.5f + 10;
+    float fadeIn = clamp01((float)age / ANIM_STATUS_IN_US);
+    float fadeOut = clamp01((float)(STATUS_DURATION_US - age) / ANIM_STATUS_OUT_US);
+    drawAlpha = fadeIn < fadeOut ? fadeIn : fadeOut;
     draw_text_box(text, 10, 20 + row * step, 0.5f);
+    drawAlpha = 1;
 }
 
 // Builds every row's rank, tag and their widths for the draw loop and returns the panel
@@ -1569,16 +1773,22 @@ static int build_player_rows(int party, bool inGame) {
 }
 
 // The player rows, "Not in a lobby" outside a lobby or "No players" for an empty list.
-static void draw_player_list(const PanelLayout* layout, int party, bool inGame,
-                             bool notHost) {
-    float left = layout->left + PANEL_PADDING;
+// The selection bar and the row limit work like in draw_options, rows start at left.
+static void draw_player_list(const PanelLayout* layout, float left, int party,
+                             bool inGame, bool notHost, float barRow) {
+    float bottom = layout->footerTop - LIST_PADDING;
     const char* empty = notHost                                         ? "Not in a lobby"
                         : !visible_option_count(HOST_MENU_KICK, inGame) ? "No players"
                                                                         : 0;
     if (empty) {
-        draw_text(empty, left, text_baseline(layout->listTop, ROW_HEIGHT, ROW_SCALE),
-                  ROW_SCALE, white);
+        draw_text(empty, left + PANEL_PADDING,
+                  text_baseline(layout->listTop, ROW_HEIGHT, ROW_SCALE), ROW_SCALE,
+                  white);
         return;
+    }
+    float barTop = layout->listTop + barRow * ROW_HEIGHT;
+    if (barTop + ROW_HEIGHT <= bottom + 0.5f) {
+        draw_shader(left, barTop, layout->width, ROW_HEIGHT, selection, whiteMaterial);
     }
     // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn the
     // selected name white. Only occupied slots get a row.
@@ -1587,15 +1797,14 @@ static void draw_player_list(const PanelLayout* layout, int party, bool inGame,
         if (!player_slot_used(party, inGame, i)) {
             continue;
         }
-        float rowTop = layout->listTop + row++ * ROW_HEIGHT;
-        bool selected = hostMenu.cursor[HOST_MENU_KICK] == i;
-        if (selected) {
-            draw_shader(layout->left, rowTop, layout->width, ROW_HEIGHT, selection,
-                        whiteMaterial);
+        float rowTop = layout->listTop + row * ROW_HEIGHT;
+        if (rowTop + ROW_HEIGHT > bottom + 0.5f) {
+            break;
         }
-        const float* color = selected ? selectedText : white;
+        float color[4];
+        mix_color(color, white, selectedText, bar_overlap(barRow, row++));
         float y = text_baseline(rowTop, ROW_HEIGHT, ROW_SCALE);
-        float x = left;
+        float x = left + PANEL_PADDING;
         // On player rows icon, level and tag/name each start at a fixed x, also without
         // an icon, so the names form one straight column. Players without a level start
         // at the left edge.
@@ -1645,27 +1854,26 @@ static void build_controls(int m, bool inGame, bool notHost, bool viewOnly, char
              switchHint, unbanHint, exitHint);
 }
 
-void host_menu_ui_draw() {
-    if (!font) {
-        font = R_RegisterFont(FONT, 0);
-    }
-    if (!whiteMaterial) {
-        whiteMaterial = Material_RegisterHandle("white", 0);
-    }
-    if (!arrowMaterial) {
-        arrowMaterial = Material_RegisterHandle("ui_arrow_right", 0);
-    }
+// The list page the panel shows (a tab or the Load Stats list), and how it came in:
+// from the right (+1) when going to the next tab or into a submenu, from the left (-1)
+// otherwise.
+static int shownPage = -1;
+static int pageDirection;
+static system_time_t pageTime;
+static Tween panelWidth;
+static Tween panelRows;
+static Tween listBar;
 
-    if (!hostMenu.open) {
-        playerListWidth = 0;
-        if (hostMenu.showControls) {
-            draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
-        }
-        draw_status(hostMenu.showControls ? 1 : 0);
-        return;
+static int page_direction(int from, int to) {
+    if (is_tab(from) && is_tab(to)) {
+        int step = (tab_index(to) - tab_index(from) + TAB_COUNT) % TAB_COUNT;
+        return step == 1 ? 1 : -1;
     }
-    draw_status(0);
+    return hostMenu.parent[from] == to ? -1 : 1;
+}
 
+// The open panel, faded to alpha and pushed down by slide (opening and closing).
+static void draw_panel(float alpha, float slide) {
     close_stale_player_modal();
     bool inGame = Dvar_GetBool("cl_ingame");
     close_stale_stats_menu(inGame);
@@ -1720,29 +1928,84 @@ void host_menu_ui_draw() {
         playerListWidth = 0;
     }
 
+    if (boxMenu != shownPage) {
+        bool slideIn = shownPage != -1 && !snapAnimations;
+        pageDirection = slideIn ? page_direction(shownPage, boxMenu) : 0;
+        pageTime = slideIn ? frameTime : 0;
+        shownPage = boxMenu;
+        tween_snap(&listBar, cursor_row(boxMenu, inGame));
+    }
     int rows = visible_option_count(boxMenu, inGame);
     if (notHost || !rows) {
         rows = 1;  // "Not in a lobby" / "No players"
     }
-    PanelLayout layout = panel_layout(width, rows);
+    float barRow = tween_follow(&listBar, cursor_row(boxMenu, inGame), ANIM_SCROLL_US);
+    PanelLayout layout =
+        panel_layout(tween_follow(&panelWidth, width, ANIM_PAGE_US),
+                     tween_follow(&panelRows, rows, ANIM_PAGE_US), slide);
+
+    drawAlpha = alpha;
     draw_shader(layout.left, layout.top, layout.width, layout.bottom - layout.top,
                 panelBackground, whiteMaterial);
     draw_header(&layout, tag, info, tab_index(m));
     draw_footer(&layout, controls, position);
 
+    // A new page's rows fade in while sliding into place.
+    float page = ease_out(anim_progress(pageTime, ANIM_PAGE_US));
+    float left = layout.left + pageDirection * (1 - page) * ANIM_PAGE_SLIDE;
+    drawAlpha = alpha * page;
     if (players) {
-        draw_player_list(&layout, party, inGame, notHost);
-        if (m == HOST_MENU_PLAYER) {
-            draw_player_modal(&layout, party, inGame);
-        }
-        return;
+        draw_player_list(&layout, left, party, inGame, notHost, barRow);
+    } else {
+        draw_options(boxMenu, inGame, left, layout.width, layout.listTop, barRow,
+                     layout.footerTop - LIST_PADDING);
+    }
+    drawAlpha = alpha;
+    draw_modal_animated(&layout, m, party, inGame);
+    drawAlpha = 1;
+}
+
+// Last state of hostMenu.open and when it changed, for the open and close animation.
+static bool shownOpen;
+static system_time_t openTime;
+
+void host_menu_ui_draw() {
+    if (!font) {
+        font = R_RegisterFont(FONT, 0);
+    }
+    if (!whiteMaterial) {
+        whiteMaterial = Material_RegisterHandle("white", 0);
+    }
+    if (!arrowMaterial) {
+        arrowMaterial = Material_RegisterHandle("ui_arrow_right", 0);
     }
 
-    draw_options(boxMenu, inGame, layout.left, layout.width, layout.listTop);
-    if (m == HOST_MENU_STATS_FILE) {
-        draw_modal(
-            &layout, HOST_MENU_STATS, HOST_MENU_STATS_FILE,
-            hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text,
-            inGame);
+    frameTime = sys_time_get_system_time();
+    bool open = hostMenu.open;
+    if (open != shownOpen) {
+        shownOpen = open;
+        openTime = frameTime;
+        snapAnimations = open;
     }
+
+    if (!open) {
+        // The menu thread already treats the menu as closed, only the picture lingers.
+        float t = anim_progress(openTime, ANIM_CLOSE_US);
+        if (t < 1) {
+            float alpha = 1 - ease_out(t);
+            draw_panel(alpha, (1 - alpha) * ANIM_OPEN_SLIDE);
+        } else {
+            playerListWidth = 0;
+        }
+        if (hostMenu.showControls) {
+            draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
+        }
+        draw_status(hostMenu.showControls ? 1 : 0);
+        return;
+    }
+    draw_status(0);
+
+    float t = ease_out(anim_progress(openTime, ANIM_OPEN_US));
+    draw_panel(t, (1 - t) * ANIM_OPEN_SLIDE);
+    snapAnimations = false;
 }
