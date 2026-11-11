@@ -97,7 +97,6 @@ void host_menu_set_local_name(const char* name) {
     char oldName[T5_PartyMemberNameSize];
     snprintf(oldName, sizeof(oldName), "%s", (const char*)T5_PlayerName2);
 
-    strcpy((char*)T5_PlayerName1, name);
     strcpy((char*)T5_PlayerName2, name);
 
     if (rename_local_party_member(T5_LobbyParty, oldName, name)) {
