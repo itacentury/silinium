@@ -1673,6 +1673,9 @@ static int shownModal = -1;
 static bool modalClosing;
 static system_time_t modalTime;
 static Tween modalBar;
+// Frozen while the modal fades out: by then a delete may have rebuilt the stats list or a
+// kick emptied the slot, so the live title would switch to someone or something else.
+static char modalTitle[32];
 
 static void draw_modal_animated(const PanelLayout* layout, int m, int party,
                                 bool inGame) {
@@ -1699,11 +1702,15 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
     float alpha = modalClosing ? 1 - t : t;
     float barRow =
         tween_follow(&modalBar, cursor_row(shownModal, inGame), ANIM_SCROLL_US);
-    const char* title =
-        shownModal == HOST_MENU_PLAYER
-            ? player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK])
-            : hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text;
-    draw_modal(layout, listMenu, shownModal, title, inGame, alpha,
+    if (!modalClosing) {
+        const char* title =
+            shownModal == HOST_MENU_PLAYER
+                ? player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK])
+                : hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]]
+                      .text;
+        snprintf(modalTitle, sizeof(modalTitle), "%s", title);
+    }
+    draw_modal(layout, listMenu, shownModal, modalTitle, inGame, alpha,
                (1 - alpha) * ANIM_MODAL_SLIDE, barRow);
 }
 
