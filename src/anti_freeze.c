@@ -27,6 +27,8 @@
    console that draws the text freezes. A name set through userinfo is stored by the host
    and sent on to every client. In the lobby, the host sends every party member's name and
    clan tag on in the partystate message.
+    - "relay <n>" (out-of-band packet, any party member can send it to any console):
+   0x1CB160 uses strtol(argv1) as party member index without a bound, e.g. -1234567.
 
     A real icon's pointer holds a NUL: materials are in the type 6 asset pool at 0xDD8C68
    (eboot BSS, from the pool table 0xB320F4; its size is unverified), so the first byte is
@@ -659,6 +661,17 @@ int CL_CGameNeedsServerCommand_Hook(int localClientNum, int serverCommandNumber)
     return res;
 }
 
+// The game matches "relay" case-insensitively, the index is the int it keeps. 1 tells
+// CL_ConnectionlessPacket the packet was handled.
+int CL_RelayPacket_Hook(int localClientNum, void* msg) {
+    if (I_stricmp(af_cmd_argv(0), "relay") == 0 &&
+        (uint32_t)af_cmd_arg_number(1) >= T5_PartyMaxMembers) {
+        af_report("a relay packet with an invalid member index");
+        return 1;
+    }
+    return CL_RelayPacket_Trampoline(localClientNum, msg);
+}
+
 // af_sanitize_text with the caches when no zone is loading, text as is if the material
 // lookup is broken.
 static const char* af_filter_text(const char* text, int length, char* buffer, size_t size,
@@ -873,6 +886,7 @@ int anti_freeze_init() {
     t5nmi(Sys_GetValue);
     t5nmi(game_strtol);
     t5nmhi(CL_CGameNeedsServerCommand);
+    t5nmhi(CL_RelayPacket);
     t5nmhi(AddBaseDrawTextCmd);
     t5nmhi(R_AddCmdDrawConsoleText);
     t5nmhi(SV_UserinfoChanged);
@@ -892,6 +906,9 @@ int anti_freeze_init() {
         return res;
     }
     if ((res = cs_hook_install(CL_CGameNeedsServerCommand, CS_HOOK_TYPE_CTR)) < 0) {
+        return res;
+    }
+    if ((res = cs_hook_install(CL_RelayPacket, CS_HOOK_TYPE_CTR)) < 0) {
         return res;
     }
     // The text filter reads material pointers with sys_dbg_process_read. Without it every

@@ -304,6 +304,12 @@
 #define T5_MaxReliableCommands 128
 #define T5_ServerCommandSize 0x400
 #define T5_MaxConfigstrings 0xAC2 // "d <index> <value>": CL_CGameNeedsServerCommand calls Com_Error above 0xAC1
+// (localClientNum?, msg_t* msg), OOB handler for "v" (0x1E1780), "vt" (0x1E04E8) and "relay", called by
+// CL_ConnectionlessPacket (0x1CC320) at 0x1CC3C0 with the packet tokenized in T5_CmdArgsSlot. "relay <n>" uses
+// strtol(argv1) unchecked as party member index (party + 0x1210 + n * 0x220, then 0x1E13C8 reads
+// 0x2023500 + 0x3C0 + n * 0x38), "v" and "vt" check theirs (<= 0x11). Returns 1 if handled. Name and first parameter
+// inferred.
+#define T5_CL_RelayPacket 0x1CB160
 #define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
 // The client side tokenizer. CL_CGameNeedsServerCommand tokenizes with Cmd_TokenizeString, "d" ends it and tokenizes
 // again with Cmd_TokenizeStringWithLimit(text, 3). CG_ExecuteNewServerCommands ends it only when 1 was returned.
