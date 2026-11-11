@@ -168,7 +168,7 @@ Built-in functions:
 | Function | Modes | Effect |
 |---|---|---|
 | `setmemory(address, data)` | MP, ZM | Writes the hex string `data` to the hex `address`. |
-| `callkeyboard(title, clientNum)` | MP | Opens the game keyboard on the host console and returns 1, or 0 while another request is still running. The entered text is sent to the player with that client number: `self waittill("keyboard_input", text);`. Characters outside ASCII become `?`, at most 64 characters. |
+| `callkeyboard(title, clientNum)` | MP | Opens the game keyboard on the host console and returns 1, or 0 while another request is still running. The entered text is sent to the player with that client number: `self waittill("keyboard_input", text);`. Characters outside ASCII become `?`, at most 64 characters. A cancelled keyboard, or one that could not open, sends an empty string. |
 
 ```
 if (callkeyboard("Say something", self getEntityNumber()))

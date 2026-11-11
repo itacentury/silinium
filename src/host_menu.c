@@ -452,10 +452,11 @@ static void show_game_messages() {
 // In game Change Name holds the same state (KEYBOARD_NAME): a second UI_OpenKeyboard most
 // likely replaces the open keyboard's callback, so only one of them may be up at a time.
 // The game calls the callback on cancel too (text NULL, length 0), but not if the
-// keyboard failed to open or ended with an unexpected result, so the state is also
-// released once the game's keyboard is closed, and when the client of a callkeyboard
-// left. Closed means fully unloaded: no keyboard is opened and no state released while
-// the game's previous keyboard is still unloading.
+// keyboard failed to open or ended with an unexpected result. So once the game's keyboard
+// is closed, a callkeyboard keyboard still open answers like a cancel (empty text) and
+// Change Name's state is released; the state is also released when the client of a
+// callkeyboard left. Closed means fully unloaded: no keyboard is opened and no state
+// released while the game's previous keyboard is still unloading.
 enum {
     KEYBOARD_IDLE,
     KEYBOARD_REQUESTED,
@@ -512,16 +513,6 @@ static bool game_keyboard_closed() {
     return *(volatile int*)T5_KeyboardState == T5_KeyboardStateClosed;
 }
 
-// The game runs the callback before it leaves the finished state, so a callback that did
-// run has already moved the state on and the swaps don't match.
-static void release_closed_keyboard() {
-    if (!game_keyboard_closed()) {
-        return;
-    }
-    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
-    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_OPEN, KEYBOARD_IDLE);
-}
-
 // An open keyboard stays up on the host's console; once its text is entered it is dropped
 // here.
 static void drop_keyboard_of_left_client() {
@@ -545,6 +536,18 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
     keyboardText[i] = 0;
     __lwsync();
     keyboardState = KEYBOARD_ENTERED;
+}
+
+// The game runs the callback before it leaves the finished state, so a callback that did
+// run has already moved the state on and nothing matches. A callkeyboard keyboard without
+// its callback is answered like a cancel, the script is still waiting on keyboard_input.
+// Both this and the callback run on the UI thread, so the callback's state check holds.
+static void release_closed_keyboard() {
+    if (!game_keyboard_closed()) {
+        return;
+    }
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
+    keyboard_input_callback(0, NULL, 0);
 }
 
 static void open_requested_keyboard() {
