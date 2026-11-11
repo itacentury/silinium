@@ -1053,6 +1053,19 @@ static int playerListParty;
 #define RANK_ICON_MAX_RANK 49
 #define RANK_ICON_MAX_PRESTIGE 15
 
+// Layout of the menu box and the modals drawn over its lists. The box is
+// LIST_BOX_PADDING (titles and bottom margin) plus one LIST_ROW_HEIGHT per row high; y
+// values of text are baselines, its top is ROW_TEXT_HEIGHT above.
+#define LIST_ROW_HEIGHT 16.5f
+#define LIST_BOX_TOP 200.0f
+#define LIST_BOX_PADDING 48.0f
+#define LIST_FIRST_ROW_Y 258.0f
+#define ROW_TEXT_HEIGHT 16.0f
+// Gap between a row and the modal drawn below it.
+#define MODAL_GAP 6.0f
+// Modal title and bottom margin around its options.
+#define MODAL_PADDING 40.0f
+
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
 // player's own color codes are dropped too. out must hold CLAN_TAG_MAX bytes.
@@ -1236,7 +1249,7 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
             continue;
         }
 
-        float rowY = row * 16.5f + y;
+        float rowY = row * LIST_ROW_HEIGHT + y;
         draw_text(option->text, x, rowY, 0.5f, hostMenu.cursor[m] == i ? accent : white);
 
         char valueBuffer[8];
@@ -1270,26 +1283,39 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
     }
 }
 
+static float list_row_y(int row) { return row * LIST_ROW_HEIGHT + LIST_FIRST_ROW_Y; }
+
+static float list_box_height(int rows) {
+    return rows * LIST_ROW_HEIGHT + LIST_BOX_PADDING;
+}
+
+static float modal_height(int modalMenu, bool inGame) {
+    return visible_option_count(modalMenu, inGame) * LIST_ROW_HEIGHT + MODAL_PADDING;
+}
+
+// Top of the modal opened on row, drawn below the row.
+static float modal_below_y(int row) { return list_row_y(row) + MODAL_GAP; }
+
+// Top of the modal opened on row, flipped above the row: it ends at the row's text top.
+static float modal_above_y(int row, float height) {
+    return list_row_y(row) - ROW_TEXT_HEIGHT - height;
+}
+
 // The rows a list box needs so modalMenu, opened on any of the list's first listRows
 // rows, fits below its row or, flipped above it by draw_modal, stays below the box
-// titles. Flipped, the modal on row r starts at 258 + r * 16.5 - 16 - height, which
-// clears the titles once it is at or below the first row's text top (242), i.e. r * 16.5
-// >= height. The rows before that must fit it below: 258 + r * 16.5 + 6 + height <= rows
-// * 16.5 + 248.
+// titles. Follows draw_modal's placement through the shared helpers, so the two can't
+// drift apart.
 static int modal_list_min_rows(int modalMenu, int listRows, bool inGame) {
-    float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
-    int firstFlip = 0;
-    while (firstFlip * 16.5f < height) {
-        firstFlip++;
-    }
-    int last = firstFlip - 1 < listRows - 1 ? firstFlip - 1 : listRows - 1;
-    if (last < 0) {
-        return 0;
-    }
-    float need = last + (16.0f + height) / 16.5f;
-    int rows = (int)need;
-    if (rows < need) {
-        rows++;  // ceil (need >= 0)
+    float height = modal_height(modalMenu, inGame);
+    float titlesBottom = list_row_y(0) - ROW_TEXT_HEIGHT;
+    int rows = 0;
+    for (int r = 0; r < listRows; r++) {
+        if (modal_above_y(r, height) >= titlesBottom) {
+            break;  // flipped it clears the titles, as on every later row
+        }
+        while (LIST_BOX_TOP + list_box_height(rows) < modal_below_y(r) + height) {
+            rows++;
+        }
     }
     return rows;
 }
@@ -1299,11 +1325,11 @@ static int modal_list_min_rows(int modalMenu, int listRows, bool inGame) {
 // or the flipped modal covers its titles.
 static void draw_modal(int listMenu, int modalMenu, const char* title, bool inGame,
                        float listBottom) {
-    float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
-    float rowY = visible_row(listMenu, inGame) * 16.5f + 258;
-    float y = rowY + 6;
+    float height = modal_height(modalMenu, inGame);
+    int row = visible_row(listMenu, inGame);
+    float y = modal_below_y(row);
     if (y + height > listBottom) {
-        y = rowY - 16 - height;
+        y = modal_above_y(row, height);
     }
 
     draw_shader(560, y, 180, height, modalBackground, whiteMaterial);
@@ -1440,7 +1466,7 @@ void host_menu_ui_draw() {
     if (rows < minRows) {
         rows = minRows;
     }
-    float height = rows * 16.5f + 48.0f;
+    float height = list_box_height(rows);
     // The player list grows around the center at 650, so titles and the modal stay
     // centered. It keeps its widest width until the list is left, so names don't shift
     // sideways when a long-named player leaves.
@@ -1459,9 +1485,9 @@ void host_menu_ui_draw() {
         playerListWidth = 0;
     }
     float left = 650 - width / 2;
-    draw_shader(left - 2, 200, 2, height, accent, whiteMaterial);
-    draw_shader(left + width - 1, 200, 2, height, accent, whiteMaterial);
-    draw_shader(left, 200, width, height, background, whiteMaterial);
+    draw_shader(left - 2, LIST_BOX_TOP, 2, height, accent, whiteMaterial);
+    draw_shader(left + width - 1, LIST_BOX_TOP, 2, height, accent, whiteMaterial);
+    draw_shader(left, LIST_BOX_TOP, width, height, background, whiteMaterial);
 
     draw_text("Silinium", get_aligned_x(650, 0.6f, "Silinium", ALIGN_CENTER), 220, 0.6f,
               white);
@@ -1499,11 +1525,11 @@ void host_menu_ui_draw() {
         draw_text_box(controls, 10, 20, 0.5f);
         draw_session_info(inGame);
         if (notHost) {
-            draw_text("Not in a lobby", 510, 258, 0.5f, white);
+            draw_text("Not in a lobby", 510, LIST_FIRST_ROW_Y, 0.5f, white);
             return;
         }
         if (!visible_option_count(HOST_MENU_KICK, inGame)) {
-            draw_text("No players", left + 10, 258, 0.5f, white);
+            draw_text("No players", left + 10, LIST_FIRST_ROW_Y, 0.5f, white);
             return;
         }
         // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn
@@ -1514,7 +1540,7 @@ void host_menu_ui_draw() {
                 continue;
             }
             const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
-            float y = row++ * 16.5f + 258;
+            float y = list_row_y(row++);
             float x = left + 10;
             // On player rows icon, level and tag/name each start at a fixed x, also
             // without an icon, so the names form one straight column. Players without a
@@ -1534,7 +1560,7 @@ void host_menu_ui_draw() {
             draw_text(player_name(party, inGame, i), x, y, 0.5f, color);
         }
         if (m == HOST_MENU_PLAYER) {
-            draw_player_modal(party, inGame, 200 + height);
+            draw_player_modal(party, inGame, LIST_BOX_TOP + height);
         }
         return;
     }
@@ -1544,11 +1570,11 @@ void host_menu_ui_draw() {
                       : "\x14\x15 - Scroll | \x01 - Select | \x02 - Back",
                   10, 20, 0.5f);
     draw_session_info(inGame);
-    draw_options(boxMenu, inGame, 510, 790, 258);
+    draw_options(boxMenu, inGame, 510, 790, LIST_FIRST_ROW_Y);
     if (m == HOST_MENU_STATS_FILE) {
         draw_modal(
             HOST_MENU_STATS, HOST_MENU_STATS_FILE,
             hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text,
-            inGame, 200 + height);
+            inGame, LIST_BOX_TOP + height);
     }
 }
