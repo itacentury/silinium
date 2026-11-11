@@ -453,7 +453,8 @@ static void show_game_messages() {
 // The game calls the callback on cancel too (text NULL, length 0), but not if the
 // keyboard failed to open or ended with an unexpected result, so the state is also
 // released once the game's keyboard is closed, and when the client of a callkeyboard
-// left.
+// left. Closed means fully unloaded: no keyboard is opened and no state released while
+// the game's previous keyboard is still unloading.
 enum {
     KEYBOARD_IDLE,
     KEYBOARD_REQUESTED,
@@ -503,15 +504,17 @@ void host_menu_name_keyboard_closed() {
     cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
 }
 
-static bool game_keyboard_open() {
-    int state = *(volatile int*)T5_KeyboardState;
-    return state == T5_KeyboardStateOpen || state == T5_KeyboardStateFinished;
+// Unloading (3) is not closed: its OSKDIALOG_UNLOADED still follows and sets 0, also
+// under a keyboard opened in between, and a new dialog most likely can't be loaded before
+// that.
+static bool game_keyboard_closed() {
+    return *(volatile int*)T5_KeyboardState == T5_KeyboardStateClosed;
 }
 
 // The game runs the callback before it leaves the finished state, so a callback that did
 // run has already moved the state on and the swaps don't match.
 static void release_closed_keyboard() {
-    if (game_keyboard_open()) {
+    if (!game_keyboard_closed()) {
         return;
     }
     cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
@@ -546,7 +549,7 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
 static void open_requested_keyboard() {
     static const char16 preset[] = {0};
     // The menu hides the pad from the game, so the keyboard waits until it's closed.
-    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open) {
+    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open || !game_keyboard_closed()) {
         return;
     }
     __lwsync();
@@ -763,7 +766,8 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     }
 
     bool inGame = Dvar_GetBool("cl_ingame");
-    if (hostMenu.changeNamePending) {
+    // Keyboards stay pending until the game's previous one is unloaded.
+    if (hostMenu.changeNamePending && game_keyboard_closed()) {
         hostMenu.changeNamePending = false;
         open_name_keyboard(inGame);
     }
@@ -803,7 +807,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             arm_party_map_sync(uiContext, openMenuCount);
         }
         sync_party_map(uiContext);
-        if (hostMenu.saveStatsKeyboardPending) {
+        if (hostMenu.saveStatsKeyboardPending && game_keyboard_closed()) {
             hostMenu.saveStatsKeyboardPending = false;
             host_menu_ui_open_stats_keyboard();
         }

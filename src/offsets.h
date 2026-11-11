@@ -58,6 +58,7 @@
 // the callback with the text for result 0 and with (NULL, 0) for results 1-3 (cancel, abort, no text), not at all for
 // other results, then sets 3.
 #define T5_KeyboardState 0x1B2942C
+#define T5_KeyboardStateClosed 0
 #define T5_KeyboardStateOpen 1
 #define T5_KeyboardStateFinished 2
 #define T5_Dvar_GetBool 0x4C7BF0
