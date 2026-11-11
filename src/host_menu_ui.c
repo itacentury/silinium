@@ -1511,24 +1511,25 @@ static void draw_footer(const PanelLayout* layout, const char* controls,
 }
 
 // The value each toggle showed last frame and when it last flipped, so a flip eases the
-// core in or out. toggleKnown is false until the first draw has read the values.
+// core in or out.
 static bool shownToggle[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
 static system_time_t toggleTime[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
-static bool toggleKnown;
+
+// Takes the current values as shown, so a toggle changed while its page was hidden
+// (for example by Load Stats) does not animate when the page appears.
+static void sync_toggles(void) {
+    for (int menu = 0; menu < HOST_MENU_MAX_MENUS; menu++) {
+        for (int option = 0; option < hostMenu.optionCount[menu]; option++) {
+            HostMenuOption* o = &hostMenu.options[menu][option];
+            if (o->type == HOST_MENU_TYPE_BOOL) {
+                shownToggle[menu][option] = *(bool*)o->value;
+            }
+        }
+    }
+}
 
 // 0 (off) .. 1 (on), easing after a flip.
 static float toggle_amount(int m, int i, bool on) {
-    if (!toggleKnown) {
-        for (int menu = 0; menu < HOST_MENU_MAX_MENUS; menu++) {
-            for (int option = 0; option < hostMenu.optionCount[menu]; option++) {
-                HostMenuOption* o = &hostMenu.options[menu][option];
-                if (o->type == HOST_MENU_TYPE_BOOL) {
-                    shownToggle[menu][option] = *(bool*)o->value;
-                }
-            }
-        }
-        toggleKnown = true;
-    }
     if (on != shownToggle[m][i]) {
         shownToggle[m][i] = on;
         toggleTime[m][i] = frameTime;
@@ -1932,6 +1933,9 @@ static void draw_panel(float alpha, float slide) {
         playerListWidth = 0;
     }
 
+    if (snapAnimations || boxMenu != shownPage) {
+        sync_toggles();
+    }
     if (boxMenu != shownPage) {
         bool slideIn = shownPage != -1 && !snapAnimations;
         pageDirection = slideIn ? page_direction(shownPage, boxMenu) : 0;
