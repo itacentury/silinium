@@ -1637,8 +1637,9 @@ static void draw_options(int m, bool inGame, float left, float width, float top,
 }
 
 // The options of modalMenu below the selected row of listMenu, or above it when they
-// would reach past the bottom of the panel.
-// alpha and slide (pushed down by it) animate it in and out, barRow is its selection bar.
+// would reach past the bottom of the panel and fit above it within the list, so they
+// never cover the header on short lists. alpha and slide (pushed down by it) animate it
+// in and out, barRow is its selection bar.
 static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
                        const char* title, bool inGame, float alpha, float slide,
                        float barRow) {
@@ -1647,7 +1648,7 @@ static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
                    TOGGLE_BORDER;
     float rowTop = layout->listTop + cursor_row(listMenu, inGame) * ROW_HEIGHT;
     float y = rowTop + ROW_HEIGHT;
-    if (y + height > layout->bottom) {
+    if (y + height > layout->bottom && rowTop - height >= layout->listTop) {
         y = rowTop - height;
     }
     y += slide;
