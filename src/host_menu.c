@@ -327,11 +327,23 @@ static bool is_gametype_tdm() {
     return dvar && dvar->current.string && strcmp(dvar->current.string, "tdm") == 0;
 }
 
+// L1 / R1 held at the last pad sample.
+static uint16_t lastPadShoulders;
+
 int PadGetData_Hook(uint32_t port, CellPadData* data) {
     int res = PadGetData_Trampoline(port, data);
 
     if (res == CELL_PAD_OK && data->len > 0) {
         memcpy(&hostMenu.pad, data, sizeof(CellPadData));
+
+        // Only while open, so the L1 of the open combo never counts as a tab switch.
+        uint16_t shoulders = data->button[CELL_PAD_BTN_OFFSET_DIGITAL2] &
+                             (CELL_PAD_CTRL_L1 | CELL_PAD_CTRL_R1);
+        uint16_t pressed = shoulders & ~lastPadShoulders;
+        lastPadShoulders = shoulders;
+        if (hostMenu.open && pressed) {
+            cellAtomicOr32(&hostMenu.shoulderTaps, pressed);
+        }
 
         // Hide all buttons except Select from the game while the menu is open (sticks
         // stay active).

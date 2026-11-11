@@ -1,5 +1,6 @@
 #include "host_menu_ui.h"
 
+#include <cell/atomic.h>
 #include <ppu_intrinsics.h>
 #include <stdio.h>
 #include <string.h>
@@ -1102,10 +1103,6 @@ static bool can_unban_all(int m, bool inGame) {
            host_menu_ban_count() > 0;
 }
 
-// L1 / R1 held at the last poll. Tabs switch on a new press only, so the L1 still held
-// from opening the menu doesn't count.
-static uint16_t lastShoulders;
-
 // Next (+1) or previous (-1) tab, wrapping around.
 static void switch_tab(int m, int step) {
     int i = (tab_index(m) + step + TAB_COUNT) % TAB_COUNT;
@@ -1115,21 +1112,20 @@ static void switch_tab(int m, int step) {
 void host_menu_ui_handle_input() {
     uint16_t digital1 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL1];
     uint16_t digital2 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL2];
-    uint16_t shoulders = digital2 & (CELL_PAD_CTRL_L1 | CELL_PAD_CTRL_R1);
 
     if (!hostMenu.open) {
         if (digital1 == CELL_PAD_CTRL_R3 && digital2 == CELL_PAD_CTRL_L1) {
             // Back on the tab that was open last.
             hostMenu.current = tabs[tab_index(hostMenu.current)];
-            lastShoulders = CELL_PAD_CTRL_L1;
+            cellAtomicStore32(&hostMenu.shoulderTaps, 0);
             hostMenu.open = true;
             sys_timer_usleep(200000);
         }
         return;
     }
 
-    uint16_t shouldersPressed = shoulders & ~lastShoulders;
-    lastShoulders = shoulders;
+    // Consumed on every poll, so a tap in a sub-menu doesn't switch tabs later.
+    uint32_t shouldersPressed = cellAtomicStore32(&hostMenu.shoulderTaps, 0);
 
     close_stale_player_modal();
     bool inGame = Dvar_GetBool("cl_ingame");

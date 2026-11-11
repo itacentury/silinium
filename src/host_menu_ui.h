@@ -61,6 +61,10 @@ typedef struct HostMenu {
     HostMenuOption options[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
 
     CellPadData pad;  // last pad state, written by the cellPadGetData hook
+    // L1 / R1 pressed since the menu thread last polled, latched by the cellPadGetData
+    // hook: a tap can start and end while the menu thread sleeps. 32 bits for
+    // cellAtomic*.
+    uint32_t shoulderTaps;
     bool open;
     bool showControls;
     bool changeNamePending;
