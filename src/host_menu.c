@@ -456,7 +456,7 @@ static void show_game_messages() {
 // is closed, a callkeyboard keyboard still open answers like a cancel (empty text) and
 // Change Name's state is released; the state is also released when the client of a
 // callkeyboard left. Closed means fully unloaded: no keyboard is opened and no state
-// released while the game's previous keyboard is still unloading.
+// released while the game's previous keyboard is still unloading, up to a time limit.
 enum {
     KEYBOARD_IDLE,
     KEYBOARD_REQUESTED,
@@ -506,11 +506,38 @@ void host_menu_name_keyboard_closed() {
     cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
 }
 
+// How long the game's keyboard may stay finished or unloading (2/3) before it counts as
+// closed anyway: the state values are only inferred, and a wait that never ends would
+// leave every later keyboard pending and a callkeyboard script without its answer.
+#define KEYBOARD_UNLOAD_TIMEOUT_US (2 * 1000 * 1000)
+
 // Unloading (3) is not closed: its OSKDIALOG_UNLOADED still follows and sets 0, also
 // under a keyboard opened in between, and a new dialog most likely can't be loaded before
-// that.
+// that. Open (1) never times out, the player may still be typing. Only called on the UI
+// thread.
 static bool game_keyboard_closed() {
-    return *(volatile int*)T5_KeyboardState == T5_KeyboardStateClosed;
+    static system_time_t closingSince;
+    static bool warned;
+    int state = *(volatile int*)T5_KeyboardState;
+    if (state == T5_KeyboardStateClosed || state == T5_KeyboardStateOpen) {
+        closingSince = 0;
+        warned = false;
+        return state == T5_KeyboardStateClosed;
+    }
+
+    system_time_t now = sys_time_get_system_time();
+    if (!closingSince) {
+        closingSince = now;
+        return false;
+    }
+    if (now - closingSince < KEYBOARD_UNLOAD_TIMEOUT_US) {
+        return false;
+    }
+    if (!warned) {
+        warned = true;
+        printf(T5WARNING "Game keyboard stuck in state %i, treated as closed.", state);
+    }
+    return true;
 }
 
 // An open keyboard stays up on the host's console; once its text is entered it is dropped
