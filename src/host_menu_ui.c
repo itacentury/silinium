@@ -397,8 +397,6 @@ static bool player_slot_visible(const HostMenuOption* option, bool inGame) {
     return player_slot_used(party, inGame, option - hostMenu.options[HOST_MENU_KICK]);
 }
 
-static void show_status(const char* text);
-
 // Only on a slot that holds someone, the modal acts on whoever is in it.
 static void open_player_modal() {
     int member = hostMenu.cursor[HOST_MENU_KICK];
