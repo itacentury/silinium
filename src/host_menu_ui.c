@@ -1664,7 +1664,7 @@ static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
 // left while that list is still shown. Its selection bar slides like the list's.
 static int shownModal = -1;
 static bool modalClosing;
-static system_time_t modalTime;
+static Tween modalAlpha;
 static Tween modalBar;
 // Frozen while the modal fades out: by then a delete may have rebuilt the stats list or a
 // kick emptied the slot, so the live title would switch to someone or something else.
@@ -1674,25 +1674,28 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
                                 bool inGame) {
     bool modal = m == HOST_MENU_PLAYER || m == HOST_MENU_STATS_FILE;
     if (modal && (m != shownModal || modalClosing)) {
+        // A reopen during the fade out continues from the alpha on screen.
+        if (m != shownModal) {
+            tween_snap(&modalAlpha, 0);
+        }
         shownModal = m;
         modalClosing = false;
-        modalTime = frameTime;
+        tween_to(&modalAlpha, 1, ANIM_MODAL_US);
         tween_snap(&modalBar, cursor_row(m, inGame));
     } else if (!modal && shownModal != -1 && !modalClosing) {
         modalClosing = true;
-        modalTime = frameTime;
+        tween_to(&modalAlpha, 0, ANIM_MODAL_US);
     }
     if (shownModal == -1) {
         return;
     }
     int listMenu = hostMenu.parent[shownModal];
-    float t = ease_out(anim_progress(modalTime, ANIM_MODAL_US));
-    if (modalClosing && (t >= 1 || m != listMenu)) {
+    float alpha = tween_value(&modalAlpha, ANIM_MODAL_US);
+    if (modalClosing && (alpha <= 0 || m != listMenu)) {
         shownModal = -1;
         return;
     }
 
-    float alpha = modalClosing ? 1 - t : t;
     float barRow =
         tween_follow(&modalBar, cursor_row(shownModal, inGame), ANIM_SCROLL_US);
     if (!modalClosing) {
@@ -1967,9 +1970,11 @@ static void draw_panel(float alpha, float slide) {
     drawAlpha = 1;
 }
 
-// Last state of hostMenu.open and when it changed, for the open and close animation.
+// Last state of hostMenu.open and the panel alpha it fades, for the open and close
+// animation. The duration is that of the running fade (open and close differ).
 static bool shownOpen;
-static system_time_t openTime;
+static Tween menuAlpha;
+static int menuAlphaDuration = ANIM_OPEN_US;
 
 void host_menu_ui_draw() {
     if (!font) {
@@ -1986,15 +1991,17 @@ void host_menu_ui_draw() {
     bool open = hostMenu.open;
     if (open != shownOpen) {
         shownOpen = open;
-        openTime = frameTime;
+        // Reopening mid-fade continues from the alpha on screen, which is measured with
+        // the duration of the fade it belongs to.
+        tween_to(&menuAlpha, open ? 1 : 0, menuAlphaDuration);
+        menuAlphaDuration = open ? ANIM_OPEN_US : ANIM_CLOSE_US;
         snapAnimations = open;
     }
+    float alpha = tween_value(&menuAlpha, menuAlphaDuration);
 
     if (!open) {
         // The menu thread already treats the menu as closed, only the picture lingers.
-        float t = anim_progress(openTime, ANIM_CLOSE_US);
-        if (t < 1) {
-            float alpha = 1 - ease_out(t);
+        if (alpha > 0) {
             draw_panel(alpha, (1 - alpha) * ANIM_OPEN_SLIDE);
         } else {
             playerListWidth = 0;
@@ -2007,7 +2014,6 @@ void host_menu_ui_draw() {
     }
     draw_status(0);
 
-    float t = ease_out(anim_progress(openTime, ANIM_OPEN_US));
-    draw_panel(t, (1 - t) * ANIM_OPEN_SLIDE);
+    draw_panel(alpha, (1 - alpha) * ANIM_OPEN_SLIDE);
     snapAnimations = false;
 }
