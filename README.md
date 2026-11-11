@@ -52,7 +52,7 @@ In multiplayer the loader also contains a host menu, a port of "The Shake Packag
 
 Open it with **L1 + R3**. Up/Down scroll, Left/Right change values, ✕ selects and ○ goes back or closes. While the menu is open the game doesn't receive any button presses except Select (the sticks still work).
 
-The main menu holds the options below and two submenus, **Patches** and **Account Settings**.
+The main menu holds the options below and three submenus, **Player Menu**, **Patches** and **Account Settings**.
 
 | Option | Effect |
 |---|---|

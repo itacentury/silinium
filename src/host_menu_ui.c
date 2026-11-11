@@ -1027,8 +1027,8 @@ static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
 // Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
 static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
 static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
-// Width of the icon and level column (scaled to 0.5). Rows with a player are indented by
-// it, so the tags and names all start at one x; empty slots start at the left edge.
+// Width of the icon and level column (scaled to 0.5). Rows with a level are indented by
+// it, so the tags and names all start at one x; rows without one start at the left edge.
 static float playerRankColumn;
 // The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
 // first lookup, so the rank icon table is only searched when they change. Reset to 0 by
