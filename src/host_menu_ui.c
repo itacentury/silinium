@@ -1069,16 +1069,13 @@ void host_menu_ui_init() {
             ->visible = player_slot_visible;
     }
 
-    hostMenu.title[HOST_MENU_PLAYER] =
-        "Player";  // the modal shows the player's name instead
     hostMenu.parent[HOST_MENU_PLAYER] = HOST_MENU_KICK;
     add_option(HOST_MENU_PLAYER, "Kick", HOST_MENU_TYPE_ACTION, 0, 0, 0, kick_selected);
     add_option(HOST_MENU_PLAYER, "Ban", HOST_MENU_TYPE_ACTION, 0, 0, 0, ban_selected);
 
-    hostMenu.title[HOST_MENU_STATS] = "Load Stats";
+    hostMenu.title[HOST_MENU_STATS] = "LOAD STATS";
     hostMenu.parent[HOST_MENU_STATS] = HOST_MENU_ACCOUNT;  // filled by open_stats_menu
 
-    hostMenu.title[HOST_MENU_STATS_FILE] = "Stats";  // the modal shows the file name
     hostMenu.parent[HOST_MENU_STATS_FILE] = HOST_MENU_STATS;
     add_option(HOST_MENU_STATS_FILE, "Load", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                load_selected_stats);
@@ -1499,6 +1496,18 @@ static void draw_header(const PanelLayout* layout, const char* tag, const char* 
     draw_shader(lineX, dividerY - TAB_UNDERLINE, lineWidth, TAB_UNDERLINE, selection,
                 whiteMaterial);
     draw_shader(layout->left, dividerY, layout->width, 1, divider, whiteMaterial);
+}
+
+// The title of a submenu page, right in the title row, as the tab bar only names tabs.
+static void draw_page_label(const PanelLayout* layout, int page) {
+    const char* title = hostMenu.title[page];
+    if (is_tab(page) || !title) {
+        return;
+    }
+    float right = layout->left + layout->width - PANEL_PADDING;
+    draw_text(title, right - text_width(title, INFO_SCALE),
+              text_baseline(layout->top, TITLE_HEIGHT, INFO_SCALE), INFO_SCALE,
+              mutedColor);
 }
 
 // Controls on the left, position on the right.
@@ -1958,6 +1967,7 @@ static void draw_panel(float alpha, float slide) {
     float page = ease_out(anim_progress(pageTime, ANIM_PAGE_US));
     float left = layout.left + pageDirection * (1 - page) * ANIM_PAGE_SLIDE;
     drawAlpha = alpha * page;
+    draw_page_label(&layout, boxMenu);
     if (players) {
         draw_player_list(&layout, left, party, inGame, notHost, barRow);
     } else {
