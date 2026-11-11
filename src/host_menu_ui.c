@@ -21,11 +21,50 @@ static int savedPlaylistMax[64];
 static char playlistRuleBuffer[64][0x100];
 
 static const float white[4] = {1, 1, 1, 1};
-static const float accent[4] = {0.9882f, 0.6667f, 0.4549f, 1};
 static const float border[4] = {0.9882f, 0.6667f, 0.4549f, 0.2f};
-static const float background[4] = {0, 0, 0, 0.45f};
 static const float modalBackground[4] = {0, 0, 0, 0.85f};
 static const float textBoxBackground[4] = {0, 0, 0, 0.2f};
+static const float panelBackground[4] = {0, 0, 0, 0.86f};
+// Selection bar, tab underline, toggle on, modal border.
+static const float selection[4] = {0.4549f, 0.7765f, 0.9882f, 1};
+static const float selectedText[4] = {0.043f, 0.051f, 0.059f, 1};
+// Info line and values on the right.
+static const float valueColor[4] = {0.788f, 0.820f, 0.839f, 1};
+// Inactive tabs and footer.
+static const float mutedColor[4] = {0.667f, 0.706f, 0.729f, 1};
+static const float toggleOff[4] = {0.545f, 0.588f, 0.616f, 1};
+static const float divider[4] = {1, 1, 1, 0.18f};
+
+// Panel layout in screen units. Derived from a 1280x720 mockup (factor ~0.55); start
+// values, only verifiable on a console.
+#define PANEL_CENTER_X 650.0f
+#define PANEL_TOP 200.0f
+#define PANEL_MIN_WIDTH 300
+#define PANEL_MAX_WIDTH 600
+#define PANEL_PADDING 9.0f
+#define TITLE_HEIGHT 24.0f
+#define TITLE_SCALE 0.55f
+#define TITLE_SPACING 2.0f
+#define INFO_HEIGHT 12.0f
+#define INFO_SCALE 0.37f
+#define TAB_HEIGHT 19.0f
+#define TAB_SCALE 0.42f
+#define TAB_GAP 12.0f
+#define TAB_UNDERLINE 2.0f
+#define LIST_PADDING 3.5f
+#define ROW_HEIGHT 16.5f
+#define ROW_SCALE 0.5f
+#define FOOTER_HEIGHT 17.5f
+#define FOOTER_SCALE 0.37f
+#define TOGGLE_SIZE 12.0f
+#define TOGGLE_BORDER 2.0f
+#define ARROW_SIZE 15.0f
+#define MODAL_WIDTH 180.0f
+#define MODAL_TITLE_HEIGHT 20.0f
+#define MODAL_TITLE_SCALE 0.45f
+// Share of R_TextHeight above the baseline, used to center text vertically (unverified,
+// tune on a console).
+#define TEXT_CAP_RATIO 0.7f
 
 typedef struct DisplayName {
     const char* internal;
@@ -126,6 +165,15 @@ static void draw_text_box(const char* text, float x, float y, float scale) {
     draw_text(text, x + 3, y, scale, white);
 }
 
+static float text_width(const char* text, float scale) {
+    return R_TextWidth(text, 0x7FFFFFFF, font) * scale;
+}
+
+// Baseline that centers text of the given scale in the band top..top + height.
+static float text_baseline(float top, float height, float scale) {
+    return top + (height + R_TextHeight(font) * scale * TEXT_CAP_RATIO) / 2;
+}
+
 static const char* dvar_string(const char* name) {
     dvar_s* dvar = Dvar_FindVar(name);
     return dvar && dvar->current.string ? dvar->current.string : "";
@@ -143,6 +191,17 @@ static const char* lookup_name(const DisplayName* names, int count,
         }
     }
     return internal;
+}
+
+// In the lobby the map and gametype picked for the next match, in game the running ones.
+static const char* session_map(bool inGame) {
+    const char* map = inGame ? "" : dvar_string("ui_mapname");
+    return *map ? map : dvar_string("mapname");
+}
+
+static const char* session_gametype(bool inGame) {
+    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
+    return *gametype ? gametype : dvar_string("g_gametype");
 }
 
 // ---------------------------------------------------------------------------
@@ -370,11 +429,23 @@ static void change_name() {
 
 static void reset_name() { hostMenu.resetNamePending = true; }
 
-static void open_player_menu() { hostMenu.current = HOST_MENU_KICK; }
+// Both options are lobby only, so these show the picks for the next match.
+static void map_value_text(char* out, int size) {
+    snprintf(
+        out, size, "%s",
+        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(false)));
+}
 
-static void open_account_menu() { hostMenu.current = HOST_MENU_ACCOUNT; }
-
-static void open_patches_menu() { hostMenu.current = HOST_MENU_PATCHES; }
+// The internal name uppercased, "tdm" -> "TDM".
+static void gametype_value_text(char* out, int size) {
+    const char* gametype = session_gametype(false);
+    snprintf(out, size, "%s", *gametype ? gametype : "-");
+    for (char* c = out; *c; c++) {
+        if (*c >= 'a' && *c <= 'z') {
+            *c -= 'a' - 'A';
+        }
+    }
+}
 
 // Only the host can act on players: in game the host runs the listen server, in the lobby
 // it hosts the lobby's party.
@@ -779,17 +850,6 @@ static int visible_option_count(int m, bool inGame) {
     return count;
 }
 
-// The row the cursor's option is drawn in: the visible options before it.
-static int visible_row(int m, bool inGame) {
-    int row = 0;
-    for (int i = 0; i < hostMenu.cursor[m]; i++) {
-        if (option_visible(&hostMenu.options[m][i], inGame)) {
-            row++;
-        }
-    }
-    return row;
-}
-
 // Moves the cursor by step (+1/-1) until it lands on a visible option, wrapping around.
 static void move_cursor(int m, int step, bool inGame) {
     for (int n = 0; n < hostMenu.optionCount[m]; n++) {
@@ -823,6 +883,31 @@ static void move_cursor_off_hidden(int m, bool inGame) {
     }
 }
 
+// The tabs in the order of the tab bar, menus without a parent.
+static const HostMenuId tabs[] = {HOST_MENU_MAIN, HOST_MENU_PATCHES, HOST_MENU_ACCOUNT,
+                                  HOST_MENU_KICK};
+#define TAB_COUNT ((int)(sizeof(tabs) / sizeof(*tabs)))
+
+static bool is_tab(int m) { return hostMenu.parent[m] == -1; }
+
+// Index in tabs of the tab menu m belongs to.
+static int tab_index(int m) {
+    while (!is_tab(m)) {
+        m = hostMenu.parent[m];
+    }
+    for (int i = 0; i < TAB_COUNT; i++) {
+        if (tabs[i] == m) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+static void init_tab(HostMenuId m, const char* label) {
+    hostMenu.title[m] = label;
+    hostMenu.parent[m] = -1;
+}
+
 void host_menu_ui_init() {
     memset(&hostMenu, 0, sizeof(hostMenu));
     hostMenu.current = HOST_MENU_MAIN;
@@ -833,8 +918,7 @@ void host_menu_ui_init() {
     hostMenu.playersToStart = 4;
     hostMenu.maxPlayers = 12;
 
-    hostMenu.title[HOST_MENU_MAIN] = "Main Menu";
-    hostMenu.parent[HOST_MENU_MAIN] = -1;
+    init_tab(HOST_MENU_MAIN, "MAIN");
     add_option(HOST_MENU_MAIN, "Show Controls", HOST_MENU_TYPE_BOOL,
                &hostMenu.showControls, 0, 0, nothing);
     add_option(HOST_MENU_MAIN, "Force Host", HOST_MENU_TYPE_BOOL, &hostMenu.forceHost, 0,
@@ -843,22 +927,18 @@ void host_menu_ui_init() {
                &hostMenu.playersToStart, 1, HOST_MENU_MAX_CLIENTS, set_players_to_start);
     add_option(HOST_MENU_MAIN, "Max Players", HOST_MENU_TYPE_INT, &hostMenu.maxPlayers, 1,
                HOST_MENU_MAX_CLIENTS, set_max_players);
-    add_option(HOST_MENU_MAIN, "Select Map", HOST_MENU_TYPE_ACTION, 0, 0, 0, select_map)
-        ->lobbyOnly = true;
-    add_option(HOST_MENU_MAIN, "Select Gametype", HOST_MENU_TYPE_ACTION, 0, 0, 0,
-               select_gametype)
-        ->lobbyOnly = true;
+    HostMenuOption* option = add_option(HOST_MENU_MAIN, "Select Map",
+                                        HOST_MENU_TYPE_ACTION, 0, 0, 0, select_map);
+    option->lobbyOnly = true;
+    option->valueText = map_value_text;
+    option = add_option(HOST_MENU_MAIN, "Select Gametype", HOST_MENU_TYPE_ACTION, 0, 0, 0,
+                        select_gametype);
+    option->lobbyOnly = true;
+    option->valueText = gametype_value_text;
     add_option(HOST_MENU_MAIN, "End Game", HOST_MENU_TYPE_ACTION, 0, 0, 0, end_game)
         ->inGameOnly = true;
-    add_option(HOST_MENU_MAIN, "Patches", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
-               open_patches_menu);
-    add_option(HOST_MENU_MAIN, "Account Settings", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
-               open_account_menu);
-    add_option(HOST_MENU_MAIN, "Player Menu", HOST_MENU_TYPE_SUBMENU, 0, 0, 0,
-               open_player_menu);
 
-    hostMenu.title[HOST_MENU_PATCHES] = "Patches";
-    hostMenu.parent[HOST_MENU_PATCHES] = HOST_MENU_MAIN;
+    init_tab(HOST_MENU_PATCHES, "PATCHES");
     add_option(HOST_MENU_PATCHES, "Depatch Bounces", HOST_MENU_TYPE_BOOL,
                &hostMenu.depatchBounces, 0, 0, depatch_bounces);
     add_option(HOST_MENU_PATCHES, "Disable DLC", HOST_MENU_TYPE_BOOL,
@@ -867,8 +947,7 @@ void host_menu_ui_init() {
                &hostMenu.antiGodClasses, 0, 0, anti_god_classes)
         ->visible = anti_god_classes_visible;
 
-    hostMenu.title[HOST_MENU_ACCOUNT] = "Account Settings";
-    hostMenu.parent[HOST_MENU_ACCOUNT] = HOST_MENU_MAIN;
+    init_tab(HOST_MENU_ACCOUNT, "ACCOUNT");
     add_option(HOST_MENU_ACCOUNT, "Quick Recovery", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                host_menu_write_recovery)
         ->lobbyOnly = true;
@@ -888,8 +967,7 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_ACCOUNT, "Reset Name", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                reset_name);
 
-    hostMenu.title[HOST_MENU_KICK] = "Players";
-    hostMenu.parent[HOST_MENU_KICK] = HOST_MENU_MAIN;
+    init_tab(HOST_MENU_KICK, "PLAYERS");
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         add_option(HOST_MENU_KICK, "", HOST_MENU_TYPE_ACTION, 0, 0, 0,
                    open_player_modal)  // names are drawn live
@@ -930,18 +1008,34 @@ static bool can_unban_all(int m, bool inGame) {
            host_menu_ban_count() > 0;
 }
 
+// L1 / R1 held at the last poll. Tabs switch on a new press only, so the L1 still held
+// from opening the menu doesn't count.
+static uint16_t lastShoulders;
+
+// Next (+1) or previous (-1) tab, wrapping around.
+static void switch_tab(int m, int step) {
+    int i = (tab_index(m) + step + TAB_COUNT) % TAB_COUNT;
+    hostMenu.current = tabs[i];
+}
+
 void host_menu_ui_handle_input() {
     uint16_t digital1 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL1];
     uint16_t digital2 = hostMenu.pad.button[CELL_PAD_BTN_OFFSET_DIGITAL2];
+    uint16_t shoulders = digital2 & (CELL_PAD_CTRL_L1 | CELL_PAD_CTRL_R1);
 
     if (!hostMenu.open) {
         if (digital1 == CELL_PAD_CTRL_R3 && digital2 == CELL_PAD_CTRL_L1) {
-            hostMenu.current = HOST_MENU_MAIN;
+            // Back on the tab that was open last.
+            hostMenu.current = tabs[tab_index(hostMenu.current)];
+            lastShoulders = CELL_PAD_CTRL_L1;
             hostMenu.open = true;
             sys_timer_usleep(200000);
         }
         return;
     }
+
+    uint16_t shouldersPressed = shoulders & ~lastShoulders;
+    lastShoulders = shoulders;
 
     close_stale_player_modal();
     bool inGame = Dvar_GetBool("cl_ingame");
@@ -956,7 +1050,9 @@ void host_menu_ui_handle_input() {
         option = &hostMenu.options[m][hostMenu.cursor[m]];
     }
 
-    if (digital1 & CELL_PAD_CTRL_UP) {
+    if (shouldersPressed && is_tab(m)) {
+        switch_tab(m, shouldersPressed & CELL_PAD_CTRL_R1 ? 1 : -1);
+    } else if (digital1 & CELL_PAD_CTRL_UP) {
         move_cursor(m, -1, inGame);
         sys_timer_usleep(150000);
     } else if (digital1 & CELL_PAD_CTRL_DOWN) {
@@ -971,7 +1067,7 @@ void host_menu_ui_handle_input() {
         }
         sys_timer_usleep(200000);
     } else if (digital2 & CELL_PAD_CTRL_CIRCLE) {
-        if (m == HOST_MENU_MAIN) {
+        if (is_tab(m)) {
             sys_timer_usleep(200000);
             hostMenu.open = false;
         } else {
@@ -1022,15 +1118,16 @@ static const char* player_name(int party, bool inGame, int i) {
 // Size of the buffer ClanTag_Format writes to, like the lobby list's.
 #define CLAN_TAG_MAX 0x80
 
-// The player list's tags and their widths (scaled to 0.5), built once per frame by
+// The player list's tags and their widths (scaled to ROW_SCALE), built once per frame by
 // build_player_rows.
 static char playerTags[HOST_MENU_MAX_CLIENTS][CLAN_TAG_MAX];
 static float playerTagWidths[HOST_MENU_MAX_CLIENTS];
 // Each row's rank icon (0 when the game has none) and level text ("" for an empty slot).
 static void* playerRankIcons[HOST_MENU_MAX_CLIENTS];
 static char playerLevels[HOST_MENU_MAX_CLIENTS][4];
-// Width of the icon and level column (scaled to 0.5). Rows with a level are indented by
-// it, so the tags and names all start at one x; rows without one start at the left edge.
+// Width of the icon and level column (scaled to ROW_SCALE). Rows with a level are
+// indented by it, so the tags and names all start at one x; rows without one start at the
+// left edge.
 static float playerRankColumn;
 // The rank + 1 and prestige playerRankIcons[i] was looked up for, rank 0 before the
 // first lookup, so the rank icon table is only searched when they change. Reset to 0 by
@@ -1054,19 +1151,6 @@ static int playerListParty;
 // Range of mp/rankIconTable.csv: rankId rows 0-49, prestige columns 0-15.
 #define RANK_ICON_MAX_RANK 49
 #define RANK_ICON_MAX_PRESTIGE 15
-
-// Layout of the menu box and the modals drawn over its lists. The box is
-// LIST_BOX_PADDING (titles and bottom margin) plus one LIST_ROW_HEIGHT per row high; y
-// values of text are baselines, its top is ROW_TEXT_HEIGHT above.
-#define LIST_ROW_HEIGHT 16.5f
-#define LIST_BOX_TOP 200.0f
-#define LIST_BOX_PADDING 48.0f
-#define LIST_FIRST_ROW_Y 258.0f
-#define ROW_TEXT_HEIGHT 16.0f
-// Gap between a row and the modal drawn below it.
-#define MODAL_GAP 6.0f
-// Modal title and bottom margin around its options.
-#define MODAL_PADDING 40.0f
 
 // "[tag]", "" without a tag. In the lobby colored like in the lobby list (the clan tag
 // feature of the party member), in game without any color like on the scoreboard, so the
@@ -1158,36 +1242,20 @@ static void host_clan_tag(bool inGame, const char* host, char* out) {
     }
 }
 
-// Host, map and gametype, one box each below the controls box.
-static void draw_session_info(bool inGame) {
-    const char* map = inGame ? "" : dvar_string("ui_mapname");
-    const char* gametype = inGame ? "" : dvar_string("ui_gametype");
-    if (!*map) {
-        map = dvar_string("mapname");
-    }
-    if (!*gametype) {
-        gametype = dvar_string("g_gametype");
-    }
-
+// The info line "host - map - gametype" into line, the host's clan tag into tag (drawn
+// apart, so its ^7 doesn't recolor the rest). Returns the width of both together.
+static float build_info_line(bool inGame, char* tag, char* line, int size) {
     const char* host = dvar_string("party_hostname");
-    char tag[CLAN_TAG_MAX] = "";
+    tag[0] = 0;
     if (*host) {
         host_clan_tag(inGame, host, tag);
     }
-    char hostLine[CLAN_TAG_MAX + 64];
-    snprintf(hostLine, sizeof(hostLine), "Host: %s%s", tag, *host ? host : "-");
-    char lines[2][64];
-    snprintf(lines[0], sizeof(lines[0]), "Map: %s",
-             lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), map));
-    snprintf(lines[1], sizeof(lines[1]), "Gametype: %s",
-             lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
-                         gametype));
-
-    float step = R_TextHeight(font) * 0.5f + 10;
-    draw_text_box(hostLine, 10, 20 + step, 0.5f);
-    for (int i = 0; i < 2; i++) {
-        draw_text_box(lines[i], 10, 20 + (i + 2) * step, 0.5f);
-    }
+    snprintf(
+        line, size, "%s - %s - %s", *host ? host : "-",
+        lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(inGame)),
+        lookup_name(gametypeNames, sizeof(gametypeNames) / sizeof(*gametypeNames),
+                    session_gametype(inGame)));
+    return (*tag ? text_width(tag, INFO_SCALE) : 0) + text_width(line, INFO_SCALE);
 }
 
 // The rankId (level - 1) and prestige like the lobby list and the scoreboard show them,
@@ -1242,8 +1310,129 @@ static void build_player_rank(int party, bool inGame, int i) {
     sprintf(playerLevels[i], "%i", rank + 1);
 }
 
-// The visible options of menu m, rows starting at y, values right aligned at right.
-static void draw_options(int m, bool inGame, float x, float right, float y) {
+// Panel sections from top to bottom: title, info line, tabs, list, footer.
+typedef struct PanelLayout {
+    float left;
+    float width;
+    float top;
+    float tabsTop;    // the 1px divider sits at tabsTop + TAB_HEIGHT
+    float listTop;    // top of the first row
+    float footerTop;  // the 1px divider above the footer
+    float bottom;
+} PanelLayout;
+
+static PanelLayout panel_layout(float width, int rows) {
+    PanelLayout layout;
+    layout.width = width;
+    layout.left = PANEL_CENTER_X - width / 2;
+    layout.top = PANEL_TOP;
+    layout.tabsTop = layout.top + TITLE_HEIGHT + INFO_HEIGHT;
+    layout.listTop = layout.tabsTop + TAB_HEIGHT + 1 + LIST_PADDING;
+    layout.footerTop = layout.listTop + rows * ROW_HEIGHT + LIST_PADDING;
+    layout.bottom = layout.footerTop + 1 + FOOTER_HEIGHT;
+    return layout;
+}
+
+// Rounded up to an even whole number within the panel limits, so the panel centered at
+// PANEL_CENTER_X stays pixel aligned.
+static int panel_width(float content) {
+    int width = (int)content;
+    if (width < content) {
+        width++;  // ceil (content >= 0)
+    }
+    width = (width + 1) & ~1;  // round up to even
+    if (width < PANEL_MIN_WIDTH) {
+        width = PANEL_MIN_WIDTH;
+    }
+    if (width > PANEL_MAX_WIDTH) {
+        width = PANEL_MAX_WIDTH;
+    }
+    return width;
+}
+
+// Text with extra space between the characters.
+static void draw_spaced_text(const char* text, float x, float y, float scale,
+                             float spacing, const float* color) {
+    char c[2] = {0, 0};
+    for (; *text; text++) {
+        c[0] = *text;
+        draw_text(c, x, y, scale, color);
+        x += text_width(c, scale) + spacing;
+    }
+}
+
+// Title, info line and the tab bar with activeTab (index in tabs) highlighted.
+static void draw_header(const PanelLayout* layout, const char* tag, const char* info,
+                        int activeTab) {
+    float x = layout->left + PANEL_PADDING;
+    draw_spaced_text("SILINIUM", x, text_baseline(layout->top, TITLE_HEIGHT, TITLE_SCALE),
+                     TITLE_SCALE, TITLE_SPACING, white);
+
+    float infoX = x;
+    float infoY = text_baseline(layout->top + TITLE_HEIGHT, INFO_HEIGHT, INFO_SCALE);
+    if (*tag) {
+        draw_text(tag, infoX, infoY, INFO_SCALE, valueColor);
+        infoX += text_width(tag, INFO_SCALE);
+    }
+    draw_text(info, infoX, infoY, INFO_SCALE, valueColor);
+
+    // Only the normal font is registered, so the active tab is white instead of bold.
+    float tabY = text_baseline(layout->tabsTop, TAB_HEIGHT, TAB_SCALE);
+    float dividerY = layout->tabsTop + TAB_HEIGHT;
+    for (int i = 0; i < TAB_COUNT; i++) {
+        const char* label = hostMenu.title[tabs[i]];
+        float w = text_width(label, TAB_SCALE);
+        if (i == activeTab) {
+            draw_text(label, x, tabY, TAB_SCALE, white);
+            draw_shader(x, dividerY - TAB_UNDERLINE, w, TAB_UNDERLINE, selection,
+                        whiteMaterial);
+        } else {
+            draw_text(label, x, tabY, TAB_SCALE, mutedColor);
+        }
+        x += w + TAB_GAP;
+    }
+    draw_shader(layout->left, dividerY, layout->width, 1, divider, whiteMaterial);
+}
+
+// Controls on the left, position on the right.
+static void draw_footer(const PanelLayout* layout, const char* controls,
+                        const char* position) {
+    draw_shader(layout->left, layout->footerTop, layout->width, 1, divider,
+                whiteMaterial);
+    float y = text_baseline(layout->footerTop + 1, FOOTER_HEIGHT, FOOTER_SCALE);
+    draw_text(controls, layout->left + PANEL_PADDING, y, FOOTER_SCALE, mutedColor);
+    float right = layout->left + layout->width - PANEL_PADDING;
+    draw_text(position, right - text_width(position, FOOTER_SCALE), y, FOOTER_SCALE,
+              mutedColor);
+}
+
+// On: border, gap and a filled core. Off: only the border. Dark on the selection bar,
+// where blue would vanish.
+static void draw_toggle(float x, float y, bool on, bool selected) {
+    const float* color = selected ? selectedText : on ? selection : toggleOff;
+    draw_outline(x, y, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_BORDER, color);
+    if (on) {
+        float inset = TOGGLE_BORDER * 2;
+        draw_shader(x + inset, y + inset, TOGGLE_SIZE - inset * 2,
+                    TOGGLE_SIZE - inset * 2, color, whiteMaterial);
+    }
+}
+
+// Row of the cursor among the visible options of menu m.
+static int cursor_row(int m, bool inGame) {
+    int row = 0;
+    for (int i = 0; i < hostMenu.cursor[m]; i++) {
+        if (option_visible(&hostMenu.options[m][i], inGame)) {
+            row++;
+        }
+    }
+    return row;
+}
+
+// The visible options of menu m as rows of a list spanning left..left + width, the first
+// row's top at top.
+static void draw_options(int m, bool inGame, float left, float width, float top) {
+    float right = left + width - PANEL_PADDING;
     int row = 0;
     for (int i = 0; i < hostMenu.optionCount[m]; i++) {
         HostMenuOption* option = &hostMenu.options[m][i];
@@ -1251,99 +1440,71 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
             continue;
         }
 
-        float rowY = row * LIST_ROW_HEIGHT + y;
-        draw_text(option->text, x, rowY, 0.5f, hostMenu.cursor[m] == i ? accent : white);
+        float rowTop = top + row * ROW_HEIGHT;
+        bool selected = hostMenu.cursor[m] == i;
+        if (selected) {
+            draw_shader(left, rowTop, width, ROW_HEIGHT, selection, whiteMaterial);
+        }
+        const float* textColor = selected ? selectedText : white;
+        float y = text_baseline(rowTop, ROW_HEIGHT, ROW_SCALE);
+        draw_text(option->text, left + PANEL_PADDING, y, ROW_SCALE, textColor);
 
-        char valueBuffer[8];
-        const char* valueText = 0;
+        char value[32] = "";
         switch (option->type) {
             case HOST_MENU_TYPE_SUBMENU:
-                draw_shader(right - 10, rowY - 16, 15, 15, accent, arrowMaterial);
+                draw_shader(right - ARROW_SIZE, rowTop + (ROW_HEIGHT - ARROW_SIZE) / 2,
+                            ARROW_SIZE, ARROW_SIZE, textColor, arrowMaterial);
                 break;
             case HOST_MENU_TYPE_INT:
-                sprintf(valueBuffer, "%i", *(signed char*)option->value);
-                valueText = valueBuffer;
+                snprintf(value, sizeof(value), selected ? "< %i >" : "%i",
+                         *(signed char*)option->value);
                 break;
             case HOST_MENU_TYPE_BOOL:
-                // Centered like the submenu arrow, full when on, only the border when
-                // off.
-                if (*(bool*)option->value) {
-                    draw_shader(right - 10, rowY - 13.5f, 10, 10, accent, whiteMaterial);
-                } else {
-                    draw_outline(right - 10, rowY - 13.5f, 10, 10, 2, accent);
-                }
+                draw_toggle(right - TOGGLE_SIZE, rowTop + (ROW_HEIGHT - TOGGLE_SIZE) / 2,
+                            *(bool*)option->value, selected);
                 break;
             default:
                 break;
         }
+        if (option->valueText) {
+            option->valueText(value, sizeof(value));
+        }
 
-        if (valueText) {
-            draw_text(valueText, get_aligned_x(right, 0.5f, valueText, ALIGN_RIGHT), rowY,
-                      0.5f, white);
+        if (*value) {
+            draw_text(value, right - text_width(value, ROW_SCALE), y, ROW_SCALE,
+                      selected ? selectedText : valueColor);
         }
         row++;
     }
 }
 
-static float list_row_y(int row) { return row * LIST_ROW_HEIGHT + LIST_FIRST_ROW_Y; }
-
-static float list_box_height(int rows) {
-    return rows * LIST_ROW_HEIGHT + LIST_BOX_PADDING;
-}
-
-static float modal_height(int modalMenu, bool inGame) {
-    return visible_option_count(modalMenu, inGame) * LIST_ROW_HEIGHT + MODAL_PADDING;
-}
-
-// Top of the modal opened on row, drawn below the row.
-static float modal_below_y(int row) { return list_row_y(row) + MODAL_GAP; }
-
-// Top of the modal opened on row, flipped above the row: it ends at the row's text top.
-static float modal_above_y(int row, float height) {
-    return list_row_y(row) - ROW_TEXT_HEIGHT - height;
-}
-
-// The rows a list box needs so modalMenu, opened on any of the list's first listRows
-// rows, fits below its row or, flipped above it by draw_modal, stays below the box
-// titles. Follows draw_modal's placement through the shared helpers, so the two can't
-// drift apart.
-static int modal_list_min_rows(int modalMenu, int listRows, bool inGame) {
-    float height = modal_height(modalMenu, inGame);
-    float titlesBottom = list_row_y(0) - ROW_TEXT_HEIGHT;
-    int rows = 0;
-    for (int r = 0; r < listRows; r++) {
-        if (modal_above_y(r, height) >= titlesBottom) {
-            break;  // flipped it clears the titles, as on every later row
-        }
-        while (LIST_BOX_TOP + list_box_height(rows) < modal_below_y(r) + height) {
-            rows++;
-        }
-    }
-    return rows;
-}
-
 // The options of modalMenu below the selected row of listMenu, or above it when they
-// would reach past the bottom of the list box. The box must be modal_list_min_rows high,
-// or the flipped modal covers its titles.
-static void draw_modal(int listMenu, int modalMenu, const char* title, bool inGame,
-                       float listBottom) {
-    float height = modal_height(modalMenu, inGame);
-    int row = visible_row(listMenu, inGame);
-    float y = modal_below_y(row);
-    if (y + height > listBottom) {
-        y = modal_above_y(row, height);
+// would reach past the bottom of the panel.
+static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
+                       const char* title, bool inGame) {
+    float height = TOGGLE_BORDER + MODAL_TITLE_HEIGHT +
+                   visible_option_count(modalMenu, inGame) * ROW_HEIGHT + LIST_PADDING +
+                   TOGGLE_BORDER;
+    float rowTop = layout->listTop + cursor_row(listMenu, inGame) * ROW_HEIGHT;
+    float y = rowTop + ROW_HEIGHT;
+    if (y + height > layout->bottom) {
+        y = rowTop - height;
     }
+    float left = PANEL_CENTER_X - MODAL_WIDTH / 2;
 
-    draw_shader(560, y, 180, height, modalBackground, whiteMaterial);
-    draw_outline(560, y, 180, height, 2, accent);
-    draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), y + 20, 0.45f,
-              accent);
-    draw_options(modalMenu, inGame, 570, 730, y + 38);
+    draw_shader(left, y, MODAL_WIDTH, height, modalBackground, whiteMaterial);
+    draw_outline(left, y, MODAL_WIDTH, height, TOGGLE_BORDER, selection);
+    draw_text(title, PANEL_CENTER_X - text_width(title, MODAL_TITLE_SCALE) / 2,
+              text_baseline(y + TOGGLE_BORDER, MODAL_TITLE_HEIGHT, MODAL_TITLE_SCALE),
+              MODAL_TITLE_SCALE, white);
+    // Inside the border, so the selection bar doesn't cover it.
+    draw_options(modalMenu, inGame, left + TOGGLE_BORDER, MODAL_WIDTH - TOGGLE_BORDER * 2,
+                 y + TOGGLE_BORDER + MODAL_TITLE_HEIGHT);
 }
 
-static void draw_player_modal(int party, bool inGame, float listBottom) {
+static void draw_player_modal(const PanelLayout* layout, int party, bool inGame) {
     const char* name = player_name(party, inGame, hostMenu.cursor[HOST_MENU_KICK]);
-    draw_modal(HOST_MENU_KICK, HOST_MENU_PLAYER, name, inGame, listBottom);
+    draw_modal(layout, HOST_MENU_KICK, HOST_MENU_PLAYER, name, inGame);
 }
 
 // Drawn in the given left column row: below the session info while the menu is open,
@@ -1363,11 +1524,10 @@ static void draw_status(int row) {
     draw_text_box(text, 10, 20 + row * step, 0.5f);
 }
 
-// Builds every row's rank, tag and their widths for the draw loop and returns the list
-// box width: wide enough for the longest "icon level [tag]name" row plus 10 padding each
-// side, at least the default 300 and at most 600, so a long tag from a modded peer can't
-// push the box off screen (its row overflows instead). The width is an even whole number
-// so the box centered at 650 stays pixel-aligned.
+// Builds every row's rank, tag and their widths for the draw loop and returns the panel
+// width: wide enough for the longest "icon level [tag]name" row plus padding, within the
+// panel limits, so a long tag from a modded peer can't push the panel off screen (its row
+// overflows instead).
 static int build_player_rows(int party, bool inGame) {
     // Compared with the last build, so a switch while the menu was closed is caught too.
     char map[sizeof(playerIconsMap)];
@@ -1379,14 +1539,14 @@ static int build_player_rows(int party, bool inGame) {
     }
     // The level column fits at least "50" (the highest level), so it doesn't shrink when
     // the last player with a two digit level leaves.
-    float levelWidth = R_TextWidth("50", 0x7FFFFFFF, font) * 0.5f;
+    float levelWidth = text_width("50", ROW_SCALE);
     for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
         char* tag = playerTags[i];
         player_clan_tag(party, inGame, i, tag);
-        playerTagWidths[i] = *tag ? R_TextWidth(tag, 0x7FFFFFFF, font) * 0.5f : 0;
+        playerTagWidths[i] = *tag ? text_width(tag, ROW_SCALE) : 0;
         build_player_rank(party, inGame, i);
         if (*playerLevels[i]) {
-            float w = R_TextWidth(playerLevels[i], 0x7FFFFFFF, font) * 0.5f;
+            float w = text_width(playerLevels[i], ROW_SCALE);
             if (w > levelWidth) {
                 levelWidth = w;
             }
@@ -1400,25 +1560,89 @@ static int build_player_rows(int party, bool inGame) {
             continue;
         }
         float w = (*playerLevels[i] ? playerRankColumn : 0) + playerTagWidths[i] +
-                  R_TextWidth(player_name(party, inGame, i), 0x7FFFFFFF, font) * 0.5f;
+                  text_width(player_name(party, inGame, i), ROW_SCALE);
         if (w > widest) {
             widest = w;
         }
     }
-    // Round up to an even whole number so left = 650 - width / 2 and the accent
-    // borders land on whole pixels.
-    int width = (int)widest + 20;
-    if (width < widest + 20) {
-        width++;  // ceil (widest >= 0)
+    return panel_width(widest + PANEL_PADDING * 2);
+}
+
+// The player rows, "Not in a lobby" outside a lobby or "No players" for an empty list.
+static void draw_player_list(const PanelLayout* layout, int party, bool inGame,
+                             bool notHost) {
+    float left = layout->left + PANEL_PADDING;
+    const char* empty = notHost                                         ? "Not in a lobby"
+                        : !visible_option_count(HOST_MENU_KICK, inGame) ? "No players"
+                                                                        : 0;
+    if (empty) {
+        draw_text(empty, left, text_baseline(layout->listTop, ROW_HEIGHT, ROW_SCALE),
+                  ROW_SCALE, white);
+        return;
     }
-    width = (width + 1) & ~1;  // round up to even
-    if (width < 300) {
-        width = 300;
+    // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn the
+    // selected name white. Only occupied slots get a row.
+    int row = 0;
+    for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
+        if (!player_slot_used(party, inGame, i)) {
+            continue;
+        }
+        float rowTop = layout->listTop + row++ * ROW_HEIGHT;
+        bool selected = hostMenu.cursor[HOST_MENU_KICK] == i;
+        if (selected) {
+            draw_shader(layout->left, rowTop, layout->width, ROW_HEIGHT, selection,
+                        whiteMaterial);
+        }
+        const float* color = selected ? selectedText : white;
+        float y = text_baseline(rowTop, ROW_HEIGHT, ROW_SCALE);
+        float x = left;
+        // On player rows icon, level and tag/name each start at a fixed x, also without
+        // an icon, so the names form one straight column. Players without a level start
+        // at the left edge.
+        if (*playerLevels[i]) {
+            if (playerRankIcons[i]) {
+                draw_shader(x, rowTop + (ROW_HEIGHT - RANK_ICON_SIZE) / 2, RANK_ICON_SIZE,
+                            RANK_ICON_SIZE, white, playerRankIcons[i]);
+            }
+            draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, ROW_SCALE,
+                      color);
+            x += playerRankColumn;
+        }
+        if (*playerTags[i]) {
+            draw_text(playerTags[i], x, y, ROW_SCALE, color);
+            x += playerTagWidths[i];
+        }
+        draw_text(player_name(party, inGame, i), x, y, ROW_SCALE, color);
     }
-    if (width > 600) {
-        width = 600;
+}
+
+// The footer's controls for menu m.
+static void build_controls(int m, bool inGame, bool notHost, bool viewOnly, char* out,
+                           int size) {
+    if (!is_tab(m)) {
+        snprintf(out, size, "\x14\x15 Scroll  \x01 Select  \x02 Back");
+        return;
     }
-    return width;
+    // The R1 glyph is unknown, so the tab keys are spelled out.
+    const char* exitHint = "\x02 Exit  L1/R1 Tab";
+    if (m != HOST_MENU_KICK) {
+        snprintf(out, size, "\x14\x15\x16\x17 Scroll/Rotate  \x01 Select  %s", exitHint);
+        return;
+    }
+    if (notHost) {
+        snprintf(out, size, "%s", exitHint);
+        return;
+    }
+    const char* switchHint = can_switch_lists(m, inGame) ? "  \x04 Switch List" : "";
+    // \x03 as the Square glyph is inferred from \x01 Cross, \x02 Circle and \x04 Triangle
+    // (unverified).
+    char unbanHint[32] = "";
+    if (can_unban_all(m, inGame)) {
+        snprintf(unbanHint, sizeof(unbanHint), "  \x03 Unban All (%i)",
+                 host_menu_ban_count());
+    }
+    snprintf(out, size, "\x14\x15 Scroll%s%s%s  %s", viewOnly ? "" : "  \x01 Select",
+             switchHint, unbanHint, exitHint);
 }
 
 void host_menu_ui_draw() {
@@ -1440,13 +1664,14 @@ void host_menu_ui_draw() {
         draw_status(hostMenu.showControls ? 1 : 0);
         return;
     }
-    draw_status(4);
+    draw_status(0);
 
     close_stale_player_modal();
     bool inGame = Dvar_GetBool("cl_ingame");
     close_stale_stats_menu(inGame);
     int m = hostMenu.current;
-    // The player modal is drawn over the player list, so the box keeps showing the list.
+    // The player modal is drawn over the player list, so the panel keeps showing the
+    // list.
     bool players = m == HOST_MENU_KICK || m == HOST_MENU_PLAYER;
     // The stats modal is drawn over the stats list the same way.
     bool stats = m == HOST_MENU_STATS || m == HOST_MENU_STATS_FILE;
@@ -1456,127 +1681,68 @@ void host_menu_ui_draw() {
     bool notHost = players && !inGame && !party;  // not in a lobby
     bool viewOnly = players && !notHost && !can_manage_players(inGame);
 
-    int rows = notHost ? 1 : visible_option_count(boxMenu, inGame);
-    // The player list fits the modal for a full lobby, so the box doesn't change height
-    // as players join or leave. "No Saved Stats" never opens the modal.
-    int minRows = 0;
-    if (players && !notHost) {
-        minRows = modal_list_min_rows(HOST_MENU_PLAYER, HOST_MENU_MAX_CLIENTS, inGame);
-    } else if (stats && statsCount) {
-        minRows = modal_list_min_rows(HOST_MENU_STATS_FILE, rows, inGame);
+    char controls[128];
+    build_controls(m, inGame, notHost, viewOnly, controls, sizeof(controls));
+    // With both parties active the position names the list shown.
+    char position[32] = "";
+    if (!notHost && visible_option_count(boxMenu, inGame)) {
+        bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
+        const char* list = !bothLists                    ? ""
+                           : hostMenu.lobbyShowGameParty ? "Party  "
+                                                         : "Lobby  ";
+        snprintf(position, sizeof(position), "%s%i / %i", list,
+                 cursor_row(boxMenu, inGame) + 1, visible_option_count(boxMenu, inGame));
     }
-    if (rows < minRows) {
-        rows = minRows;
-    }
-    float height = list_box_height(rows);
-    // The player list grows around the center at 650, so titles and the modal stay
-    // centered. It keeps its widest width until the list is left, so names don't shift
-    // sideways when a long-named player leaves.
-    float width = 300;
+    char tag[CLAN_TAG_MAX];
+    char info[128];
+    float infoWidth = build_info_line(inGame, tag, info, sizeof(info));
+    float footerWidth = text_width(controls, FOOTER_SCALE) + PANEL_PADDING +
+                        text_width(position, FOOTER_SCALE);
+    int width = panel_width((infoWidth > footerWidth ? infoWidth : footerWidth) +
+                            PANEL_PADDING * 2);
+
+    // The player list grows around the center, so the tabs and the modal stay centered.
+    // It keeps its widest width until the list is left, so names don't shift sideways
+    // when a long-named player leaves.
     if (players && !notHost) {
         if (party != playerListParty) {
             playerListParty = party;
-            playerListWidth = 0;  // fit the box to the new list
+            playerListWidth = 0;  // fit the panel to the new list
         }
         int w = build_player_rows(party, inGame);
         if (w > playerListWidth) {
             playerListWidth = w;
         }
-        width = playerListWidth;
+        if (playerListWidth > width) {
+            width = playerListWidth;
+        }
     } else {
         playerListWidth = 0;
     }
-    float left = 650 - width / 2;
-    draw_shader(left - 2, LIST_BOX_TOP, 2, height, accent, whiteMaterial);
-    draw_shader(left + width - 1, LIST_BOX_TOP, 2, height, accent, whiteMaterial);
-    draw_shader(left, LIST_BOX_TOP, width, height, background, whiteMaterial);
 
-    draw_text("Silinium", get_aligned_x(650, 0.6f, "Silinium", ALIGN_CENTER), 220, 0.6f,
-              white);
-    // With both parties active the title names the list shown.
-    bool bothLists = players && !inGame && host_menu_lobby_parties_both_active();
-    const char* title = hostMenu.title[boxMenu];
-    if (bothLists) {
-        title = hostMenu.lobbyShowGameParty ? "Players (Party)" : "Players (Lobby)";
+    int rows = visible_option_count(boxMenu, inGame);
+    if (notHost || !rows) {
+        rows = 1;  // "Not in a lobby" / "No players"
     }
-    draw_text(title, get_aligned_x(650, 0.45f, title, ALIGN_CENTER), 238, 0.45f, accent);
+    PanelLayout layout = panel_layout(width, rows);
+    draw_shader(layout.left, layout.top, layout.width, layout.bottom - layout.top,
+                panelBackground, whiteMaterial);
+    draw_header(&layout, tag, info, tab_index(m));
+    draw_footer(&layout, controls, position);
+
     if (players) {
-        const char* switchHint =
-            can_switch_lists(m, inGame) ? " | \x04 - Switch List" : "";
-        // \x03 as the Square glyph is inferred from \x01 Cross, \x02 Circle and \x04
-        // Triangle (unverified).
-        char unbanHint[32] = "";
-        if (can_unban_all(m, inGame)) {
-            snprintf(unbanHint, sizeof(unbanHint), " | \x03 - Unban All (%i)",
-                     host_menu_ban_count());
-        }
-        char controls[128];
-        if (notHost) {
-            snprintf(controls, sizeof(controls), "\x02 - Back");
-        } else if (viewOnly) {
-            snprintf(controls, sizeof(controls), "\x14\x15 - Scroll%s%s | \x02 - Back",
-                     switchHint, unbanHint);
-        } else if (m == HOST_MENU_PLAYER) {
-            snprintf(controls, sizeof(controls),
-                     "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Back");
-        } else {
-            snprintf(controls, sizeof(controls),
-                     "\x14\x15 - Scroll | \x01 - Select%s%s | \x02 - Back", switchHint,
-                     unbanHint);
-        }
-        draw_text_box(controls, 10, 20, 0.5f);
-        draw_session_info(inGame);
-        if (notHost) {
-            draw_text("Not in a lobby", 510, LIST_FIRST_ROW_Y, 0.5f, white);
-            return;
-        }
-        if (!visible_option_count(HOST_MENU_KICK, inGame)) {
-            draw_text("No players", left + 10, LIST_FIRST_ROW_Y, 0.5f, white);
-            return;
-        }
-        // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn
-        // the selected name white. Only occupied slots get a row.
-        int row = 0;
-        for (int i = 0; i < HOST_MENU_MAX_CLIENTS; i++) {
-            if (!player_slot_used(party, inGame, i)) {
-                continue;
-            }
-            const float* color = hostMenu.cursor[HOST_MENU_KICK] == i ? accent : white;
-            float y = list_row_y(row++);
-            float x = left + 10;
-            // On player rows icon, level and tag/name each start at a fixed x, also
-            // without an icon, so the names form one straight column. Players without a
-            // level start at the left edge.
-            if (*playerLevels[i]) {
-                if (playerRankIcons[i]) {
-                    draw_shader(x, y - RANK_ICON_SIZE, RANK_ICON_SIZE, RANK_ICON_SIZE,
-                                white, playerRankIcons[i]);
-                }
-                draw_text(playerLevels[i], x + RANK_ICON_SIZE + RANK_GAP, y, 0.5f, color);
-                x += playerRankColumn;
-            }
-            if (*playerTags[i]) {
-                draw_text(playerTags[i], x, y, 0.5f, color);
-                x += playerTagWidths[i];
-            }
-            draw_text(player_name(party, inGame, i), x, y, 0.5f, color);
-        }
+        draw_player_list(&layout, party, inGame, notHost);
         if (m == HOST_MENU_PLAYER) {
-            draw_player_modal(party, inGame, LIST_BOX_TOP + height);
+            draw_player_modal(&layout, party, inGame);
         }
         return;
     }
 
-    draw_text_box(m == HOST_MENU_MAIN
-                      ? "\x14\x15\x16\x17 - Scroll/Rotate | \x01 - Select | \x02 - Exit"
-                      : "\x14\x15 - Scroll | \x01 - Select | \x02 - Back",
-                  10, 20, 0.5f);
-    draw_session_info(inGame);
-    draw_options(boxMenu, inGame, 510, 790, LIST_FIRST_ROW_Y);
+    draw_options(boxMenu, inGame, layout.left, layout.width, layout.listTop);
     if (m == HOST_MENU_STATS_FILE) {
         draw_modal(
-            HOST_MENU_STATS, HOST_MENU_STATS_FILE,
+            &layout, HOST_MENU_STATS, HOST_MENU_STATS_FILE,
             hostMenu.options[HOST_MENU_STATS][hostMenu.cursor[HOST_MENU_STATS]].text,
-            inGame, LIST_BOX_TOP + height);
+            inGame);
     }
 }

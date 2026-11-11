@@ -21,15 +21,15 @@ typedef enum HostMenuOptionType {
 } HostMenuOptionType;
 
 typedef enum HostMenuId {
+    // The tabs, menus without a parent.
     HOST_MENU_MAIN = 0,
-    HOST_MENU_KICK = 1,  // player list
+    HOST_MENU_PATCHES = 1,  // toggles for host-side game patches
+    HOST_MENU_ACCOUNT = 2,  // own account: recovery, prestige, stats files, name
+    HOST_MENU_KICK = 3,     // player list, the PLAYERS tab
     HOST_MENU_PLAYER =
-        2,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
-    HOST_MENU_STATS = 3,  // saved stats files
-    HOST_MENU_STATS_FILE =
-        4,                  // actions for the file selected in HOST_MENU_STATS, a modal
-    HOST_MENU_ACCOUNT = 5,  // own account: recovery, prestige, stats files, name
-    HOST_MENU_PATCHES = 6   // toggles for host-side game patches
+        4,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
+    HOST_MENU_STATS = 5,      // saved stats files
+    HOST_MENU_STATS_FILE = 6  // actions for the file selected in HOST_MENU_STATS, a modal
 } HostMenuId;
 
 typedef enum HostMenuStatsAction {
@@ -49,6 +49,7 @@ typedef struct HostMenuOption {
     bool inGameOnly;  // hidden while in lobby
     // Extra condition for showing it, 0 = none.
     bool (*visible)(const struct HostMenuOption* option, bool inGame);
+    void (*valueText)(char* out, int size);  // text shown on the right, 0 = none
 } HostMenuOption;
 
 typedef struct HostMenu {
