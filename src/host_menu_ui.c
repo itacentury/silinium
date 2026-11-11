@@ -1044,12 +1044,6 @@ static int playerListWidth;
 // The party the list showed last frame (0 in game), so the width is refit on a change.
 static int playerListParty;
 
-// The player list box is at least this many rows high. Flipped upward, the Kick/Ban modal
-// (73 high) only clears the list title from row 5 on, so rows 0-4 must fit it below:
-// row 4 needs 258 + 4 * 16.5 + 6 + 73 <= rows * 16.5 + 248, i.e. 10 rows. With fewer it
-// would flip upward over the box's top edge and titles.
-#define PLAYER_LIST_MIN_ROWS 10
-
 // Rank icon size and the gap after the icon and after the level.
 #define RANK_ICON_SIZE 15.0f
 #define RANK_GAP 4.0f
@@ -1274,8 +1268,33 @@ static void draw_options(int m, bool inGame, float x, float right, float y) {
     }
 }
 
+// The rows a list box needs so modalMenu, opened on any of the list's first listRows
+// rows, fits below its row or, flipped above it by draw_modal, stays below the box
+// titles. Flipped, the modal on row r starts at 258 + r * 16.5 - 16 - height, which
+// clears the titles once it is at or below the first row's text top (242), i.e. r * 16.5
+// >= height. The rows before that must fit it below: 258 + r * 16.5 + 6 + height <= rows
+// * 16.5 + 248.
+static int modal_list_min_rows(int modalMenu, int listRows, bool inGame) {
+    float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
+    int firstFlip = 0;
+    while (firstFlip * 16.5f < height) {
+        firstFlip++;
+    }
+    int last = firstFlip - 1 < listRows - 1 ? firstFlip - 1 : listRows - 1;
+    if (last < 0) {
+        return 0;
+    }
+    float need = last + (16.0f + height) / 16.5f;
+    int rows = (int)need;
+    if (rows < need) {
+        rows++;  // ceil (need >= 0)
+    }
+    return rows;
+}
+
 // The options of modalMenu below the selected row of listMenu, or above it when they
-// would reach past the bottom of the list box.
+// would reach past the bottom of the list box. The box must be modal_list_min_rows high,
+// or the flipped modal covers its titles.
 static void draw_modal(int listMenu, int modalMenu, const char* title, bool inGame,
                        float listBottom) {
     float height = visible_option_count(modalMenu, inGame) * 16.5f + 40.0f;
@@ -1408,8 +1427,16 @@ void host_menu_ui_draw() {
     bool viewOnly = players && !notHost && !can_manage_players(inGame);
 
     int rows = notHost ? 1 : visible_option_count(boxMenu, inGame);
-    if (players && !notHost && rows < PLAYER_LIST_MIN_ROWS) {
-        rows = PLAYER_LIST_MIN_ROWS;
+    // The player list fits the modal for a full lobby, so the box doesn't change height
+    // as players join or leave. "No Saved Stats" never opens the modal.
+    int minRows = 0;
+    if (players && !notHost) {
+        minRows = modal_list_min_rows(HOST_MENU_PLAYER, HOST_MENU_MAX_CLIENTS, inGame);
+    } else if (stats && statsCount) {
+        minRows = modal_list_min_rows(HOST_MENU_STATS_FILE, rows, inGame);
+    }
+    if (rows < minRows) {
+        rows = minRows;
     }
     float height = rows * 16.5f + 48.0f;
     // The player list grows around the center at 650, so titles and the modal stay
