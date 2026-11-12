@@ -2,5 +2,6 @@ bin/*
 objs/*
 *.ff
 *.local.code-workspace
+*.bin
 # scetool key folder (keys must never be committed)
 /data/
