@@ -74,6 +74,7 @@ t5nd(int, I_stricmp, (const char* s0, const char* s1));
 t5nd(void, UI_OpenKeyboard,
      (int localClientNum, const char16* title, const char16* preset, int maxLength,
       KeyboardCallback_t callback));
+t5nd(void, UI_UpdateKeyboard, (int localClientNum));
 t5nd(bool, Dvar_GetBool, (const char* name));
 t5nd(int, R_TextHeight, (void* font));
 t5nd(int, R_TextWidth, (const char* text, int maxChars, void* font));

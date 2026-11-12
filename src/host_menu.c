@@ -457,6 +457,8 @@ static void show_game_messages() {
 // Change Name's state is released; the state is also released when the client of a
 // callkeyboard left. Closed means fully unloaded: no keyboard is opened and no state
 // released while the game's previous keyboard is still unloading, up to a time limit.
+// In game the game only updates its keyboard while a menu is open, so the update is
+// driven from here (update_game_keyboard).
 enum {
     KEYBOARD_IDLE,
     KEYBOARD_REQUESTED,
@@ -571,6 +573,17 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
     keyboardText[i] = 0;
     __lwsync();
     keyboardState = KEYBOARD_ENTERED;
+}
+
+// In game UI_Refresh, the only caller of the keyboard update, runs only while a menu
+// catches the keys. Without one a finished dialog is never unloaded: it is gone from the
+// screen but keeps the pad and the PS button, and its callback never runs. A second call
+// in the same frame from UI_Refresh is harmless, the first one already left state 2.
+static void update_game_keyboard() {
+    int state = *(volatile int*)T5_KeyboardState;
+    if (state == T5_KeyboardStateOpen || state == T5_KeyboardStateFinished) {
+        UI_UpdateKeyboard(0);
+    }
 }
 
 // The game runs the callback before it leaves the finished state, so a callback that did
@@ -898,6 +911,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             Cbuf_AddText(0, buffer);
         }
         show_game_messages();
+        update_game_keyboard();
         release_closed_keyboard();
         open_requested_keyboard();
     }
@@ -1077,6 +1091,7 @@ static void init_host_menu_offsets() {
     t5nmi(R_AddCmdDrawStretchPic);
     t5nmi(R_AddCmdDrawText);
     t5nmi(UI_OpenKeyboard);
+    t5nmi(UI_UpdateKeyboard);
     t5nmi(Dvar_GetBool);
     t5nmi(R_TextHeight);
     t5nmi(R_TextWidth);
