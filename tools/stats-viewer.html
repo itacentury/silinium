@@ -1317,6 +1317,37 @@ itemGroup("Feature", Object.fromEntries(["Killstreaks", "Contracts", "Reticles",
 
 const itemName = (i) => i === 0 ? "None" : ITEMS[i]?.[1] ?? `Item #${i}`;
 const itemType = (i) => ITEMS[i]?.[0] ?? "";
+const WEAPON_TYPES = new Set(["Pistol", "SMG", "Assault", "LMG", "Sniper", "Shotgun", "Launcher",
+  "Special", "Lethal", "Tactical", "Equipment", "Attachment", "Melee"]);
+
+// [display name, statsTable indices (drop and placed variant are summed), globalstats_e earned
+// stat]. The earned stats use internal weapon names; the mapping is inferred from those names and
+// from matching used/earned counts in a sample file (Blackbird 1557/1609, Counter-Spy 2685/2860),
+// unverified.
+const KILLSTREAKS = [
+  ["Spy Plane", [193], "killstreak_earned_u2"],
+  ["RC-XD", [195], "killstreak_earned_rcbomb"],
+  ["Counter-Spy Plane", [206], "killstreak_earned_counter_u2"],
+  ["SAM Turret", [198, 199], "killstreak_earned_sam_turret"],
+  ["Care Package", [194], "killstreak_earned_supply_drop"],
+  ["Napalm Strike", [201], "killstreak_earned_napalm"],
+  ["Sentry Gun", [196, 197], "killstreak_earned_sentry_gun"],
+  ["Mortar Team", [200], "killstreak_earned_mortar"],
+  ["Attack Helicopter", [203], "killstreak_earned_comlink"],
+  ["Valkyrie Rockets", [211, 212], "killstreak_earned_m220"],
+  ["Blackbird", [202], "killstreak_earned_satellite"],
+  ["Rolling Thunder", [207], "killstreak_earned_airstrike"],
+  ["Chopper Gunner", [205], "killstreak_earned_chopper_gunner"],
+  ["Attack Dogs", [209], "killstreak_earned_dogs"],
+  ["Gunship", [208], "killstreak_earned_gunship"],
+  ["Death Machine", [210], null],
+  ["Grim Reaper", [213], "killstreak_earned_m202"],
+];
+
+// Contract definitions are not in the stats file or the rawfiles (the game resolves them through
+// GetContractStatName and friends), so contracts are shown by index until names are known.
+const CONTRACTS = {};
+const contractName = (i) => CONTRACTS[i] ?? `Contract #${i}`;
 
 // --- DDL ------------------------------------------------------------------------------
 
@@ -1684,6 +1715,83 @@ const WEAPON_COLUMNS = [
 ];
 const ITEM_COLUMNS = [WEAPON_COLUMNS[0], { key: "type", label: "Type" }, ...WEAPON_COLUMNS.slice(1)];
 
+function killstreakRows(s) {
+  return KILLSTREAKS.map(([label, items, earned]) => {
+    const sum = (stat) => items.reduce((total, i) => total + s.get("itemstats.stats.statvalue", i, STAT[stat]), 0);
+    return {
+      label, earned: earned ? s.playerStat(earned) : null, used: sum("used"), kills: sum("kills"),
+      destroyed: sum("destroyed"),
+    };
+  }).filter((r) => r.earned || r.used || r.kills || r.destroyed);
+}
+
+const KILLSTREAK_COLUMNS = [
+  { key: "label", label: "Killstreak" },
+  { key: "earnedText", label: "Earned", sortBy: "earned", fmt: (r) => r.earned === null ? "–" : fmt(r.earned) },
+  { key: "used", label: "Used" },
+  { key: "kills", label: "Kills" },
+  { key: "destroyed", label: "Destroyed" },
+  { key: "kills", label: "", bar: true },
+];
+
+function renderKillstreakTiles(s) {
+  const p = (n) => s.playerStat(n);
+  // killstreak_kills_* exist only for the three planes; "kills while active" is inferred.
+  const inferred = "meaning inferred";
+  return `<div class="tiles">
+    ${tile("Killstreaks earned", fmt(p("killstreak_earned")))}
+    ${tile("Kills during Spy Plane", fmt(p("killstreak_kills_u2")), inferred)}
+    ${tile("Kills during Blackbird", fmt(p("killstreak_kills_satellite")), inferred)}
+    ${tile("Kills during Counter-Spy", fmt(p("killstreak_kills_counter_u2")), inferred)}
+  </div>`;
+}
+
+// lasttimedeactivated values fall between 2011 and 2026 as Unix seconds; that reading is inferred.
+const dateFormat = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium" });
+const unixDate = (seconds) => seconds ? dateFormat.format(new Date(seconds * 1000)) : "–";
+
+function contractRows(s) {
+  const rows = [];
+  for (let i = 0; i < s.ddl.fields.get("root.contracts").array; i++) {
+    const purchased = s.get("contracts.timespurchased", i);
+    if (purchased) {
+      rows.push({ label: contractName(i), purchased, deactivated: s.get("contracts.lasttimedeactivated", i) });
+    }
+  }
+  return rows;
+}
+
+const CONTRACT_COLUMNS = [
+  { key: "label", label: "Contract" },
+  { key: "purchased", label: "Times purchased" },
+  { key: "deactivatedText", label: "Last deactivated", sortBy: "deactivated", fmt: (r) => unixDate(r.deactivated) },
+  { key: "purchased", label: "", bar: true },
+];
+
+function renderContracts(s) {
+  const p = (n) => s.playerStat(n);
+  const completed = p("contracts_completed"), purchased = p("contracts_purchased");
+  const spent = p("contracts_cp_spent"), earned = p("contracts_cp_earned");
+  const tiles = `<div class="tiles">
+    ${tile("Completed", fmt(completed))}
+    ${tile("Purchased", fmt(purchased))}
+    ${tile("Completion rate", pct(completed, purchased))}
+    ${tile("CP spent", fmt(spent))}
+    ${tile("CP earned", fmt(earned))}
+    ${tile("CP net", fmt(earned - spent))}
+    ${tile("XP earned", fmt(p("contracts_xp_earned")))}
+  </div>`;
+  const active = [];
+  for (let i = 0; i < s.ddl.fields.get("root.activecontracts").array; i++) {
+    const g = (f) => s.get("activecontracts." + f, i);
+    active.push(`<tr><td>#${i + 1}</td><td>${esc(contractName(g("contractindex")))}</td>
+      <td class="mono">${fmt(g("progress"))}</td><td class="mono">${fmt(g("startingtime"))}</td></tr>`);
+  }
+  const activeTable = `<div class="panel scroll"><table><thead><tr><th>Slot</th><th>Contract</th>
+    <th>Progress</th><th>Starting time (raw)</th></tr></thead><tbody>${active.join("")}</tbody></table></div>`;
+  return `${tiles}<div class="two"><div>${activeTable}</div><div>${tableShell("contracts")}</div></div>`;
+}
+
 function renderClasses(header, s) {
   const loadout = [["primary", "Primary"], ["secondary", "Secondary"], ["primarygrenade", "Lethal"],
     ["specialgrenade", "Tactical"], ["equipment", "Equipment"], ["specialty1", "Perk 1"],
@@ -1772,7 +1880,8 @@ function render(name, bytes, ddl) {
   const groups = ddl.enums[6].names;
   const groupRows = weaponRows(s, "groupstats", groups.length,
     (i) => groups[i].replace(/^weapon_/, "").replace(/_/g, " "));
-  const itemRows = weaponRows(s, "itemstats", ddl.fields.get("root.itemstats").array, itemName);
+  const itemRows = weaponRows(s, "itemstats", ddl.fields.get("root.itemstats").array, itemName)
+    .filter((r) => WEAPON_TYPES.has(itemType(r.index)));
   for (const r of itemRows) {
     r.type = itemType(r.index);
   }
@@ -1793,7 +1902,9 @@ function render(name, bytes, ddl) {
     section("Personal bests", renderBests(s)),
     section("Game modes", tableShell("modes")),
     section("Weapon groups", tableShell("groups")),
-    section("Items", tableShell("items", "tall")),
+    section("Weapons", tableShell("weapons", "tall")),
+    section("Killstreaks", renderKillstreakTiles(s) + tableShell("killstreaks")),
+    section("Contracts", renderContracts(s), "contract names are not in the file"),
     section("Classes", renderClasses(header, s), "hover an item for its statsTable id"),
     section("Recent matches & last match", renderMatches(s)),
     section("All player stats", renderSearchList("ps", "Search playerstatslist…", false)),
@@ -1814,7 +1925,9 @@ function render(name, bytes, ddl) {
   ];
   setupTable("modes", modeColumns, modeRows(s), "time");
   setupTable("groups", WEAPON_COLUMNS, groupRows, "kills");
-  setupTable("items", ITEM_COLUMNS, itemRows, "kills");
+  setupTable("weapons", ITEM_COLUMNS, itemRows, "kills");
+  setupTable("killstreaks", KILLSTREAK_COLUMNS, killstreakRows(s), "used");
+  setupTable("contracts", CONTRACT_COLUMNS, contractRows(s), "purchased");
   bindSearchList("ps", playerStats);
   bindSearchList("raw", raw);
 }
