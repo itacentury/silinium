@@ -508,6 +508,10 @@ static void show_status(const char* text) {
     statusTime = sys_time_get_system_time();
 }
 
+// From the UI thread. A menu thread report at the same moment can mix the two texts;
+// the draw copies bounded, so that only shows a garbled line.
+void host_menu_ui_show_status(const char* text) { show_status(text); }
+
 // As a PS3 notification, or in the menu if webMAN didn't take it. Blocks while webMAN is
 // asked, so only the menu thread reports.
 static void report_stats_result(const char* text, bool success) {

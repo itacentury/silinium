@@ -771,16 +771,97 @@ static void arm_party_map_sync(void* uiContext, int openMenuCountBefore) {
     mapSyncMenus[mapSyncMenuCount++] = menu;
 }
 
+// Members only read the map from the party's rotation ring here, see
+// T5_Com_IsPublicOnlineGame. Wager matches look up the playlist differently, so they are
+// left alone.
+static bool party_map_uses_rotation_ring() {
+    return Com_IsPublicOnlineGame() && !Dvar_GetBool("xblive_wagermatch");
+}
+
+// Index of the map in the rotation of the current playlist, preferring the entry with the
+// gametype as well. The playlist slot is found like 0x43F020 does. -1 if the map is not
+// in the rotation, or only with another gametype while requireGametype is set.
+static int playlist_rotation_index(const char* map, const char* gametype,
+                                   bool requireGametype) {
+    dvar_s* playlistDvar = Dvar_FindVar("playlist");
+    if (!playlistDvar) {
+        return -1;
+    }
+    int playlist = playlistDvar->current.integer;
+    int rank = 0;
+    for (int slot = 0; slot < T5_PlaylistMax; slot++) {
+        int count = PLAYLIST_ROTATION_COUNT(slot);
+        if (!count) {
+            continue;
+        }
+        if (rank++ != playlist) {
+            continue;
+        }
+        int first = PLAYLIST_ROTATION_FIRST(slot);
+        int mapOnly = -1;
+        // The ring holds bytes and T5_PlaylistRotationNone means no map.
+        for (int i = 0; i < count && i < T5_PlaylistRotationNone; i++) {
+            const char* entryMap = PLAYLIST_ROTATION_MAP(first + i);
+            if (!entryMap || I_stricmp(entryMap, map)) {
+                continue;
+            }
+            const char* entryGametype = PLAYLIST_ROTATION_GAMETYPE(first + i);
+            if (entryGametype && !I_stricmp(entryGametype, gametype)) {
+                return i;
+            }
+            if (mapOnly < 0) {
+                mapOnly = i;
+            }
+        }
+        return requireGametype ? -1 : mapOnly;
+    }
+    return -1;
+}
+
+// Pushes the rotation index like the game's own rotation (0x1F0268) and applies the entry
+// to the host as well, so the host's ui_gametype matches what members get. Returns false
+// if the selection is not in the playlist rotation.
+static bool push_party_rotation_map(int party, const char* map, const char* gametype,
+                                    bool mapChanged) {
+    // A new gametype alone must not fall back to an entry with another one, that would
+    // undo the host's choice.
+    int index = playlist_rotation_index(map, gametype, !mapChanged);
+    if (index < 0) {
+        printf(T5WARNING
+               "%s / %s is not in the playlist rotation, members keep the old map.",
+               map, gametype);
+        return false;
+    }
+    int slot =
+        (int)(((unsigned int)PARTY_MAP_RING_INDEX(party) + 1) % T5_PartyMapRingSize);
+    PARTY_MAP_RING_ENTRY(party, slot) = (uint8_t)index;
+    PARTY_MAP_RING_INDEX(party) = slot;
+    // Rewrites ui_mapname / ui_gametype; map and gametype may point into the old values,
+    // so they are not used afterwards.
+    Playlist_SetRotationEntry(0, index);
+    store_synced_party_map();
+    return true;
+}
+
 static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     const char* map = Dvar_GetString("ui_mapname");
     const char* gametype = Dvar_GetString("ui_gametype");
-    if (!map || !gametype ||
-        (!strcmp(map, syncedMap) && !strcmp(gametype, syncedGametype))) {
+    if (!map || !gametype) {
+        return;
+    }
+    bool mapChanged = strcmp(map, syncedMap) != 0;
+    if (!mapChanged && !strcmp(gametype, syncedGametype)) {
         return;
     }
     store_synced_party_map();
+    // The game's rotation only uses the LobbyParty ring (0x1F0268).
+    if (lobbyHosted && party_map_uses_rotation_ring() &&
+        !push_party_rotation_map(T5_LobbyParty, map, gametype, mapChanged)) {
+        host_menu_ui_show_status("Not in this playlist, players keep the old map");
+    }
     // Unlike send_party_rename not limited to private matches: the host picked this map /
-    // mode on purpose through the host menu, so advertising it is intended in any lobby.
+    // mode on purpose through the host menu. Outside a private match the members only see
+    // it through the rotation ring above.
     if (lobbyHosted) {
         Party_UpdateState(T5_LobbyParty);
     }
@@ -1100,6 +1181,8 @@ static void init_host_menu_offsets() {
     t5nmi(Party_KickMember);
     t5nmi(Live_IsLocalXuid);
     t5nmi(Party_UpdateState);
+    t5nmi(Com_IsPublicOnlineGame);
+    t5nmi(Playlist_SetRotationEntry);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);
     t5nmi(ClanTag_Format);

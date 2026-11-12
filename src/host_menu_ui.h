@@ -119,6 +119,8 @@ void host_menu_ui_handle_input();
 void host_menu_ui_draw();
 void host_menu_ui_open_name_keyboard();
 void host_menu_ui_open_stats_keyboard();
+// Shows a short status line below the session info / open hint for a few seconds.
+void host_menu_ui_show_status(const char* text);
 // Runs queued Save/Load/Delete Stats requests, in the menu thread (file access).
 void host_menu_ui_run_stats_actions(bool inGame);
 void host_menu_set_party_dvars(bool connectToOthers, int minPlayers, int pregameTimer,

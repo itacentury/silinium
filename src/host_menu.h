@@ -24,6 +24,17 @@
 #define CG_CLIENT_PRESTIGE(i) \
     (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientPrestigeOffset))
 #define PLAYLIST_ENTRY(i) (T5_PlaylistEntries + (i) * 0x98)
+#define PLAYLIST_ROTATION_FIRST(i) \
+    (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationFirstOffset))
+#define PLAYLIST_ROTATION_COUNT(i) \
+    (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationCountOffset))
+#define PLAYLIST_ROTATION_ENTRY(i) \
+    (T5_PlaylistRotationEntries + (i) * T5_PlaylistRotationEntrySize)
+#define PLAYLIST_ROTATION_MAP(i) (*(const char**)PLAYLIST_ROTATION_ENTRY(i))
+#define PLAYLIST_ROTATION_GAMETYPE(i) (*(const char**)(PLAYLIST_ROTATION_ENTRY(i) + 4))
+#define PARTY_MAP_RING_INDEX(party) (*(int*)((party) + T5_PartyMapRingIndexOffset))
+#define PARTY_MAP_RING_ENTRY(party, i) \
+    (*(uint8_t*)((party) + T5_PartyMapRingOffset + (i)))
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
 #define PARTY_MEMBER_USED(party, i) (*(unsigned char*)PARTY_MEMBER(party, i) > 2)
@@ -84,6 +95,8 @@ t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
 t5nd(void, Party_KickMember, (int party, int memberIndex, const char* reason));
 t5nd(int, Live_IsLocalXuid, (uint64_t xuid));
 t5nd(void, Party_UpdateState, (int party));
+t5nd(bool, Com_IsPublicOnlineGame, ());
+t5nd(void, Playlist_SetRotationEntry, (int localClientNum, int rotationIndex));
 t5nd(void, Party_BanName, (const char* name));
 t5nd(int, Party_IsBanned, (const char* name));
 t5nd(void, ClanTag_Format,

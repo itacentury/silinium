@@ -86,6 +86,22 @@
 // local player hosts it (0x1E7068), then copies ui_mapname / ui_gametype into the party (0x1EAE70 / 0x1EAE38) and
 // sends partystate, which carries both to the members. Name inferred.
 #define T5_Party_UpdateState 0x207770
+// Members of a private match take the map and gametype from partystate as strings (Com_SessionModeIs(3) at 0x2003C8).
+// In a public online game they ignore them: the host sends the 8 playlist rotation indices of the LobbyParty map ring
+// (Party_SendPartyState at 0x2098FC), a member pushes them into its own ring and sets ui_mapname / ui_gametype from the
+// current one (0x200880 - 0x200A14). The game's own host side is 0x1F0268. Traced statically, names inferred.
+// () onlinegame && !xblive_privatematch && !xblive_basictraining && !xblive_theater, dvar reads only. Wager matches
+// pass.
+#define T5_Com_IsPublicOnlineGame 0x39EC58
+// (localClientNum, rotationIndex) sets ui_mapname / ui_gametype (and xblive_rankedmatch, party_teambased, ...) from the
+// current playlist's rotation entry. Wager matches pick the playlist by wagerCategory instead.
+#define T5_Playlist_SetRotationEntry 0x440910
+#define T5_PartyMapRingOffset 0x676D // 8 rotation indices (bytes)
+#define T5_PartyMapRingIndexOffset 0x6778 // int, the current ring slot
+#define T5_PartyMapRingSize 8
+#define T5_PlaylistRotationNone 0xFF // ring entry without a map, Playlist_SetRotationEntry skips it (0x440950)
+#define T5_PlaylistRotationEntries 0x1898250 // + i * 16: +0 map name, +4 gametype name (read at 0x440EDC)
+#define T5_PlaylistRotationEntrySize 16
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0
@@ -226,6 +242,12 @@
 // (0x1CDE70) sends its userinfo to the server when DVAR_USERINFO is set, then clears it (0x1C7B48).
 #define T5_DvarModifiedFlags 0x18F019C
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int
+#define T5_PlaylistMax 64
+// int, first rotation entry (T5_PlaylistRotationEntries) of the playlist. 0x440910 and 0x43F020 address the table
+// from 0x18950A8, so these are +0x54 / +0x58 there.
+#define T5_PlaylistRotationFirstOffset 0x44
+// int, rotation entry count. A slot with a count is a playlist; the playlist dvar picks the n-th of them (0x43F020).
+#define T5_PlaylistRotationCountOffset 0x48
 #define T5_DvarPtr_BBA19C 0xBBA19C // bool dvar, default true (probably jump_slowdownEnable)
 #define T5_DvarPtr_BBA1A4 0xBBA1A4 // float dvar, default 300 (probably bg_fallDamageMaxHeight)
 
