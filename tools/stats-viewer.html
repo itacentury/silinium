@@ -1258,6 +1258,66 @@ const MODE_NAMES = {
 const modeName = (id) => id.startsWith("hc") && MODE_NAMES[id.slice(2)]
   ? "Hardcore " + MODE_NAMES[id.slice(2)] : (MODE_NAMES[id] || id);
 
+// mp/statsTable.csv row index -> [type, display name]. The rows and their localize
+// references come from a statsTable.csv dump; the English text is transcribed by hand
+// from the in-game names and not checked against the localized strings.
+const ITEMS = {};
+function itemGroup(type, names) {
+  for (const [index, name] of Object.entries(names)) {
+    ITEMS[index] = [type, name];
+  }
+}
+itemGroup("Pistol", { 1: "ASP", 2: "CZ75", 3: "M1911", 4: "Makarov", 5: "Python",
+  6: "ASP Dual Wield", 7: "CZ75 Dual Wield", 8: "M1911 Dual Wield", 9: "Makarov Dual Wield",
+  10: "Python Dual Wield" });
+itemGroup("SMG", { 12: "AK74u", 13: "Kiparis", 14: "MAC11", 15: "MP5K", 16: "MPL", 17: "PM63",
+  18: "Skorpion", 19: "Spectre", 20: "Uzi", 21: "Kiparis Dual Wield", 22: "MAC11 Dual Wield",
+  23: "PM63 Dual Wield", 24: "Skorpion Dual Wield" });
+itemGroup("Assault", { 26: "AK47", 27: "AUG", 28: "Commando", 29: "Enfield", 30: "FAMAS",
+  31: "FN FAL", 32: "G11", 33: "Galil", 34: "M14", 35: "M16" });
+itemGroup("LMG", { 37: "HK21", 38: "M60", 39: "RPK", 40: "Stoner63" });
+itemGroup("Sniper", { 42: "Dragunov", 43: "L96A1", 44: "PSG1", 45: "WA2000" });
+itemGroup("Shotgun", { 47: "HS10", 48: "Stakeout", 49: "Olympia", 50: "SPAS-12",
+  51: "HS10 Dual Wield" });
+itemGroup("Launcher", { 53: "M72 LAW", 54: "RPG", 55: "Strela-3", 57: "China Lake" });
+itemGroup("Special", { 56: "Crossbow", 62: "Ballistic Knife" });
+itemGroup("Lethal", { 63: "Frag", 64: "Semtex", 65: "Tomahawk" });
+itemGroup("Tactical", { 67: "Willy Pete", 68: "Nova Gas", 69: "Flashbang", 70: "Concussion",
+  71: "Decoy" });
+itemGroup("Equipment", { 73: "Claymore", 74: "C4", 75: "Jammer", 76: "Tactical Insertion",
+  77: "Camera Spike", 78: "Motion Sensor" });
+itemGroup("Attachment", { 131: "Masterkey", 132: "Grenade Launcher", 133: "Flamethrower" });
+itemGroup("Melee", { 190: "Knife" });
+itemGroup("Body", { 97: "None", 98: "Lightweight Pro", 99: "Scavenger Pro", 100: "Ghost Pro",
+  101: "Flak Jacket Pro", 102: "Hardline Pro" });
+itemGroup("Face paint", Object.fromEntries(["None", "Stalker", "Crom", "Highlander", "Sidewinder",
+  "Mantis", "Militia", "Apache", "Sandman", "Zulu", "Blitz", "Commando", "Tundra", "Banshee",
+  "Dutch", "Ranger", "Smoke", "Black Widow", "Death", "Reaper", "Jester", "Face 21", "Face 22",
+  "Face 23", "Face 24"].map((name, i) => [106 + i, name])));
+itemGroup("Face paint color", Object.fromEntries(
+  Array.from({ length: 9 }, (_, i) => [88 + i, `Color ${i}`])));
+itemGroup("Perk", Object.fromEntries(["Lightweight", "Scavenger", "Ghost", "Flak Jacket",
+  "Hardline", "Steady Aim", "Scout", "Hardened", "Sleight of Hand", "Warlord", "Marathon",
+  "Ninja", "Second Chance", "Hacker", "Tactical Mask"].flatMap((name, i) =>
+  [[150 + 2 * i, name], [151 + 2 * i, name + " Pro"]])));
+itemGroup("Perk", { 188: "None" });
+itemGroup("Killstreak", { 192: "None", 193: "Spy Plane", 194: "Care Package", 195: "RC-XD",
+  196: "Sentry Gun (drop)", 197: "Sentry Gun", 198: "SAM Turret (drop)", 199: "SAM Turret",
+  200: "Mortar Team", 201: "Napalm Strike", 202: "Blackbird", 203: "Attack Helicopter",
+  205: "Chopper Gunner", 206: "Counter-Spy Plane", 207: "Rolling Thunder", 208: "Gunship",
+  209: "Attack Dogs", 210: "Death Machine", 211: "Valkyrie Rockets (drop)",
+  212: "Valkyrie Rockets", 213: "Grim Reaper", 214: "None" });
+itemGroup("Feature", Object.fromEntries(["Killstreaks", "Contracts", "Reticles", "Lenses",
+  "Gun Tag", "Gun Emblem", "Face Paint", "Second Attachment", "Emblem", "Close Assault",
+  "Sniper", "Create-a-Class", "Camo", "Combat Record", "Clan Tag", "Prestige Leaderboard",
+  "Challenges", "Special Challenges", "Prestige Class 1", "Prestige Class 2",
+  "Prestige Class 3", "Prestige Class 4", "Prestige Class 5", "Reticle Color",
+  "Killstreak Challenges", "Elite Challenges", "Final Challenges", "Game Mode Challenges",
+  "Medal Challenges"].map((name, i) => [216 + i, name])));
+
+const itemName = (i) => i === 0 ? "None" : ITEMS[i]?.[1] ?? `Item #${i}`;
+const itemType = (i) => ITEMS[i]?.[0] ?? "";
+
 // --- DDL ------------------------------------------------------------------------------
 
 // fields: path -> {bit, bits, element, type, array, enum}; children: path -> [paths]
@@ -1387,7 +1447,8 @@ class Stats {
         continue;
       }
       const here = count > 1 ? [...indices, i] : indices;
-      const name = count > 1 ? `${label}[${names ? names[i] : i}]` : label;
+      const index = path === "root.itemstats" ? `${i} ${itemName(i)}` : names ? names[i] : i;
+      const name = count > 1 ? `${label}[${index}]` : label;
       const kids = this.ddl.children.get(path);
       if (kids) {
         for (const kid of kids) {
@@ -1500,7 +1561,8 @@ function setupTable(id, columns, rows, sortKey) {
 function renderTable(id) {
   const { columns, rows, sortKey } = tables.get(id);
   const el = document.getElementById(id);
-  const sorted = [...rows].sort((a, b) => (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
+  const sorted = [...rows].sort((a, b) => typeof a[sortKey] === "string"
+    ? a[sortKey].localeCompare(b[sortKey]) : (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
   const barColumn = columns.find((c) => c.bar);
   const max = barColumn ? Math.max(1, ...rows.map((r) => r[barColumn.key])) : 1;
   el.querySelectorAll("th.sortable").forEach((th) => th.classList.toggle("sorted", th.dataset.key === sortKey));
@@ -1589,7 +1651,7 @@ function weaponRows(s, path, count, label) {
   for (let i = 0; i < count; i++) {
     const g = (stat) => s.get(path + ".stats.statvalue", i, STAT[stat]);
     const row = {
-      label: label(i), kills: g("kills"), deaths: g("deaths"), headshots: g("headshots"),
+      index: i, label: label(i), kills: g("kills"), deaths: g("deaths"), headshots: g("headshots"),
       hits: g("hits"), shots: g("shots"), used: g("used"), time: g("timeused"),
     };
     if (row.kills || row.used || row.shots) {
@@ -1609,13 +1671,17 @@ const WEAPON_COLUMNS = [
   { key: "used", label: "Used" },
   { key: "kills", label: "", bar: true },
 ];
+const ITEM_COLUMNS = [WEAPON_COLUMNS[0], { key: "type", label: "Type" }, ...WEAPON_COLUMNS.slice(1)];
 
 function renderClasses(header, s) {
   const loadout = ["primary", "secondary", "primarygrenade", "specialgrenade", "equipment",
     "specialty1", "specialty2", "specialty3"];
   return `<div class="classes">${header.classes.map((name, i) => {
     const path = i < 5 ? `cacloadouts.customclass${i + 1}` : `cacloadouts.prestigeclass${i - 4}`;
-    const items = loadout.map((f) => `<dt>${f}</dt><dd>#${s.get(`${path}.${f}`)}</dd>`).join("");
+    const items = loadout.map((f) => {
+      const id = s.get(`${path}.${f}`);
+      return `<dt>${f}</dt><dd title="statsTable #${id}">${esc(itemName(id))}</dd>`;
+    }).join("");
     return `<div class="class"><div class="slot">${CLASS_SLOTS[i]}</div>
       <div class="name">${esc(name || "—")}</div><dl>${items}</dl></div>`;
   }).join("")}</div>`;
@@ -1642,7 +1708,7 @@ function renderMatches(s) {
       ["Score", fmt(a("score"))], ["Kills", a("kills")], ["Deaths", a("deaths")],
       ["Headshots", a("headshots")], ["Best streak", a("bestkillstreak")],
       ["XP earned", fmt(a("xpearned"))], ["CP earned", fmt(a("cpearned"))],
-      ["Match bonus", fmt(a("matchbonus"))], ["Top weapon", `#${a("topweaponitemindex")} (${a("topweaponkills")} kills)`],
+      ["Match bonus", fmt(a("matchbonus"))], ["Top weapon", `${itemName(a("topweaponitemindex"))} (${a("topweaponkills")} kills)`],
       ["Nemesis", a("nemesisname") || "–"],
       ["Kills on nemesis", a("nemesiskills")], ["Killed by nemesis", a("nemesiskilledby")],
       ["Private match", a("privatematch") ? "yes" : "no"],
@@ -1693,7 +1759,10 @@ function render(name, bytes, ddl) {
   const groups = ddl.enums[6].names;
   const groupRows = weaponRows(s, "groupstats", groups.length,
     (i) => groups[i].replace(/^weapon_/, "").replace(/_/g, " "));
-  const itemRows = weaponRows(s, "itemstats", ddl.fields.get("root.itemstats").array, (i) => `Item #${i}`);
+  const itemRows = weaponRows(s, "itemstats", ddl.fields.get("root.itemstats").array, itemName);
+  for (const r of itemRows) {
+    r.type = itemType(r.index);
+  }
   for (const r of [...groupRows, ...itemRows]) {
     r.accValue = r.shots ? r.hits / r.shots : 0;
   }
@@ -1711,11 +1780,11 @@ function render(name, bytes, ddl) {
     section("Personal bests", renderBests(s)),
     section("Game modes", tableShell("modes")),
     section("Weapon groups", tableShell("groups")),
-    section("Items", tableShell("items", "tall"), "statsTable names are not available, items are shown by their row index"),
-    section("Classes", renderClasses(header, s), "loadout values are statsTable item ids"),
+    section("Items", tableShell("items", "tall")),
+    section("Classes", renderClasses(header, s), "hover an item for its statsTable id"),
     section("Recent matches & last match", renderMatches(s)),
     section("All player stats", renderSearchList("ps", "Search playerstatslist…", false)),
-    section("Raw DDL", renderSearchList("raw", "Search every field, e.g. emblemstats or itemstats[43]", true),
+    section("Raw DDL", renderSearchList("raw", "Search every field, e.g. emblemstats or L96A1", true),
       "account and console fields are cleared on save and hidden"),
   ].join("");
 
@@ -1732,7 +1801,7 @@ function render(name, bytes, ddl) {
   ];
   setupTable("modes", modeColumns, modeRows(s), "time");
   setupTable("groups", WEAPON_COLUMNS, groupRows, "kills");
-  setupTable("items", WEAPON_COLUMNS, itemRows, "kills");
+  setupTable("items", ITEM_COLUMNS, itemRows, "kills");
   bindSearchList("ps", playerStats);
   bindSearchList("raw", raw);
 }
