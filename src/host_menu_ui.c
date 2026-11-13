@@ -133,8 +133,10 @@ static void* arrowMaterial;
 #define ANIM_TOGGLE_US 100000
 #define ANIM_STATUS_IN_US 150000
 #define ANIM_STATUS_OUT_US 300000
-#define ANIM_OPEN_SLIDE 8.0f   // the panel rises by this into place
-#define ANIM_PAGE_SLIDE 12.0f  // a new page's rows come in from this far left or right
+#define ANIM_OPEN_SLIDE 8.0f  // the panel rises by this into place
+// A new page's rows come in from this far left or right; no farther than the padding, so
+// they stay inside the panel.
+#define ANIM_PAGE_SLIDE PANEL_PADDING
 #define ANIM_MODAL_SLIDE 6.0f
 
 // Time of the frame being drawn, read once per frame so all animations agree.
@@ -1750,13 +1752,21 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
 }
 
 // Drawn in the given left column row: the top row while the menu is open,
-// below the open hint while it is closed (Save Stats closes it for the keyboard).
+// below the open hint while it is closed (Save Stats closes it for the keyboard). A
+// status on screen eases to a new row, a new one appears directly in its row.
+static Tween statusRow;
+
 static void draw_status(int row) {
     system_time_t time = statusTime;
     system_time_t age = frameTime - time;
     if (!time || age > STATUS_DURATION_US) {
+        tween_snap(&statusRow, row);
         return;
     }
+    // Not tween_follow: the frame the menu opens snaps, and the move to row 0 should
+    // ease.
+    tween_to(&statusRow, row, ANIM_PAGE_US);
+    float shownRow = tween_value(&statusRow, ANIM_PAGE_US);
     // Pairs with the one in show_status: the text is read only after the time that marks
     // it ready.
     __lwsync();
@@ -1767,7 +1777,7 @@ static void draw_status(int row) {
     float fadeIn = clamp01((float)age / ANIM_STATUS_IN_US);
     float fadeOut = clamp01((float)(STATUS_DURATION_US - age) / ANIM_STATUS_OUT_US);
     drawAlpha = fadeIn < fadeOut ? fadeIn : fadeOut;
-    draw_text_box(text, 10, 20 + row * step, 0.5f);
+    draw_text_box(text, 10, 20 + shownRow * step, 0.5f);
     drawAlpha = 1;
 }
 
