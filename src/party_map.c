@@ -348,20 +348,21 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     if (!map || !gametype) {
         return;
     }
+    // The game's rotation (0x1F0268) moved the ring and already sent partystate; our own
+    // pushes re-baseline the ring index right away. Checked before the strings, so a
+    // rotation to the same map and gametype doesn't leave a stale ring index that would
+    // swallow the host's next selection. A host selection in the same frame is dropped,
+    // the rotation overwrote it anyway.
+    if (lobbyHosted && PARTY_MAP_RING_INDEX(T5_LobbyParty) != syncedRingIndex) {
+        store_synced_party_map();
+        printf(T5INFO "The game's rotation set %s / %s, not syncing it.", map, gametype);
+        return;
+    }
     bool mapChanged = strcmp(map, syncedMap) != 0;
     if (!mapChanged && !strcmp(gametype, syncedGametype)) {
         return;
     }
-    // The game's rotation (0x1F0268) moved the ring and already sent partystate; our own
-    // pushes re-baseline the ring index right away. A host selection in the same frame is
-    // dropped, the rotation overwrote it anyway.
-    bool rotatedByGame =
-        lobbyHosted && PARTY_MAP_RING_INDEX(T5_LobbyParty) != syncedRingIndex;
     store_synced_party_map();
-    if (rotatedByGame) {
-        printf(T5INFO "The game's rotation set %s / %s, not syncing it.", map, gametype);
-        return;
-    }
     // The game's rotation only uses the LobbyParty ring (0x1F0268).
     if (lobbyHosted && party_map_uses_rotation_ring()) {
         RotationResult result =
