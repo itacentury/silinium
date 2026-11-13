@@ -459,8 +459,9 @@ void party_map_update_wager_match() {
 // The game writes the session's playlist again from the playlist dvar at the match start
 // (0x20D420) and when it recreates the session, the switched one would then hide the
 // lobby from the original playlist, so it is checked every frame, in game as well.
-// Whether LobbyParty stays active and hosted during the match is unverified: in game the
-// running server stands for hosting, and only the lobby decides that the host left.
+// Whether LobbyParty stays active and hosted during the match is unverified: while
+// loading and in game the running server stands for hosting, only without it does the
+// lobby decide that the host left.
 void party_map_keep_matchmaking_playlist(bool inGame) {
     if (matchmakingPlaylist < 0) {
         return;
@@ -471,14 +472,11 @@ void party_map_keep_matchmaking_playlist(bool inGame) {
         matchmakingPlaylist = -1;
         return;
     }
-    if (!host_menu_party_is_local_host(T5_LobbyParty)) {
+    if (!host_menu_party_is_local_host(T5_LobbyParty) && !Dvar_GetBool("sv_running")) {
         if (!inGame) {
             matchmakingPlaylist = -1;
-            return;
         }
-        if (!Dvar_GetBool("sv_running")) {
-            return;
-        }
+        return;
     }
     int offered = SESSION_INFO_PLAYLIST;
     if (offered < 0 || offered == matchmakingPlaylist) {
