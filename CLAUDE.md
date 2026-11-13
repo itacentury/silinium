@@ -57,6 +57,9 @@ All sources are in `src/`.
   linked with `-nodefaultlibs`.
 
 `tmp/` holds an example mod for MP and ZM; `docs/` holds this style guide.
+`tools/stats-viewer.html` is a standalone browser viewer for the Save Stats files;
+it has its own copy of the file header layout from `stats_file.c` and of bo1-re's
+`data/mp/stats_ddl.txt`.
 
 ## Key conventions
 
@@ -70,6 +73,12 @@ All sources are in `src/`.
   which checks the original instruction first.
 - Mod folder and file names must be lowercase (the game requests canonical names,
   the PS3 HDD is case-sensitive).
+- Changes to the stats file format (`stats_file.c` / `stats_file.h`: header fields,
+  `STATS_FILE_*` sizes, flags) or to the stats layout it saves must update
+  `tools/stats-viewer.html` in the same change. The viewer stays backward compatible:
+  it keeps reading version 2 files (the first released format: `SLST`, 0xD4-byte
+  header) and every later version. A format change bumps the file version instead of
+  changing what an existing version means.
 - Many offsets and game function names are reverse engineered (the
   [bo1-re](https://github.com/itacentury/bo1-re) repository holds that work). Mark unconfirmed findings in comments
   instead of presenting them as facts.

@@ -78,6 +78,8 @@ Quick Recovery and Prestige write to your online stats, only in the lobby. Quick
 
 Save, Load and Delete Stats show their result as a PS3 notification when [webMAN MOD](https://github.com/aldostools/webMAN-MOD) is installed (sent to webMAN's `/popup.ps3` on `127.0.0.1`; a plugin in the game can't show XMB notifications itself). Without webMAN the result is shown for a few seconds below the host box instead.
 
+To look at a saved file on a PC, open [tools/stats-viewer.html](tools/stats-viewer.html) in a browser and drop the `.bin` file on it (the file is only read locally, nothing is uploaded). It shows level, prestige, the clan tag, career and game mode stats, weapons, killstreaks, contracts, the classes with their names, recent matches and the raw DDL values, and whether the file's CRC matches.
+
 ## Anti-Freeze
 In multiplayer the loader blocks what the "Freeze PS3" options of RTM tools send to other consoles ([src/anti_freeze.c](src/anti_freeze.c)). It is always on and not available in zombies.
 
