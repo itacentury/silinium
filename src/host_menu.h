@@ -24,32 +24,6 @@
 #define CG_CLIENT_PRESTIGE(i) \
     (*(int*)(CG_CLIENTINFO_BASE + (i) * 0x5D0 + T5_CgClientPrestigeOffset))
 #define PLAYLIST_ENTRY(i) (T5_PlaylistEntries + (i) * 0x98)
-#define PLAYLIST_ROTATION_FIRST(i) \
-    (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationFirstOffset))
-#define PLAYLIST_ROTATION_COUNT(i) \
-    (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationCountOffset))
-#define PLAYLIST_WAGER_COST1(i) (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistWagerCostOffset1))
-#define PLAYLIST_WAGER_COST2(i) (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistWagerCostOffset2))
-#define PLAYLIST_ROTATION_ENTRY(i) \
-    (T5_PlaylistRotationEntries + (i) * T5_PlaylistRotationEntrySize)
-#define PLAYLIST_ROTATION_MAP(i) (*(const char**)PLAYLIST_ROTATION_ENTRY(i))
-#define PLAYLIST_ROTATION_GAMETYPE(i) (*(const char**)(PLAYLIST_ROTATION_ENTRY(i) + 4))
-#define PLAYLIST_GAMETYPE_ENTRY(i) (T5_PlaylistGametypes + (i) * T5_PlaylistGametypeSize)
-#define PLAYLIST_GAMETYPE_NAME(i) (*(const char**)PLAYLIST_GAMETYPE_ENTRY(i))
-#define PLAYLIST_GAMETYPE_PLAYLIST_NAME(i) \
-    (*(const char**)(PLAYLIST_GAMETYPE_ENTRY(i) + 4))
-#define SESSION_INFO (*(int*)T5_SessionInfo)
-#define SESSION_INFO_PLAYLIST \
-    (SESSION_INFO ? *(int*)(SESSION_INFO + T5_SessionInfoPlaylistOffset) : -1)
-#define UI_GAMETYPE_COUNT (*(int*)T5_UiGametypeCount)
-#define UI_GAMETYPE(i) (T5_UiGametypes + (i) * T5_UiGametypeSize)
-#define UI_GAMETYPE_NAME(i) ((char*)UI_GAMETYPE(i))
-#define UI_GAMETYPE_LOCALIZED(i) ((char*)(UI_GAMETYPE(i) + T5_UiGametypeLocalizedOffset))
-#define UI_GAMETYPE_SPLITSCREEN(i) \
-    (*(int*)(UI_GAMETYPE(i) + T5_UiGametypeSplitscreenOffset))
-#define PARTY_MAP_RING_INDEX(party) (*(int*)((party) + T5_PartyMapRingIndexOffset))
-#define PARTY_MAP_RING_ENTRY(party, i) \
-    (*(uint8_t*)((party) + T5_PartyMapRingOffset + (i)))
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
 #define PARTY_MEMBER_USED(party, i) (*(unsigned char*)PARTY_MEMBER(party, i) > 2)
@@ -110,8 +84,6 @@ t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
 t5nd(void, Party_KickMember, (int party, int memberIndex, const char* reason));
 t5nd(int, Live_IsLocalXuid, (uint64_t xuid));
 t5nd(void, Party_UpdateState, (int party));
-t5nd(bool, Com_IsPublicOnlineGame, ());
-t5nd(void, Playlist_SetRotationEntry, (int localClientNum, int rotationIndex));
 t5nd(void, Party_BanName, (const char* name));
 t5nd(int, Party_IsBanned, (const char* name));
 t5nd(void, ClanTag_Format,
@@ -119,11 +91,6 @@ t5nd(void, ClanTag_Format,
 t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
-t5nd(void, Dvar_SetInt, (dvar_s * dvar, int value));
-t5nd(void, Session_SetPlaylist, (int localClientNum, int playlist));
-t5nd(void, StringTable_Find, (const char* name, void** table));
-t5nd(const char*, StringTable_Lookup,
-     (void* table, int compareColumn, const char* value, int valueColumn));
 t5nd(int, CL_ControllerIndexFromClientNum, (int localClientNum));
 t5nd(void, GamerProfile_UpdateDvarsFromProfile, (int controller));
 t5nd(void, GamerProfile_UpdateProfileFromDvars, (int controller, int a2));

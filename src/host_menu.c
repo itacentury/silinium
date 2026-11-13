@@ -984,18 +984,12 @@ static void init_host_menu_offsets() {
     t5nmi(Party_KickMember);
     t5nmi(Live_IsLocalXuid);
     t5nmi(Party_UpdateState);
-    t5nmi(Com_IsPublicOnlineGame);
-    t5nmi(Playlist_SetRotationEntry);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);
     t5nmi(ClanTag_Format);
     t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
-    t5nmi(Dvar_SetInt);
-    t5nmi(Session_SetPlaylist);
-    t5nmi(StringTable_Find);
-    t5nmi(StringTable_Lookup);
     t5nmi(CL_ControllerIndexFromClientNum);
     t5nmi(GamerProfile_UpdateDvarsFromProfile);
     t5nmi(GamerProfile_UpdateProfileFromDvars);
@@ -1081,6 +1075,7 @@ int host_menu_init() {
     // The hooks read the menu state, so it has to be ready first.
     host_menu_ui_init();
     init_host_menu_offsets();
+    party_map_init();
     unfilter_names();
 
     int res;

@@ -22,6 +22,15 @@ static char syncedMap[64];
 static char syncedGametype[64];
 static int syncedRingIndex;
 
+void party_map_init() {
+    t5nmi(Com_IsPublicOnlineGame);
+    t5nmi(Playlist_SetRotationEntry);
+    t5nmi(Dvar_SetInt);
+    t5nmi(Session_SetPlaylist);
+    t5nmi(StringTable_Find);
+    t5nmi(StringTable_Lookup);
+}
+
 static void store_synced_party_map() {
     host_menu_read_dvar_string("ui_mapname", syncedMap, sizeof(syncedMap));
     host_menu_read_dvar_string("ui_gametype", syncedGametype, sizeof(syncedGametype));
