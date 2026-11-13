@@ -21,15 +21,16 @@ typedef enum HostMenuOptionType {
 } HostMenuOptionType;
 
 typedef enum HostMenuId {
+    // The tabs, menus without a parent.
     HOST_MENU_MAIN = 0,
-    HOST_MENU_KICK = 1,  // player list
-    HOST_MENU_PLAYER =
-        2,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
-    HOST_MENU_STATS = 3,  // saved stats files
+    HOST_MENU_PATCHES = 1,  // toggles for host-side game patches
+    HOST_MENU_ACCOUNT = 2,  // own account: recovery, prestige, stats files, name
+    HOST_MENU_PLAYERS = 3,  // player list
+    HOST_MENU_PLAYER = 4,   // actions for the player selected in HOST_MENU_PLAYERS, drawn
+                            // as a modal over it
+    HOST_MENU_STATS_LIST = 5,  // saved stats files
     HOST_MENU_STATS_FILE =
-        4,                  // actions for the file selected in HOST_MENU_STATS, a modal
-    HOST_MENU_ACCOUNT = 5,  // own account: recovery, prestige, stats files, name
-    HOST_MENU_PATCHES = 6   // toggles for host-side game patches
+        6  // actions for the file selected in HOST_MENU_STATS_LIST, a modal
 } HostMenuId;
 
 typedef enum HostMenuStatsAction {
@@ -49,6 +50,7 @@ typedef struct HostMenuOption {
     bool inGameOnly;  // hidden while in lobby
     // Extra condition for showing it, 0 = none.
     bool (*visible)(const struct HostMenuOption* option, bool inGame);
+    void (*valueText)(char* out, int size);  // text shown on the right, 0 = none
 } HostMenuOption;
 
 typedef struct HostMenu {
@@ -60,7 +62,12 @@ typedef struct HostMenu {
     HostMenuOption options[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
 
     CellPadData pad;  // last pad state, written by the cellPadGetData hook
+    // L1 / R1 pressed since the menu thread last polled, latched by the cellPadGetData
+    // hook: a tap can start and end while the menu thread sleeps. 32 bits for
+    // cellAtomic*.
+    uint32_t shoulderTaps;
     bool open;
+    bool closing;  // the close fade runs while buttons are still hidden from the game
     bool showControls;
     bool changeNamePending;
     bool resetNamePending;  // set by Reset Name, run by Menu_PaintAll
