@@ -1803,7 +1803,7 @@ function renderContracts(s) {
   }
   const activeTable = `<div class="panel scroll"><table><thead><tr><th>Slot</th><th>Contract</th>
     <th>Progress</th><th>Starting time (raw)</th></tr></thead><tbody>${active.join("")}</tbody></table></div>`;
-  return `${tiles}<div class="two"><div>${activeTable}</div><div>${tableShell("contracts")}</div></div>`;
+  return `${tiles}<div class="two"><div>${activeTable}</div><div>${tableShell("contracts", "tall")}</div></div>`;
 }
 
 function renderClasses(header, s) {
