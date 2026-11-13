@@ -12,6 +12,7 @@
 #define STATS_FILE_CLASS_COUNT 10        // customclass1-5, prestigeclass1-5
 // Class name buffer, NUL included, as in the profile.
 #define STATS_FILE_CLASS_NAME_MAX 16
+#define STATS_FILE_GAMERTAG_MAX 32  // gamertag buffer, NUL included (PSN IDs have 16)
 
 // Saved with the stats, but kept by the game in the gamer profile, not the stats buffer.
 // The strings are NUL-terminated.
@@ -22,15 +23,18 @@ typedef struct StatsFileProfile {
 
 // Errors besides the negative CellFsErrno codes.
 #define STATS_FILE_ERROR_INVALID_NAME -1
-#define STATS_FILE_ERROR_FORMAT -2  // not an intact stats file of this version and size
+#define STATS_FILE_ERROR_FORMAT -2  // not an intact stats file of a known version
 
 // Turns text into a file name: lowercase, anything but a-z 0-9 _ - becomes _, at most
 // STATS_FILE_NAME_MAX characters. out must hold STATS_FILE_NAME_MAX + 1 bytes.
 void stats_file_sanitize_name(const char* text, char* out);
-// Writes the stats buffer with the profile names and flags. 0 or an error.
-int stats_file_save(const char* name, const StatsFileProfile* profile, uint32_t flags);
-// Reads and checks a file without touching the stats buffer yet. The profile names are
-// only returned. 0 or an error, *profile and *flags are set on success.
+// Writes the stats buffer with the profile names, the saver's gamertag and flags. 0 or an
+// error.
+int stats_file_save(const char* name, const StatsFileProfile* profile,
+                    const char* gamertag, uint32_t flags);
+// Reads and checks a file of any supported version without touching the stats buffer
+// yet. The profile names are only returned, the gamertag is not. 0 or an error, *profile
+// and *flags are set on success.
 int stats_file_load(const char* name, StatsFileProfile* profile, uint32_t* flags);
 // Copies the stats from the last successful load into the stats buffer, keeping the live
 // account and console fields, and marks them dirty. On the main thread, where the game's

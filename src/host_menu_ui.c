@@ -594,7 +594,8 @@ static void close_stale_stats_menu(bool inGame) {
 static void run_save_stats() {
     char text[64];
     uint32_t flags = hostMenu.prestigeUnlocks ? STATS_FILE_PRESTIGE_UNLOCKS : 0;
-    int err = stats_file_save(hostMenu.saveStatsName, &hostMenu.saveStatsProfile, flags);
+    int err = stats_file_save(hostMenu.saveStatsName, &hostMenu.saveStatsProfile,
+                              hostMenu.saveStatsGamertag, flags);
     if (err) {
         snprintf(text, sizeof(text), "Save failed: %s", stats_file_error_text(err));
     } else {
@@ -705,8 +706,13 @@ static void stats_keyboard_callback(int localClientNum, const char16* text, int 
 
     stats_file_sanitize_name(entered, hostMenu.saveStatsName);
     host_menu_read_profile_names(&hostMenu.saveStatsProfile);
-    // Name, clan tag and class names have to be visible before the flag that marks them
-    // ready.
+    // The real gamertag, also while Change Name shows another name.
+    const char* gamertag =
+        hostMenu.originalName[0] ? hostMenu.originalName : (char*)T5_PlayerName2;
+    snprintf(hostMenu.saveStatsGamertag, sizeof(hostMenu.saveStatsGamertag), "%s",
+             gamertag);
+    // Name, gamertag, clan tag and class names have to be visible before the flag that
+    // marks them ready.
     __lwsync();
     hostMenu.saveStatsPending = true;
 }

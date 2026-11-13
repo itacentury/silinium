@@ -1,6 +1,7 @@
 #include "stats_file.h"
 
 #include <cell/cell_fs.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/fs_external.h>
@@ -12,11 +13,15 @@
 #define STATS_DIR SCRIPTS_PATH "/stats"
 #define STATS_FILE_EXTENSION ".bin"
 #define STATS_FILE_TEMP_EXTENSION ".tmp"
-#define STATS_FILE_VERSION 2      // 2: class names in the header
+// 2: class names in the header (first released format), 3: gamertag
+#define STATS_FILE_VERSION 3
+#define STATS_FILE_VERSION_MIN 2  // oldest version that still loads
 #define STATS_FILE_RECOVER_MAX 8  // orphaned temporary files handled per listing
 
-// Big endian like the PPU writes it. A later version can append the emblem after the
-// stats.
+// Big endian like the PPU writes it. Every version since STATS_FILE_VERSION_MIN keeps
+// loading: a new version only appends fields at the end of the header (see header_size)
+// or data after the stats, and never changes what an earlier field means. Fields an
+// older file doesn't have read as zero.
 typedef struct StatsFileHeader {
     char magic[4];  // "SLST"
     uint32_t version;
@@ -24,7 +29,17 @@ typedef struct StatsFileHeader {
     uint32_t flags;      // STATS_FILE_*
     uint32_t crc;        // CRC-32 of the header with crc 0, then the stats
     StatsFileProfile profile;
+    // Since version 3. Only saved for the Stats Viewer, loading doesn't use it.
+    char gamertag[STATS_FILE_GAMERTAG_MAX];
 } StatsFileHeader;
+
+// Size of the header as a file of this version holds it.
+static size_t header_size(uint32_t version) {
+    if (version == 2) {
+        return offsetof(StatsFileHeader, gamertag);
+    }
+    return sizeof(StatsFileHeader);
+}
 
 static const char statsFileMagic[4] = {'S', 'L', 'S', 'T'};
 
@@ -150,11 +165,12 @@ static uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t size) {
     return ~crc;
 }
 
-// The header part of the file CRC; continue it over the stats with crc32_update.
+// The header part of the file CRC, over the header size of its version; continue it over
+// the stats with crc32_update.
 static uint32_t header_crc(const StatsFileHeader* header) {
     StatsFileHeader copy = *header;
     copy.crc = 0;
-    return crc32_update(0, (const uint8_t*)&copy, sizeof(copy));
+    return crc32_update(0, (const uint8_t*)&copy, header_size(header->version));
 }
 
 static void copy_bits(uint8_t* to, const uint8_t* from, int bit, int count) {
@@ -200,7 +216,8 @@ static void terminate_profile(StatsFileProfile* profile) {
     }
 }
 
-int stats_file_save(const char* name, const StatsFileProfile* profile, uint32_t flags) {
+int stats_file_save(const char* name, const StatsFileProfile* profile,
+                    const char* gamertag, uint32_t flags) {
     if (!valid_name(name)) {
         return STATS_FILE_ERROR_INVALID_NAME;
     }
@@ -219,6 +236,7 @@ int stats_file_save(const char* name, const StatsFileProfile* profile, uint32_t 
     file.header.flags = flags;
     file.header.profile = *profile;
     terminate_profile(&file.header.profile);
+    snprintf(file.header.gamertag, sizeof(file.header.gamertag), "%s", gamertag);
     memcpy(file.stats, stats_buffer(), sizeof(file.stats));
     // Files get shared and load restores these fields from the live stats anyway, so the
     // saver's XUID, console info and tokens never end up in a file.
@@ -265,7 +283,24 @@ int stats_file_save(const char* name, const StatsFileProfile* profile, uint32_t 
 
 static bool valid_header(const StatsFileHeader* header) {
     return memcmp(header->magic, statsFileMagic, sizeof(header->magic)) == 0 &&
-           header->version == STATS_FILE_VERSION && header->statsSize == T5_StatsSize;
+           header->version >= STATS_FILE_VERSION_MIN &&
+           header->version <= STATS_FILE_VERSION && header->statsSize == T5_StatsSize;
+}
+
+// Reads the header of any supported version; the fields its version lacks stay zero.
+// 0, STATS_FILE_ERROR_FORMAT or the file system error.
+static int read_header(int fd, StatsFileHeader* header) {
+    memset(header, 0, sizeof(*header));
+    size_t firstSize = header_size(STATS_FILE_VERSION_MIN);
+    int err = read_all(fd, header, firstSize);
+    if (err) {
+        return err;
+    }
+    if (!valid_header(header)) {
+        return STATS_FILE_ERROR_FORMAT;
+    }
+    return read_all(fd, (uint8_t*)header + firstSize,
+                    header_size(header->version) - firstSize);
 }
 
 int stats_file_load(const char* name, StatsFileProfile* profile, uint32_t* flags) {
@@ -280,10 +315,7 @@ int stats_file_load(const char* name, StatsFileProfile* profile, uint32_t* flags
         printf(T5ERROR "Load Stats: cannot open '%s' (0x%08X).", path, err);
         return err;
     }
-    err = read_all(fd, &file.header, sizeof(file.header));
-    if (!err && !valid_header(&file.header)) {
-        err = STATS_FILE_ERROR_FORMAT;
-    }
+    err = read_header(fd, &file.header);
     if (!err) {
         err = read_all(fd, file.stats, sizeof(file.stats));
     }
@@ -371,17 +403,18 @@ static bool strip_extension(CellFsDirent* entry, const char* extension) {
 
 // Streams the stats through a stack buffer instead of the shared file buffer, which may
 // still hold a load waiting for stats_file_apply_loaded. Returns 0 if the file is intact,
-// STATS_FILE_ERROR_FORMAT if it is not a complete stats file, otherwise the file system
-// error.
-static int check_file(const char* path) {
+// STATS_FILE_ERROR_FORMAT if it is not a complete stats file of size fileSize, otherwise
+// the file system error.
+static int check_file(const char* path, uint64_t fileSize) {
     int fd;
     int err = cellFsOpen(path, CELL_FS_O_RDONLY, &fd, NULL, 0);
     if (err != CELL_FS_SUCCEEDED) {
         return err;
     }
     StatsFileHeader header;
-    err = read_all(fd, &header, sizeof(header));
-    if (!err && !valid_header(&header)) {
+    err = read_header(fd, &header);
+    // A temporary file left by an older module version holds that version's header.
+    if (!err && fileSize != header_size(header.version) + sizeof(file.stats)) {
         err = STATS_FILE_ERROR_FORMAT;
     }
     uint32_t crc = err ? 0 : header_crc(&header);
@@ -421,8 +454,7 @@ static void recover_temp_file(const char* name) {
     }
     // Power lost before the fsync in stats_file_save. The size can be on disk before all
     // of the data, so only the CRC shows the file is complete.
-    int err = status.st_size == sizeof(StatsFile) ? check_file(tempPath)
-                                                  : STATS_FILE_ERROR_FORMAT;
+    int err = check_file(tempPath, status.st_size);
     if (err == STATS_FILE_ERROR_FORMAT) {
         remove_temp_file(tempPath, "incomplete");
         return;

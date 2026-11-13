@@ -75,10 +75,12 @@ it has its own copy of the file header layout from `stats_file.c` and of bo1-re'
   the PS3 HDD is case-sensitive).
 - Changes to the stats file format (`stats_file.c` / `stats_file.h`: header fields,
   `STATS_FILE_*` sizes, flags) or to the stats layout it saves must update
-  `tools/stats-viewer.html` in the same change. The viewer stays backward compatible:
-  it keeps reading version 2 files (the first released format: `SLST`, 0xD4-byte
-  header) and every later version. A format change bumps the file version instead of
-  changing what an existing version means.
+  `tools/stats-viewer.html` in the same change. Module and viewer stay backward
+  compatible: both keep reading version 2 files (the first released format: `SLST`,
+  0xD4-byte header) and every later version (`STATS_FILE_VERSION_MIN`, `header_size`
+  / `HEADER_SIZES`). A format change bumps the file version instead of changing what
+  an existing version means, and only appends fields at the end of the header (or data
+  after the stats).
 - Many offsets and game function names are reverse engineered (the
   [bo1-re](https://github.com/itacentury/bo1-re) repository holds that work). Mark unconfirmed findings in comments
   instead of presenting them as facts.

@@ -1233,10 +1233,13 @@ enum 12 clantagfeatures_e count=14
 
 // --- File layout (src/stats_file.c, src/stats_file.h, src/offsets.h) ---------------------
 
-const HEADER_SIZE = 0xD4; // magic, version, statsSize, flags, crc, clanName[32], classNames[10][16]
+// Header size per file version. Every version only appends to the header of the one
+// before: magic, version, statsSize, flags, crc, clanName[32], classNames[10][16] (v2),
+// gamertag[32] (v3).
+const HEADER_SIZES = { 2: 0xD4, 3: 0xF4 };
+const MIN_HEADER_SIZE = HEADER_SIZES[2];
 const STATS_SIZE = 0x9968; // T5_StatsSize
 const STATS_HEADER_SIZE = 0x28; // game header before the DDL data
-const FILE_VERSION = 2;
 const FLAG_PRESTIGE_UNLOCKS = 0x1;
 const CLASS_SLOTS = ["Custom 1", "Custom 2", "Custom 3", "Custom 4", "Custom 5",
   "Prestige 1", "Prestige 2", "Prestige 3", "Prestige 4", "Prestige 5"];
@@ -1412,8 +1415,8 @@ function indexNames(ddl, field) {
 }
 
 class Stats {
-  constructor(bytes, ddl) {
-    this.data = bytes.subarray(HEADER_SIZE + STATS_HEADER_SIZE, HEADER_SIZE + STATS_SIZE);
+  constructor(bytes, headerSize, ddl) {
+    this.data = bytes.subarray(headerSize + STATS_HEADER_SIZE, headerSize + STATS_SIZE);
     this.ddl = ddl;
   }
 
@@ -1534,7 +1537,7 @@ function cString(bytes) {
 }
 
 function readHeader(bytes) {
-  if (bytes.length < HEADER_SIZE) {
+  if (bytes.length < MIN_HEADER_SIZE) {
     throw new Error("File is too short for a stats file header.");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset);
@@ -1548,15 +1551,18 @@ function readHeader(bytes) {
     clan: cString(bytes.subarray(20, 52)),
     classes: CLASS_SLOTS.map((_, i) => cString(bytes.subarray(52 + i * 16, 68 + i * 16))),
   };
-  if (header.version !== FILE_VERSION) {
-    throw new Error(`Unsupported file version ${header.version} (expected ${FILE_VERSION}).`);
+  header.size = HEADER_SIZES[header.version];
+  if (!header.size) {
+    const known = Object.keys(HEADER_SIZES).join(", ");
+    throw new Error(`Unsupported file version ${header.version} (supported: ${known}).`);
   }
-  if (header.statsSize !== STATS_SIZE || bytes.length < HEADER_SIZE + STATS_SIZE) {
+  if (header.statsSize !== STATS_SIZE || bytes.length < header.size + STATS_SIZE) {
     throw new Error("Stats size does not match game version 1.13, or the file is truncated.");
   }
-  const copy = bytes.slice(0, HEADER_SIZE);
+  header.gamertag = header.version >= 3 ? cString(bytes.subarray(HEADER_SIZES[2], HEADER_SIZES[3])) : "";
+  const copy = bytes.slice(0, header.size);
   copy.fill(0, 16, 20);
-  header.crcOk = crc32(bytes.subarray(HEADER_SIZE, HEADER_SIZE + STATS_SIZE), crc32(copy)) === header.crc;
+  header.crcOk = crc32(bytes.subarray(header.size, header.size + STATS_SIZE), crc32(copy)) === header.crc;
   return header;
 }
 
@@ -1649,8 +1655,9 @@ function renderHero(name, header, s) {
   return `<div class="hero">
     <div class="emblem"><div>${fmt(prestige)}<small>PRESTIGE</small></div></div>
     <div>
-      <h2>${clan}${esc(name)}</h2>
+      <h2>${clan}${esc(header.gamertag || name)}</h2>
       <div class="meta">
+        ${header.gamertag ? `<span class="chip">${esc(name)}.bin</span>` : ""}
         <span class="chip ${header.crcOk ? "ok" : "warn"}">${header.crcOk ? "CRC OK" : "CRC MISMATCH"}</span>
         <span class="chip">v${header.version}</span>
         <span class="chip">${header.flags & FLAG_PRESTIGE_UNLOCKS ? "Prestige Unlocks on" : "Prestige Unlocks off"}</span>
@@ -1900,7 +1907,7 @@ function bindSearchList(id, entries, limit = 800) {
 
 function render(name, bytes, ddl) {
   const header = readHeader(bytes);
-  const s = new Stats(bytes, ddl);
+  const s = new Stats(bytes, header.size, ddl);
 
   const groups = ddl.enums[6].names;
   const groupRows = weaponRows(s, "groupstats", groups.length,
