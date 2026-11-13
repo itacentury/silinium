@@ -7,6 +7,7 @@
 
 #include "anti_freeze.h"
 #include "client_command.h"
+#include "contracts_dump.h"
 #include "cshook.h"
 #include "host_menu.h"
 #include "offsets.h"
@@ -162,6 +163,10 @@ int init_game() {
             printf(T5ERROR "Host menu init failed (0x%08X).", err);
         } else {
             printf(T5INFO "Host menu ready.");
+        }
+
+        if ((err = contracts_dump_init()) < 0) {
+            printf(T5ERROR "Contracts dump init failed (0x%08X).", err);
         }
     }
 

@@ -49,6 +49,9 @@ All sources are in `src/`.
   and the menu options.
 - `stats_file.c`: Save/Load Stats files (`/dev_hdd0/tmp/Silinium/stats/<name>.bin`).
   `notify.c`: PS3 notifications through webMAN, over the game's `sys_net` import stubs.
+- `contracts_dump.c`: MP-only hook on the contracts.info parser; writes the text the
+  game fetched in the online WAD to `/dev_hdd0/tmp/Silinium/contracts.info` (source of
+  the contract names).
 - `offsets.h`: all game addresses (`T5_<Name>` / `T5_<Name>_ZM`).
 - `defines.h`: the `t5nd` / `t5nhd` / `t5ni` / `t5nmi` declaration macros and game
   structs.
@@ -57,6 +60,9 @@ All sources are in `src/`.
   linked with `-nodefaultlibs`.
 
 `tmp/` holds an example mod for MP and ZM; `docs/` holds this style guide.
+`tools/stats-viewer.html` is a standalone browser viewer for the Save Stats files;
+it has its own copy of the file header layout from `stats_file.c` and of bo1-re's
+`data/mp/stats_ddl.txt`.
 
 ## Key conventions
 
@@ -70,6 +76,14 @@ All sources are in `src/`.
   which checks the original instruction first.
 - Mod folder and file names must be lowercase (the game requests canonical names,
   the PS3 HDD is case-sensitive).
+- Changes to the stats file format (`stats_file.c` / `stats_file.h`: header fields,
+  `STATS_FILE_*` sizes, flags) or to the stats layout it saves must update
+  `tools/stats-viewer.html` in the same change. Module and viewer stay backward
+  compatible: both keep reading version 2 files (the first released format: `SLST`,
+  0xD4-byte header) and every later version (`STATS_FILE_VERSION_MIN`, `header_size`
+  / `HEADER_SIZES`). A format change bumps the file version instead of changing what
+  an existing version means, and only appends fields at the end of the header (or data
+  after the stats).
 - Many offsets and game function names are reverse engineered (the
   [bo1-re](https://github.com/itacentury/bo1-re) repository holds that work). Mark unconfirmed findings in comments
   instead of presenting them as facts.

@@ -98,6 +98,7 @@ typedef struct HostMenu {
     bool saveStatsPending;
     char saveStatsName[STATS_FILE_NAME_MAX + 1];
     StatsFileProfile saveStatsProfile;
+    char saveStatsGamertag[STATS_FILE_GAMERTAG_MAX];
     // Load and Delete from the stats modal, run by the menu thread on the file named.
     HostMenuStatsAction statsAction;
     char statsActionName[STATS_FILE_NAME_MAX + 1];

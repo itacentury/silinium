@@ -400,6 +400,12 @@
 #define T5_SL_TransferToCanonicalString 0x5A9178
 #define T5_SL_ConvertToString 0x5B6D10 // (sv, inst) -> string
 
+// Contracts (MP only). The online WAD fetch (0x6BCCF0) inflates each entry into a zeroed 0x40000-byte buffer and passes
+// the contracts.info text to this parser (call at 0x6BCFE4). It runs Com_BeginParseSession("contracts") and reads the
+// contract keys (name, desc, cost, stat, ...) and contract_strings. Name inferred, unverified.
+#define T5_Contracts_ParseFile 0x657480
+#define T5_ContractsFileMax 0x40000
+
 #define PPC_NOP 0x60000000
 #define PPC_BLR 0x4E800020
 #define PPC_B(from, to) (0x48000000 | (((to) - (from)) & 0x03FFFFFC)) // b to (relative, no link)
