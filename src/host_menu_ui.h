@@ -25,9 +25,9 @@ typedef enum HostMenuId {
     HOST_MENU_MAIN = 0,
     HOST_MENU_PATCHES = 1,  // toggles for host-side game patches
     HOST_MENU_ACCOUNT = 2,  // own account: recovery, prestige, stats files, name
-    HOST_MENU_PLAYERS = 3,
-    HOST_MENU_PLAYER = 4,  // actions for the player selected in HOST_MENU_PLAYERS, drawn
-                           // as a modal over it
+    HOST_MENU_PLAYERS = 3,  // player list
+    HOST_MENU_PLAYER = 4,   // actions for the player selected in HOST_MENU_PLAYERS, drawn
+                            // as a modal over it
     HOST_MENU_STATS_LIST = 5,  // saved stats files
     HOST_MENU_STATS_FILE =
         6  // actions for the file selected in HOST_MENU_STATS_LIST, a modal

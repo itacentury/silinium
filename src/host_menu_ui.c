@@ -1548,7 +1548,7 @@ static system_time_t toggleTime[HOST_MENU_MAX_MENUS][HOST_MENU_MAX_OPTIONS];
 
 // Takes the current values as shown, so a toggle changed while its page was hidden
 // (for example by Load Stats) does not animate when the page appears.
-static void sync_toggles(void) {
+static void sync_toggles() {
     for (int menu = 0; menu < HOST_MENU_MAX_MENUS; menu++) {
         for (int option = 0; option < hostMenu.optionCount[menu]; option++) {
             HostMenuOption* o = &hostMenu.options[menu][option];
@@ -2067,10 +2067,13 @@ void host_menu_ui_draw() {
         } else {
             playerListWidth = 0;
         }
-        if (hostMenu.showControls) {
+        // During the close window the buttons are still hidden and the combo does nothing
+        // yet.
+        bool showHint = hostMenu.showControls && !closing;
+        if (showHint) {
             draw_text_box("Press \x05 + \x11 to Open Silinium", 10, 20, 0.5f);
         }
-        draw_status(hostMenu.showControls ? 1 : 0);
+        draw_status(showHint ? 1 : 0);
         return;
     }
     draw_status(0);
