@@ -1337,17 +1337,20 @@ static void append_info_part(char* line, int size, int* length, const char* part
 }
 
 // The info line "host - map - gametype" into line, leaving out empty parts, the host's
-// clan tag into tag (drawn apart, so its ^7 doesn't recolor the rest). Returns the width
-// of both together.
+// clan tag into tag (drawn apart, so its ^7 doesn't recolor the rest). The host name
+// loses its color codes, they would recolor map and gametype. Returns the width of both
+// together.
 static float build_info_line(bool inGame, char* tag, char* line, int size) {
     const char* host = dvar_string("party_hostname");
     tag[0] = 0;
     if (*host) {
         host_clan_tag(inGame, host, tag);
     }
+    char plainHost[64];
+    strip_color_codes(host, (int)strlen(host), plainHost, sizeof(plainHost));
     line[0] = 0;
     int length = 0;
-    append_info_part(line, size, &length, host);
+    append_info_part(line, size, &length, plainHost);
     append_info_part(
         line, size, &length,
         lookup_name(mapNames, sizeof(mapNames) / sizeof(*mapNames), session_map(inGame)));
