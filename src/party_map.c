@@ -455,7 +455,8 @@ void party_map_on_server_scripts_loaded() {
 // aborted, the forced value must not stay for the next (possibly public wager) match.
 // The check (a stringtable lookup) runs only when g_gametype differs from the last
 // checked one, not every frame. Not only once when entering the game: a member may
-// receive g_gametype after cl_ingame is set (unverified).
+// receive g_gametype after cl_ingame is set (unverified). It may then still hold the
+// previous match's gametype, a force made from it is undone once the real one arrives.
 void party_map_update_wager_match() {
     if (!Dvar_GetBool("cl_ingame")) {
         wagerMatchCheckedGametype[0] = '\0';
@@ -466,10 +467,9 @@ void party_map_update_wager_match() {
     }
     if (wagerMatchForced) {
         wagerMatchSeenInGame = true;
-        return;
     }
     const char* gametype = Dvar_GetString("g_gametype");
-    if (!gametype || !strcmp(gametype, wagerMatchCheckedGametype)) {
+    if (!gametype || !*gametype || !strcmp(gametype, wagerMatchCheckedGametype)) {
         return;
     }
     snprintf(wagerMatchCheckedGametype, sizeof(wagerMatchCheckedGametype), "%s",
@@ -477,6 +477,8 @@ void party_map_update_wager_match() {
     if (wager_match_wanted()) {
         force_wager_match();
         wagerMatchSeenInGame = true;
+    } else {
+        restore_wager_match();
     }
 }
 
