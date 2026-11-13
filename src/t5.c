@@ -9,6 +9,7 @@
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu.h"
+#include "notify.h"
 #include "offsets.h"
 #include "string.h"
 #include "utils.h"
@@ -150,6 +151,7 @@ int init_game() {
     // they fail.
     if (isMultiplayer) {
         init_mp_offsets();
+        notify_init();
         if ((err = anti_freeze_init()) < 0) {
             printf(T5ERROR
                    "Anti-Freeze init failed (0x%08X), it may be partially active.",

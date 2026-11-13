@@ -21,7 +21,7 @@ Formatting is owned by `clang-format` (`.clang-format`, checked in CI with versi
 **Naming**
 
 - Own functions are `snake_case`; public ones carry their module prefix (`host_menu_lobby_party`), file-local ones are `static`.
-- Game functions and natives keep the game's name (`Dvar_FindVar`, `Party_RemoveMember`). A hook is `<Name>_Hook`, the original it calls is `<Name>_Trampoline`.
+- Game functions and natives keep the game's name (`Dvar_FindVar`, `Party_KickMember`). A hook is `<Name>_Hook`, the original it calls is `<Name>_Trampoline`.
 - Local variables, parameters and globals are `camelCase` (`clientNum`, `hostMenu`). Own types are `PascalCase` (`HostMenu`, `DisplayName`); game structs may keep their original name (`dvar_s`).
 - Macros and constants are `UPPER_SNAKE_CASE` (`HOST_MENU_MAX_CLIENTS`, `PARTY_MEMBER_NAME`). Exception: the `t5n*` declaration macros in `defines.h`.
 - Never abbreviate by deleting letters within a word; avoid ambiguous abbreviations.

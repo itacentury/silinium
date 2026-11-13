@@ -20,6 +20,7 @@ t5nd(void*, Sys_GetValue, (int index));
 t5nd(long, game_strtol, (const char* s, char** end, int base));
 
 t5nhd(int, CL_CGameNeedsServerCommand, (int localClientNum, int serverCommandNumber));
+t5nhd(int, CL_RelayPacket, (int localClientNum, void* msg));
 t5nhd(void*, AddBaseDrawTextCmd,
       (const char* text, int maxChars, void* font, float x, float y, float w,
        float xScale, float yScale, float rotation, const float* color, int style,

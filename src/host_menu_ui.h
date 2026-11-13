@@ -7,7 +7,7 @@
 #include "defines.h"
 #include "stats_file.h"
 
-#define HOST_MENU_MAX_MENUS 5
+#define HOST_MENU_MAX_MENUS 7
 #define HOST_MENU_MAX_OPTIONS 30
 #define HOST_MENU_KICK_BAN \
     0x40  // or'd into kickClient and lobbyKickMember, above any client num or member
@@ -25,8 +25,11 @@ typedef enum HostMenuId {
     HOST_MENU_KICK = 1,  // player list
     HOST_MENU_PLAYER =
         2,  // actions for the player selected in HOST_MENU_KICK, drawn as a modal over it
-    HOST_MENU_STATS = 3,      // saved stats files
-    HOST_MENU_STATS_FILE = 4  // actions for the file selected in HOST_MENU_STATS, a modal
+    HOST_MENU_STATS = 3,  // saved stats files
+    HOST_MENU_STATS_FILE =
+        4,                  // actions for the file selected in HOST_MENU_STATS, a modal
+    HOST_MENU_ACCOUNT = 5,  // own account: recovery, prestige, stats files, name
+    HOST_MENU_PATCHES = 6   // toggles for host-side game patches
 } HostMenuId;
 
 typedef enum HostMenuStatsAction {
@@ -42,9 +45,10 @@ typedef struct HostMenuOption {
     signed char min;
     signed char max;
     void (*func)(void);
-    bool lobbyOnly;                // hidden while in game
-    bool inGameOnly;               // hidden while in lobby
-    bool (*visible)(bool inGame);  // extra condition for showing it, 0 = none
+    bool lobbyOnly;   // hidden while in game
+    bool inGameOnly;  // hidden while in lobby
+    // Extra condition for showing it, 0 = none.
+    bool (*visible)(const struct HostMenuOption* option, bool inGame);
 } HostMenuOption;
 
 typedef struct HostMenu {
@@ -59,6 +63,7 @@ typedef struct HostMenu {
     bool open;
     bool showControls;
     bool changeNamePending;
+    bool resetNamePending;  // set by Reset Name, run by Menu_PaintAll
     bool selectMapPending;
     bool selectGametypePending;
     bool endGamePending;
@@ -114,6 +119,8 @@ void host_menu_ui_handle_input();
 void host_menu_ui_draw();
 void host_menu_ui_open_name_keyboard();
 void host_menu_ui_open_stats_keyboard();
+// Shows a short status line below the session info / open hint for a few seconds.
+void host_menu_ui_show_status(const char* text);
 // Runs queued Save/Load/Delete Stats requests, in the menu thread (file access).
 void host_menu_ui_run_stats_actions(bool inGame);
 void host_menu_set_party_dvars(bool connectToOthers, int minPlayers, int pregameTimer,

@@ -9,7 +9,6 @@
 #include "t5.h"
 #include "utils.h"
 
-#define CLIENT_STATE(client) (*(int*)((client) + T5_ClientStateOffset))
 #define CLIENT_STATS(client) ((uint8_t*)((client) + T5_ClientStatsOffset))
 #define CLIENT_STATS_MASK(client) (*(uint64_t*)((client) + T5_ClientStatsMaskOffset))
 #define CLIENT_USERINFO(client) ((const char*)((client) + T5_ClientUserinfoOffset))
@@ -93,9 +92,7 @@ static void format_client_name(char* out, int size, int clientNum, int client) {
 // A free or dropped slot keeps the stats and mask of its last client until
 // SV_DirectConnect clears the whole client_t (memset at 0x3E66D4), so only the server
 // state tells whether a player is still there. It is the same gate getdstat uses.
-static bool client_in_use(int clientNum) {
-    return CLIENT_STATE(SV_CLIENT(clientNum)) >= T5_ClientStateConnected;
-}
+static bool client_in_use(int clientNum) { return SV_CLIENT_IN_USE(clientNum); }
 
 // Returns whether a class was fixed.
 static bool check_client_classes(int clientNum, int client) {

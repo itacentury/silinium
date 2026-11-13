@@ -75,7 +75,8 @@ static void set_timeouts(int s) {
     Net_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
 
-bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
+static bool notify_send(const char* text, NotifyIcon icon, NotifySound sound,
+                        bool logFailure) {
     if (!netResolved) {
         return false;
     }
@@ -111,7 +112,7 @@ bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
 
     // Reaching the VSH's webMAN over loopback from the game process is unverified.
     if (Net_connect(s, (struct sockaddr*)&address, sizeof(address)) != 0) {
-        if (!warned) {
+        if (logFailure && !warned) {
             warned = true;
             printf(T5WARNING
                    "No webMAN on 127.0.0.1:%d, notifications only show in the menu.",
@@ -132,6 +133,14 @@ bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
     return sent;
 }
 
+bool notify_popup(const char* text, NotifyIcon icon, NotifySound sound) {
+    return notify_send(text, icon, sound, true);
+}
+
+bool notify_popup_quiet(const char* text, NotifyIcon icon, NotifySound sound) {
+    return notify_send(text, icon, sound, false);
+}
+
 void notify_init() {
     Net_socket = (Net_socket_t)resolve_import(T5_Net_socket);
     Net_connect = (Net_connect_t)resolve_import(T5_Net_connect);
@@ -145,3 +154,5 @@ void notify_init() {
         printf(T5WARNING "sys_net imports not resolved, PS3 notifications are disabled.");
     }
 }
+
+bool notify_available() { return netResolved; }

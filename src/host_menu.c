@@ -1,5 +1,6 @@
 #include "host_menu.h"
 
+#include <cell/atomic.h>
 #include <ppu_intrinsics.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -12,7 +13,7 @@
 #include "client_command.h"
 #include "cshook.h"
 #include "host_menu_ui.h"
-#include "notify.h"
+#include "party_map.h"
 #include "t5.h"
 #include "utils.h"
 
@@ -32,7 +33,7 @@ static bool is_host(int clientNum) {
             party_is_host(T5_GameParty, clientNum));
 }
 
-static bool party_is_local_host(int party) {
+bool host_menu_party_is_local_host(int party) {
     return host_menu_party_active(party) && *(int*)(party + T5_PartyIsHostOffset);
 }
 
@@ -62,7 +63,58 @@ int host_menu_lobby_view_party() {
 
 int host_menu_lobby_party() {
     int party = host_menu_lobby_view_party();
-    return party && party_is_local_host(party) ? party : 0;
+    return party && host_menu_party_is_local_host(party) ? party : 0;
+}
+
+// The party copies the name into the local member only when it's added; members only
+// see the new one with the next partystate (see send_party_rename). The host index is
+// unverified, so the slot must still hold the old name.
+static bool rename_local_party_member(int party, const char* oldName, const char* name) {
+    if (!host_menu_party_is_local_host(party)) {
+        return false;
+    }
+    int member = *(int*)(party + T5_PartyHostIndexOffset);
+    if (member < 0 || member >= T5_PartyMaxMembers || !PARTY_MEMBER_USED(party, member) ||
+        strcmp(PARTY_MEMBER_NAME(party, member), oldName) != 0) {
+        return false;
+    }
+    snprintf(PARTY_MEMBER_NAME_BUFFER(party, member), T5_PartyMemberNameSize, "%s", name);
+    return true;
+}
+
+// Party_UpdateState also copies ui_mapname / ui_gametype into the party before sending.
+// In a private match those are the stock map / mode selection the stock lobby menus send
+// on load anyway; in other lobbies they may not be what the party advertises, so the
+// name only shows up with the next partystate there. That xblive_privatematch marks the
+// private match on 1.13 is unverified; without the dvar nothing is sent.
+static void send_party_rename(int party) {
+    if (Dvar_GetBool("cl_ingame") || !Dvar_GetBool("xblive_privatematch")) {
+        return;
+    }
+    Party_UpdateState(party);
+}
+
+void host_menu_set_local_name(const char* name) {
+    char oldName[T5_PartyMemberNameSize];
+    snprintf(oldName, sizeof(oldName), "%s", (const char*)T5_PlayerName2);
+
+    strcpy((char*)T5_PlayerName1, name);
+    strcpy((char*)T5_PlayerName2, name);
+
+    if (rename_local_party_member(T5_LobbyParty, oldName, name)) {
+        send_party_rename(T5_LobbyParty);
+    }
+    if (rename_local_party_member(T5_GameParty, oldName, name)) {
+        send_party_rename(T5_GameParty);
+    }
+
+    // The userinfo takes the name from PlayerName2; the flag makes the client send it
+    // again, the server then updates the name for everyone. The |= is not atomic: it is
+    // only safe because the keyboard callback and Menu_PaintAll presumably run on the
+    // same thread as the client frame (0x1CDE70) that clears the flag (unverified).
+    if (Dvar_GetBool("cl_ingame")) {
+        *(int*)T5_DvarModifiedFlags |= DVAR_USERINFO;
+    }
 }
 
 #define PARTY_REMOVE_COOLDOWN_US (1000 * 1000)
@@ -82,13 +134,21 @@ static PartyRemoval* party_removal(int party, int member) {
     return &lastRemovals[party == T5_GameParty][member];
 }
 
-// Whether Party_RemoveMember frees the slot right away is unverified. If it doesn't, the
-// banned member would be removed (and sent "endparty") every frame, so a slot just
+// Goes through the stock kick: Party_RemoveMember with notify sends "endparty" instead,
+// and with the host's own party in the lobby that dropped every party member along with
+// the kicked player (seen in game, the exact chain is unverified).
+// Whether the kick frees the slot right away is unverified. If it doesn't, the
+// banned member would be removed (and sent "kicked") every frame, so a slot just
 // removed is skipped for a second. The cooldown is kept per slot, so several members
 // waiting to be freed don't reset each other's. The name is compared so another player
 // taking the slot in that second is still removed.
+// The kick also removes every other slot at the member's netadr, the host's included, so
+// players on this console are never kicked, like the stock kickPlayer does.
 static void remove_party_member(int party, int member, const char* reason) {
     static bool logged;
+    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
+        return;
+    }
     PartyRemoval* removal = party_removal(party, member);
     if (removal) {
         const char* name = PARTY_MEMBER_NAME(party, member);
@@ -101,10 +161,10 @@ static void remove_party_member(int party, int member, const char* reason) {
         removal->name[sizeof(removal->name) - 1] = 0;
         removal->time = now;
     }
-    Party_RemoveMember(party, member, 1, reason);
+    Party_KickMember(party, member, reason);
     if (!logged) {
         logged = true;
-        printf(T5INFO "Party_RemoveMember: slot %d still used afterwards: %d.", member,
+        printf(T5INFO "Party_KickMember: slot %d still used afterwards: %d.", member,
                PARTY_MEMBER_USED(party, member));
     }
 }
@@ -162,8 +222,8 @@ static void unban_all() {
 // (or a banClient entry) every frame; if it adds nothing, the check after the call
 // catches it.
 static void restore_bans() {
-    if (banRestoreDisabled ||
-        (!party_is_local_host(T5_LobbyParty) && !party_is_local_host(T5_GameParty))) {
+    if (banRestoreDisabled || (!host_menu_party_is_local_host(T5_LobbyParty) &&
+                               !host_menu_party_is_local_host(T5_GameParty))) {
         return;
     }
     int freeEntries = free_ban_entries();
@@ -195,16 +255,22 @@ static void restore_bans() {
 // since, the slot holds someone else. The party only has to still be hosted by us, not
 // shown, so switching lists before it runs doesn't drop it. A ban adds the name to the
 // list party joins are checked against, which banClient fills too and both parties share.
-// Only LobbyParty joins are checked against it, so enforce_game_party_bans covers
-// GameParty.
+// A kick on LobbyParty also removes the member from GameParty if we host it. Only
+// LobbyParty joins are checked against the list, so enforce_game_party_bans covers
+// rejoins of GameParty.
 static void lobby_kick(int party, int member, const char* name, bool ban) {
-    if (!party_is_local_host(party) ||
+    if (!host_menu_party_is_local_host(party) ||
         member == *(int*)(party + T5_PartyHostIndexOffset) ||
         !PARTY_MEMBER_USED(party, member)) {
         return;
     }
     const char* memberName = PARTY_MEMBER_NAME(party, member);
     if (strncmp(memberName, name, sizeof(hostMenu.lobbyKickName) - 1) != 0) {
+        return;
+    }
+    // remove_party_member never kicks players on this console, so a ban here would only
+    // take up a list entry for the whole session.
+    if (Live_IsLocalXuid(PARTY_MEMBER_XUID(party, member))) {
         return;
     }
     if (ban) {
@@ -221,7 +287,7 @@ static void lobby_kick(int party, int member, const char* name, bool ban) {
 // banned player can rejoin it. Remove them again as soon as they show up.
 static void enforce_game_party_bans() {
     int party = T5_GameParty;
-    if (!party_is_local_host(party)) {
+    if (!host_menu_party_is_local_host(party)) {
         return;
     }
     int host = *(int*)(party + T5_PartyHostIndexOffset);
@@ -384,8 +450,24 @@ static void show_game_messages() {
 
 // callkeyboard: requested on the server thread, opened on the UI thread, and the text is
 // sent back on the server thread. Each step only runs in the state the previous one left.
-enum { KEYBOARD_IDLE, KEYBOARD_REQUESTED, KEYBOARD_OPEN, KEYBOARD_ENTERED };
-static volatile int keyboardState;
+// In game Change Name holds the same state (KEYBOARD_NAME): a second UI_OpenKeyboard most
+// likely replaces the open keyboard's callback, so only one of them may be up at a time.
+// The game calls the callback on cancel too (text NULL, length 0), but not if the
+// keyboard failed to open or ended with an unexpected result. So once the game's keyboard
+// is closed, a callkeyboard keyboard still open answers like a cancel (empty text) and
+// Change Name's state is released; the state is also released when the client of a
+// callkeyboard left. Closed means fully unloaded: no keyboard is opened and no state
+// released while the game's previous keyboard is still unloading, up to a time limit.
+// In game the game only updates its keyboard while a menu is open, so the update is
+// driven from here (update_game_keyboard).
+enum {
+    KEYBOARD_IDLE,
+    KEYBOARD_REQUESTED,
+    KEYBOARD_OPEN,
+    KEYBOARD_ENTERED,
+    KEYBOARD_NAME
+};
+static volatile uint32_t keyboardState;
 static char16 keyboardTitle[64];
 static int keyboardClient;
 static char keyboardText[65];
@@ -408,8 +490,76 @@ bool host_menu_request_keyboard(const char* title, int clientNum) {
     keyboardClient = clientNum;
     // Title and client have to be visible before the state that marks them ready.
     __lwsync();
-    keyboardState = KEYBOARD_REQUESTED;
+    // The UI thread may have taken the keyboard for Change Name since the check above.
+    return cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_IDLE,
+                                      KEYBOARD_REQUESTED) == KEYBOARD_IDLE;
+}
+
+// In the lobby there is no callkeyboard, so the name keyboard doesn't take the state.
+static void open_name_keyboard(bool inGame) {
+    if (inGame && cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_IDLE,
+                                             KEYBOARD_NAME) != KEYBOARD_IDLE) {
+        printf(T5INFO "Change Name skipped, a script keyboard is open.");
+        return;
+    }
+    host_menu_ui_open_name_keyboard();
+}
+
+void host_menu_name_keyboard_closed() {
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
+}
+
+// How long the game's keyboard may stay finished or unloading (2/3) before it counts as
+// closed anyway: the state values are only inferred, and a wait that never ends would
+// leave every later keyboard pending and a callkeyboard script without its answer.
+#define KEYBOARD_UNLOAD_TIMEOUT_US (2 * 1000 * 1000)
+
+// A longer gap between two polls means nobody waited in between (no request pending, or a
+// hitch): the wait starts over instead of counting the gap as unload time.
+#define KEYBOARD_POLL_GAP_US (300 * 1000)
+
+// Unloading (3) is not closed: its OSKDIALOG_UNLOADED still follows and sets 0, also
+// under a keyboard opened in between, and a new dialog most likely can't be loaded before
+// that. Open (1) never times out, the player may still be typing. Only called on the UI
+// thread.
+static bool game_keyboard_closed() {
+    static system_time_t closingSince;
+    static system_time_t lastPoll;
+    static bool warned;
+    int state = *(volatile int*)T5_KeyboardState;
+    if (state == T5_KeyboardStateClosed || state == T5_KeyboardStateOpen) {
+        closingSince = 0;
+        warned = false;
+        return state == T5_KeyboardStateClosed;
+    }
+
+    system_time_t now = sys_time_get_system_time();
+    bool waitInterrupted = now - lastPoll > KEYBOARD_POLL_GAP_US;
+    lastPoll = now;
+    if (!closingSince || waitInterrupted) {
+        closingSince = now;
+        warned = false;
+        return false;
+    }
+    if (now - closingSince < KEYBOARD_UNLOAD_TIMEOUT_US) {
+        return false;
+    }
+    if (!warned) {
+        warned = true;
+        printf(T5WARNING "Game keyboard stuck in state %i, treated as closed.", state);
+    }
     return true;
+}
+
+// An open keyboard stays up on the host's console; once its text is entered it is dropped
+// here.
+static void drop_keyboard_of_left_client() {
+    uint32_t state = keyboardState;
+    if ((state != KEYBOARD_REQUESTED && state != KEYBOARD_ENTERED) || !SV_CLIENTS ||
+        SV_CLIENT_IN_USE(keyboardClient)) {
+        return;
+    }
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, state, KEYBOARD_IDLE);
 }
 
 static void keyboard_input_callback(int localClientNum, const char16* text, int length) {
@@ -426,10 +576,33 @@ static void keyboard_input_callback(int localClientNum, const char16* text, int 
     keyboardState = KEYBOARD_ENTERED;
 }
 
+// In game UI_Refresh, the only caller of the keyboard update, runs only while a menu
+// catches the keys. Without one a finished dialog is never unloaded: it is gone from the
+// screen but keeps the pad and the PS button, and its callback never runs. A second call
+// in the same frame from UI_Refresh is harmless, the first one already left state 2.
+static void update_game_keyboard() {
+    int state = *(volatile int*)T5_KeyboardState;
+    if (state == T5_KeyboardStateOpen || state == T5_KeyboardStateFinished) {
+        UI_UpdateKeyboard(0);
+    }
+}
+
+// The game runs the callback before it leaves the finished state, so a callback that did
+// run has already moved the state on and nothing matches. A callkeyboard keyboard without
+// its callback is answered like a cancel, the script is still waiting on keyboard_input.
+// Both this and the callback run on the UI thread, so the callback's state check holds.
+static void release_closed_keyboard() {
+    if (!game_keyboard_closed()) {
+        return;
+    }
+    cellAtomicCompareAndSwap32((uint32_t*)&keyboardState, KEYBOARD_NAME, KEYBOARD_IDLE);
+    keyboard_input_callback(0, NULL, 0);
+}
+
 static void open_requested_keyboard() {
     static const char16 preset[] = {0};
     // The menu hides the pad from the game, so the keyboard waits until it's closed.
-    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open) {
+    if (keyboardState != KEYBOARD_REQUESTED || hostMenu.open || !game_keyboard_closed()) {
         return;
     }
     __lwsync();
@@ -477,16 +650,16 @@ static const char* const classNameDvars[STATS_FILE_CLASS_COUNT] = {
     "prestigeclass4", "prestigeclass5",
 };
 
-static void read_dvar_string(const char* name, char* out, int size) {
+void host_menu_read_dvar_string(const char* name, char* out, int size) {
     const char* value = Dvar_GetString(name);
     snprintf(out, size, "%s", value ? value : "");
 }
 
 void host_menu_read_profile_names(StatsFileProfile* profile) {
-    read_dvar_string("clanName", profile->clanName, sizeof(profile->clanName));
+    host_menu_read_dvar_string("clanName", profile->clanName, sizeof(profile->clanName));
     for (int i = 0; i < STATS_FILE_CLASS_COUNT; i++) {
-        read_dvar_string(classNameDvars[i], profile->classNames[i],
-                         sizeof(profile->classNames[i]));
+        host_menu_read_dvar_string(classNameDvars[i], profile->classNames[i],
+                                   sizeof(profile->classNames[i]));
     }
 }
 
@@ -560,9 +733,24 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         hostMenu.statsLoadPending = false;
     }
 
+    bool inGame = Dvar_GetBool("cl_ingame");
+    party_map_update_wager_match(inGame);
+    // Keyboards stay pending until the game's previous one is unloaded.
+    if (hostMenu.changeNamePending && game_keyboard_closed()) {
+        hostMenu.changeNamePending = false;
+        open_name_keyboard(inGame);
+    }
+    if (hostMenu.resetNamePending) {
+        hostMenu.resetNamePending = false;
+        if (hostMenu.originalName[0]) {
+            host_menu_set_local_name(hostMenu.originalName);
+        }
+        hostMenu.originalName[0] = 0;
+    }
+
     // Lobby menus can only be opened from the UI thread, and party state is only changed
     // from it.
-    if (!Dvar_GetBool("cl_ingame")) {
+    if (!inGame) {
         int kick = hostMenu.lobbyKickMember;
         if (kick != -1) {
             // Pairs with the one in queue_kick: party and name are read only after the
@@ -577,21 +765,25 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         enforce_game_party_bans();
         if (hostMenu.selectMapPending) {
             hostMenu.selectMapPending = false;
+            int openMenuCount = UI_OPEN_MENU_COUNT(uiContext);
             Menus_OpenByName(0, uiContext, "select_map");
+            party_map_arm_sync(uiContext, openMenuCount);
         }
         if (hostMenu.selectGametypePending) {
             hostMenu.selectGametypePending = false;
+            int openMenuCount = UI_OPEN_MENU_COUNT(uiContext);
+            party_map_extend_gametype_list();
             Menus_OpenByName(0, uiContext, "select_game_mode");
+            party_map_arm_sync(uiContext, openMenuCount);
         }
-        if (hostMenu.changeNamePending) {
-            hostMenu.changeNamePending = false;
-            host_menu_ui_open_name_keyboard();
-        }
-        if (hostMenu.saveStatsKeyboardPending) {
+        party_map_sync(uiContext);
+        if (hostMenu.saveStatsKeyboardPending && game_keyboard_closed()) {
             hostMenu.saveStatsKeyboardPending = false;
             host_menu_ui_open_stats_keyboard();
         }
     } else {
+        // The sync belongs to the lobby the menu was opened in.
+        party_map_clear_sync();
         // The same command as End Game in the pause menu. -1 is the menu index the game
         // sends for a menu that isn't a script menu.
         if (hostMenu.endGamePending) {
@@ -601,8 +793,11 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             Cbuf_AddText(0, buffer);
         }
         show_game_messages();
+        update_game_keyboard();
+        release_closed_keyboard();
         open_requested_keyboard();
     }
+    party_map_keep_matchmaking_playlist(inGame);
     host_menu_ui_draw();
 }
 
@@ -618,6 +813,7 @@ void host_menu_on_server_scripts_loaded() {
     }
     hostSpawned = false;
     anti_god_class_reset();
+    party_map_on_server_scripts_loaded();
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
     keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }
@@ -725,6 +921,7 @@ void ClientEndFrame_Hook(void* ent, void* a2) {
         hostMenu.antiGodClassCheckPending = false;
         anti_god_class_check_clients();
     }
+    drop_keyboard_of_left_client();
     send_keyboard_input(ent);
     anti_god_class_client_frame(ent);
     ClientEndFrame_Trampoline(ent, a2);
@@ -749,7 +946,6 @@ static void host_menu_thread(uint64_t arg) {
         else {
             hostMenu.selectMapPending = false;
             hostMenu.selectGametypePending = false;
-            hostMenu.changeNamePending = false;
             hostMenu.saveStatsKeyboardPending = false;
             hostMenu.lobbyKickMember = -1;
         }
@@ -779,12 +975,15 @@ static void init_host_menu_offsets() {
     t5nmi(R_AddCmdDrawStretchPic);
     t5nmi(R_AddCmdDrawText);
     t5nmi(UI_OpenKeyboard);
+    t5nmi(UI_UpdateKeyboard);
     t5nmi(Dvar_GetBool);
     t5nmi(R_TextHeight);
     t5nmi(R_TextWidth);
     t5nmi(SL_GetString);
     t5nmi(R_RegisterFont);
-    t5nmi(Party_RemoveMember);
+    t5nmi(Party_KickMember);
+    t5nmi(Live_IsLocalXuid);
+    t5nmi(Party_UpdateState);
     t5nmi(Party_BanName);
     t5nmi(Party_IsBanned);
     t5nmi(ClanTag_Format);
@@ -798,7 +997,6 @@ static void init_host_menu_offsets() {
     t5nmi(Sys_IsMainThread);
     t5nmi(Scr_Notify);
     t5nmi(FindEntityId);
-    notify_init();
 }
 
 static int init_host_menu_hooks() {
@@ -877,6 +1075,7 @@ int host_menu_init() {
     // The hooks read the menu state, so it has to be ready first.
     host_menu_ui_init();
     init_host_menu_offsets();
+    party_map_init();
     unfilter_names();
 
     int res;

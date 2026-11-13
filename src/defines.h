@@ -80,6 +80,10 @@ typedef enum dvarType_t {
     DVAR_TYPE_COUNT = 0xC
 } dvarType_t;
 
+// dvar_s.flags bit: a changed userinfo dvar makes the client resend its userinfo
+// (name as in CoD4, unverified for T5).
+#define DVAR_USERINFO 0x2
+
 typedef struct dvar_s {
     const char* name;
     const char* description;

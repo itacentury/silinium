@@ -39,11 +39,31 @@
 // Host menu (MP only), names of the game functions are inferred from usage
 #define T5_Cbuf_AddText 0x399CC8
 #define T5_Menus_OpenByName 0x45EC08
+// Open menu stack in the UI context Menu_PaintAll gets: entries of T5_UiMenuStackEntrySize at T5_UiMenuStackOffset,
+// the first word is the menuDef_t* (0x465624 loads it and reads +0xB4 from it), the count at T5_UiOpenMenuCountOffset
+// bounds the loop (0x4653F4, 0x46540C). 16 entries end right at the count, as in CoD4's UiContext (menuStack[16],
+// openMenuCount); the names and that Menus_OpenByName pushes onto the top are taken from CoD4 (unverified).
+#define T5_UiMenuStackOffset 0x14F8
+#define T5_UiMenuStackEntrySize 8
+#define T5_UiMenuStackMax 16
+#define T5_UiOpenMenuCountOffset 0x1578
 #define T5_R_AddCmdDrawStretchPic 0x751940
 #define T5_R_AddCmdDrawText 0x754410
 #define T5_SV_Cmd_ArgvBuffer 0x3997C8
 #define T5_I_stricmp 0x4DD8C0 // ClientCommand matches command names with it, folds only A-Z
 #define T5_UI_OpenKeyboard 0x56A118
+// Name inferred. Only called from UI_Refresh (0x432FF8), which in game (connection state 10) only runs while a menu
+// catches the keys (keyCatchers & 0x10, checked at 0x1DC36C): without one the dialog is never unloaded.
+#define T5_UI_UpdateKeyboard 0x56A270
+// int, the keyboard's state (meanings inferred from the disassembly): UI_OpenKeyboard sets 1 only if
+// cellOskDialogLoadAsync succeeded, otherwise the callback never runs. The sysutil callback (0x56A070) sets 2
+// (finished) on OSKDIALOG_FINISHED and 0 on OSKDIALOG_UNLOADED. UI_UpdateKeyboard runs only in states 1 and 2; in
+// state 2 it unloads the dialog, calls the callback with the text for result 0 and with (NULL, 0) for results 1-3
+// (cancel, abort, no text), not at all for other results, then sets 3 (unloading).
+#define T5_KeyboardState 0x1B2942C
+#define T5_KeyboardStateClosed 0
+#define T5_KeyboardStateOpen 1
+#define T5_KeyboardStateFinished 2
 #define T5_Dvar_GetBool 0x4C7BF0
 #define T5_R_TextHeight 0x734340
 #define T5_R_TextWidth 0x734570
@@ -52,7 +72,73 @@
 // DB_FindXAssetHeader(material, name, errorIfMissing 1, wait forever): a miss creates a default entry, only for fixed
 // names.
 #define T5_Material_RegisterHandle 0x7458D8
-#define T5_Party_RemoveMember 0x208BD8 // (party, memberIndex, notify, reason), notify sends "endparty <reason>"
+// (party, memberIndex, reason), name inferred. The stock kick: used by the kickPlayer UI script (0x44ADF8) and wager
+// kicks. Sends "%ikicked %s" to the member, then removes every member at its netadr (guests on the same console) with
+// 0x208BD8 (party, memberIndex, notify 0, reason). That loop does not skip the host's slot, so the stock kickPlayer
+// refuses local XUIDs first (0x44AE80). 0x208BD8 removes the member's XUID from the linked party as well
+// (LobbyParty + 0x57E0 = GameParty, set at 0x1E8B04) if we host it, for either notify value: notify 1 only sends
+// "endparty <reason>" first (0x208D00), then joins the same path at 0x208D60.
+#define T5_Party_KickMember 0x20DA18
+// (xuid), 1 if the XUID is one of the 4 local users' (table at 0x2000A10, stride 0x48, XUID at +0x28). Name inferred,
+// whether the table only holds signed-in users is unverified.
+#define T5_Live_IsLocalXuid 0x68BFC8
+// (party), the xupdatepartystate command (0x1D02C0, with LobbyParty). Returns unless the party is active and the
+// local player hosts it (0x1E7068), then copies ui_mapname / ui_gametype into the party (0x1EAE70 / 0x1EAE38) and
+// sends partystate, which carries both to the members. Name inferred.
+#define T5_Party_UpdateState 0x207770
+// Members of a private match take the map and gametype from partystate as strings (Com_SessionModeIs(3) at 0x2003C8).
+// In a public online game they ignore them: the host sends the 8 playlist rotation indices of the LobbyParty map ring
+// (Party_SendPartyState at 0x2098FC), a member pushes them into its own ring and sets ui_mapname / ui_gametype from the
+// current one (0x200880 - 0x200A14). The game's own host side is 0x1F0268. Traced statically, names inferred.
+// The playlist number goes along: the host writes the playlist dvar as a byte before the ring (0x2098EC), the member
+// sets its own playlist from it (0x200828 - 0x200838) before it resolves the ring, so a rotation index of another
+// playlist works once the host switched to it. NetMsg_go (0x1F4E68) applies playlist and rotation index again at the
+// match start (0x1F5338 / 0x1F5348) and copies ui_mapname / ui_gametype into party_* afterwards, which undoes a
+// gametype that is not in the rotation. Traced statically, unverified on the console.
+// () onlinegame && !xblive_privatematch && !xblive_basictraining && !xblive_theater, dvar reads only. Wager matches
+// pass.
+#define T5_Com_IsPublicOnlineGame 0x39EC58
+// (localClientNum, rotationIndex) sets ui_mapname / ui_gametype (and xblive_rankedmatch, party_teambased, ...) from the
+// current playlist's rotation entry. Wager matches pick the playlist by wagerCategory instead.
+#define T5_Playlist_SetRotationEntry 0x440910
+#define T5_PartyMapRingOffset 0x676D // 8 rotation indices (bytes)
+#define T5_PartyMapRingIndexOffset 0x6778 // int, the current ring slot
+#define T5_PartyMapRingSize 8
+#define T5_PlaylistRotationNone 0xFF // ring entry without a map, Playlist_SetRotationEntry skips it (0x440950)
+#define T5_PlaylistRotationEntries 0x1898250 // + i * 16: +0 map name, +4 gametype name (read at 0x440EDC)
+#define T5_PlaylistRotationEntrySize 16
+// The gametype of a rotation entry (+4) is a playlist gametype name, not the ui_gametype value: 0x440910 looks it up in
+// this table (+4, I_stricmp at 0x440D20 ff., 64 entries) and sets ui_gametype to +0 of the hit (0x44104C - 0x4410A8),
+// an unknown name is a Com_Error (0x440EB0). Field meanings inferred from that code, unverified.
+#define T5_PlaylistGametypes 0x1897D2C
+#define T5_PlaylistGametypeSize 0x14
+#define T5_PlaylistGametypeMax 64
+// Matchmaking session info (pointer). Searches send the searcher's playlist dvar (0x69A79C), the host offers +0x148.
+// Only written by 0x68B5B8: host start (0x20D420), session creation / host migration (0x69C09C), search (0x69A788)
+// and members on partystate (0x200844), so changing the playlist dvar alone leaves it. Traced statically, unverified.
+#define T5_SessionInfo 0x20009EC
+#define T5_SessionInfoPlaylistOffset 0x148
+// (localClientNum, playlist) sets the session info's playlist (+0x148) and slot (+0x144, +0x110) and marks it for the
+// next session update (+0x160). Does nothing while the dvar at 0x1FE074C is off. Inferred from code, unverified.
+#define T5_Session_SetPlaylist 0x68B5B8
+// (name, StringTable** out) DB_FindXAssetHeader for a stringtable (type 0x27). StringTable: +4 column count, +8 row
+// count, +0xC cells of 8 bytes (+0 string), row by row.
+#define T5_StringTable_Find 0x4BEE30
+// (table, compareColumn, value, valueColumn) the cell of the first row whose compareColumn is value, "" if there is none.
+#define T5_StringTable_Lookup 0x4BED78
+// The UI's gametype list (select_game_mode feeders 0x40FED0 / 0x410A98 / 0x410DD0, validatePrivateMatchGametype).
+// UI_AssetCache (0x416398) fills it from mp/gametypesTable.csv: count = the maxnum_gametype row, entry i = the row whose
+// column 4 is i (column 0 name, column 1 localized name, column 5 "YES" = splitscreen). maxnum_gametype is 8, the
+// wager gametypes follow in the table with the indices 8 - 11 (hlnd, oic, gun, shrp; seen on the console). The basic
+// training list follows at 0x18782A8, so 32 entries fit. Traced statically, unverified.
+#define T5_UiGametypeCount 0x1877824
+#define T5_UiGametypes 0x1877828
+#define T5_UiGametypeSize 0x50
+#define T5_UiGametypeMax 32
+#define T5_UiGametypeNameSize 12
+#define T5_UiGametypeLocalizedOffset 0xC
+#define T5_UiGametypeLocalizedSize 32
+#define T5_UiGametypeSplitscreenOffset 0x4C
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0
@@ -117,6 +203,7 @@
 #define T5_GamerProfile_UpdateProfileFromDvars 0x562090
 #define T5_Dvar_GetString 0x4C7370
 #define T5_Dvar_SetStringByName 0x4CF170
+#define T5_Dvar_SetInt 0x4CB970 // (dvar, value), formats "%i" and sets it; NetMsg_go sets playlist with it (0x1F5338)
 #define T5_KeyboardInvalidChars_Patch 0x3FF264 // character check passed, original: bne cr1 (0x40860048)
 #define T5_KeyboardInvalidChars_Target 0x3FF2AC
 
@@ -167,6 +254,7 @@
 #define T5_PartyIsHostOffset 0x570C // int, local player is host
 #define T5_PartyMembersOffset 0x11B0 // 18 members of 0x220: +0x00 status byte (slot used if > 2), +0x18 name, +0x5C clan tag
 #define T5_PartyMemberSize 0x220
+#define T5_PartyMemberXuidOffset 0x10 // uint64, read by 0x208D84 and looked up in the linked party with 0x1E68E0
 #define T5_PartyMaxMembers 18 // members of T5_PartyMemberSize at T5_PartyMembersOffset
 #define T5_PartyMemberNameOffset 0x18
 #define T5_PartyMemberNameSize 0x20 // next field at +0x38
@@ -182,9 +270,30 @@
 // it's full: name with MSG_WriteString, clan tag with MSG_WriteData. Only called by the host's partystate sender
 // (0x208DB0, "%ipartystate"), at 0x209404, 0x209538 and 0x2096FC.
 #define T5_Party_WriteMembers 0x204820
+// Local player 0. PlayerName1 is the SceNpId the userinfo sends as "npid" (online id first, 0x24 bytes per local
+// client); PlayerName2 is the name the userinfo builder (0x3A73C0, via 0x68BF48) sends as "name" and the party copies
+// into the local member when it's added (0x207BD0). A rename writes both; whether changing the npid while connected to
+// a server breaks anything is untested on console.
 #define T5_PlayerName1 0x2000934
 #define T5_PlayerName2 0x2000A14
+// dvar_modifiedFlags: Dvar_SetVariant ORs the flags of a changed dvar in (0x4C8788). While connected the client frame
+// (0x1CDE70) sends its userinfo to the server when DVAR_USERINFO is set, then clears it (0x1C7B48).
+#define T5_DvarModifiedFlags 0x18F019C
 #define T5_PlaylistEntries 0x18950B8 // 64 entries of 0x98: +0x00 rule string, +0x58 int
+#define T5_PlaylistMax 64
+// int, first rotation entry (T5_PlaylistRotationEntries) of the playlist. 0x440910 and 0x43F020 address the table
+// from 0x18950A8, so these are +0x54 / +0x58 there.
+#define T5_PlaylistRotationFirstOffset 0x44
+// int, rotation entry count. A slot with a count is a playlist; the playlist dvar picks the n-th of them (0x43F020).
+#define T5_PlaylistRotationCountOffset 0x48
+// ints, the wager cost of a playlist (playlist 22, Gun Game: 10 + 0, seen on the console). Members check it when the
+// partystate brings a playlist (0x200A20 -> 0x1EA320 -> 0x43F8D0) and at NetMsg_go: a cost above 0 is compared with the
+// COD points of their entry (+0x64) in their own T5_GameParty (0x43CA30 -> 0x221900), reason 10 =
+// MPUI_WAGERMATCH_NOT_ENOUGH_CP drops them (Com_Error). That party is not active for a member that joined through a
+// normal playlist, so any cost drops them; a cost of 0 skips the check (0x43FAD8). Probably wagerentry / wagerbet
+// (0x4433A0), names unverified.
+#define T5_PlaylistWagerCostOffset1 0x68
+#define T5_PlaylistWagerCostOffset2 0x6C
 #define T5_DvarPtr_BBA19C 0xBBA19C // bool dvar, default true (probably jump_slowdownEnable)
 #define T5_DvarPtr_BBA1A4 0xBBA1A4 // float dvar, default 300 (probably bg_fallDamageMaxHeight)
 
@@ -194,7 +303,8 @@
 #define T5_Stats_Prestige 0x20946DD
 #define T5_Stats_Rank 0x20946E1 // little endian, rank id (level - 1), what the menus show
 #define T5_StatsSize 0x9968
-// The DDL data starts at T5_Stats_Base + 0x28, the layout is in data/mp/stats_ddl.txt in bo1-re. itemstats: 256 items of 671 bits from bit 4, the first 3 bits of an item
+// The DDL data starts at T5_Stats_Base + 0x28, the layout is in data/mp/stats_ddl.txt
+// in bo1-re. itemstats: 256 items of 671 bits from bit 4, the first 3 bits of an item
 // are isproversionunlocked (then new, purchased), bits packed from the lowest one.
 #define T5_Stats_ItemStats 0x208D898
 #define T5_Stats_ItemStatsBit 4
@@ -267,6 +377,12 @@
 #define T5_MaxReliableCommands 128
 #define T5_ServerCommandSize 0x400
 #define T5_MaxConfigstrings 0xAC2 // "d <index> <value>": CL_CGameNeedsServerCommand calls Com_Error above 0xAC1
+// (localClientNum?, msg_t* msg), OOB handler for "v" (0x1E1780), "vt" (0x1E04E8) and "relay", called by
+// CL_ConnectionlessPacket (0x1CC320) at 0x1CC3C0 with the packet tokenized in T5_CmdArgsSlot. "relay <n>" uses
+// strtol(argv1) unchecked as party member index (party + 0x1210 + n * 0x220, then 0x1E13C8 reads
+// 0x2023500 + 0x3C0 + n * 0x38), "v" and "vt" check theirs (<= 0x11). Returns 1 if handled. Name and first parameter
+// inferred.
+#define T5_CL_RelayPacket 0x1CB160
 #define T5_BG_GetNumWeapons 0xC0A68 // *(int*)0xBD8778 + 1, BG_GetWeaponDef (0xC0A98) indexes 0xBD877C unchecked
 // The client side tokenizer. CL_CGameNeedsServerCommand tokenizes with Cmd_TokenizeString, "d" ends it and tokenizes
 // again with Cmd_TokenizeStringWithLimit(text, 3). CG_ExecuteNewServerCommands ends it only when 1 was returned.

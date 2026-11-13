@@ -8,6 +8,7 @@
 
 #include <cell/pad.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <types.h>
 
 #include "defines.h"
@@ -26,8 +27,12 @@
 #define PARTY_MEMBER(party, i) \
     ((party) + T5_PartyMembersOffset + (i) * T5_PartyMemberSize)
 #define PARTY_MEMBER_USED(party, i) (*(unsigned char*)PARTY_MEMBER(party, i) > 2)
+#define PARTY_MEMBER_XUID(party, i) \
+    (*(uint64_t*)(PARTY_MEMBER(party, i) + T5_PartyMemberXuidOffset))
 #define PARTY_MEMBER_NAME(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
+#define PARTY_MEMBER_NAME_BUFFER(party, i) \
+    ((char*)(PARTY_MEMBER(party, i) + T5_PartyMemberNameOffset))
 #define PARTY_MEMBER_CLAN(party, i) \
     ((const char*)(PARTY_MEMBER(party, i) + T5_PartyMemberClanOffset))
 #define PARTY_MEMBER_CLAN_FEATURE(party, i) \
@@ -38,12 +43,18 @@
     (*(int*)(PARTY_MEMBER(party, i) + T5_PartyMemberPrestigeOffset))
 #define PARTY_BAN_NAME(i) \
     ((const char*)(T5_LobbyParty + T5_PartyBanListOffset + (i) * T5_PartyBanEntrySize))
+#define UI_OPEN_MENU_COUNT(uiContext) \
+    (*(int*)((char*)(uiContext) + T5_UiOpenMenuCountOffset))
+#define UI_MENU_STACK_ENTRY(uiContext, i) \
+    (*(void**)((char*)(uiContext) + T5_UiMenuStackOffset + (i) * T5_UiMenuStackEntrySize))
 
 #define G_ENTITY(clientNum) ((void*)(T5_GEntities + (clientNum) * T5_GEntitySize))
 #define G_ENTITY_NUM(ent) (((int)(ent) - T5_GEntities) / T5_GEntitySize)
 #define SV_CLIENTS (*(int*)T5_SvClients)  // 0 while no server runs
 #define SV_CLIENT(i) (SV_CLIENTS + (i) * T5_ClientSize)
 #define SV_CLIENT_NUM(client) (((int)(client) - SV_CLIENTS) / T5_ClientSize)
+#define SV_CLIENT_IN_USE(i) \
+    (*(int*)(SV_CLIENT(i) + T5_ClientStateOffset) >= T5_ClientStateConnected)
 
 #define HOST_MENU_MAX_CLIENTS 18
 
@@ -63,14 +74,16 @@ t5nd(int, I_stricmp, (const char* s0, const char* s1));
 t5nd(void, UI_OpenKeyboard,
      (int localClientNum, const char16* title, const char16* preset, int maxLength,
       KeyboardCallback_t callback));
+t5nd(void, UI_UpdateKeyboard, (int localClientNum));
 t5nd(bool, Dvar_GetBool, (const char* name));
 t5nd(int, R_TextHeight, (void* font));
 t5nd(int, R_TextWidth, (const char* text, int maxChars, void* font));
 t5nd(unsigned int, SL_GetString, (const char* str, unsigned int user, unsigned int inst));
 t5nd(void*, R_RegisterFont, (const char* name, int imageTrack));
 t5nd(void*, Material_RegisterHandle, (const char* name, int imageTrack));
-t5nd(void, Party_RemoveMember,
-     (int party, int memberIndex, int notify, const char* reason));
+t5nd(void, Party_KickMember, (int party, int memberIndex, const char* reason));
+t5nd(int, Live_IsLocalXuid, (uint64_t xuid));
+t5nd(void, Party_UpdateState, (int party));
 t5nd(void, Party_BanName, (const char* name));
 t5nd(int, Party_IsBanned, (const char* name));
 t5nd(void, ClanTag_Format,
@@ -107,6 +120,10 @@ bool host_menu_lobby_parties_both_active();
 int host_menu_lobby_view_party();
 // That party if the local player hosts it, else 0.
 int host_menu_lobby_party();
+// The party is active and the local player hosts it.
+bool host_menu_party_is_local_host(int party);
+// The dvar's string, empty if it doesn't exist.
+void host_menu_read_dvar_string(const char* name, char* out, int size);
 // Names in the game's ban list (menu and banClient bans).
 int host_menu_ban_count();
 // Host side: false if the client command being run is blocked (endround from a client
@@ -134,11 +151,17 @@ typedef enum {
 // is in the game.
 void host_menu_report_client(int clientNum, const char* name, HostMenuReport report);
 struct StatsFileProfile;
+// Renames the local player: in the hosted parties' member lists (sent to the members
+// right away in a private match lobby) and, in game, through the userinfo. On the UI
+// thread, party state is only changed there.
+void host_menu_set_local_name(const char* name);
 // Reads the clan tag and class names from their dvars, for Save Stats. On the UI thread.
 void host_menu_read_profile_names(struct StatsFileProfile* profile);
 
 // Opens the game keyboard on the host console (callkeyboard). The entered text is sent to
 // the client's player as "keyboard_input" notify. False while another request is waiting.
 bool host_menu_request_keyboard(const char* title, int clientNum);
+// Called from the Change Name keyboard's callback, lets callkeyboard open again.
+void host_menu_name_keyboard_closed();
 
 #endif /* HOST_MENU_H */
