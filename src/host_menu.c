@@ -950,8 +950,9 @@ static bool gametype_is_wager(const char* gametype) {
 }
 
 // The playlist the matchmaking session was offered in before the host menu switched the
-// playlist, -1 while none is kept. Players searching that playlist must keep finding the
-// lobby.
+// playlist, -1 while none is kept. The switch stays for the following matches (their
+// rules and the rotation after them come from it), only the session keeps being offered
+// in this playlist, in the lobby and in game, so players searching it keep finding it.
 static int matchmakingPlaylist = -1;
 
 typedef enum {
@@ -1130,18 +1131,29 @@ static void update_wager_match() {
     }
 }
 
-// The game writes the session's playlist again when it recreates the session (e.g. after
-// a match), the switched one would then hide the lobby from the original playlist.
-static void keep_matchmaking_playlist() {
+// The game writes the session's playlist again from the playlist dvar at the match start
+// (0x20D420) and when it recreates the session, the switched one would then hide the
+// lobby from the original playlist, so it is checked every frame, in game as well.
+// Whether LobbyParty stays active and hosted during the match is unverified: in game the
+// running server stands for hosting, and only the lobby decides that the host left.
+static void keep_matchmaking_playlist(bool inGame) {
     if (matchmakingPlaylist < 0) {
         return;
     }
     dvar_s* playlistDvar = Dvar_FindVar("playlist");
-    if (!playlistDvar || !party_is_local_host(T5_LobbyParty) ||
-        !party_map_uses_rotation_ring() ||
+    if (!playlistDvar || !party_map_uses_rotation_ring() ||
         playlistDvar->current.integer == matchmakingPlaylist) {
         matchmakingPlaylist = -1;
         return;
+    }
+    if (!party_is_local_host(T5_LobbyParty)) {
+        if (!inGame) {
+            matchmakingPlaylist = -1;
+            return;
+        }
+        if (!Dvar_GetBool("sv_running")) {
+            return;
+        }
     }
     int offered = SESSION_INFO_PLAYLIST;
     if (offered < 0 || offered == matchmakingPlaylist) {
@@ -1319,7 +1331,6 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             arm_party_map_sync(uiContext, openMenuCount);
         }
         sync_party_map(uiContext);
-        keep_matchmaking_playlist();
         if (hostMenu.saveStatsKeyboardPending && game_keyboard_closed()) {
             hostMenu.saveStatsKeyboardPending = false;
             host_menu_ui_open_stats_keyboard();
@@ -1340,6 +1351,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         release_closed_keyboard();
         open_requested_keyboard();
     }
+    keep_matchmaking_playlist(inGame);
     host_menu_ui_draw();
 }
 
