@@ -62,7 +62,7 @@ void party_map_extend_gametype_list();
 void party_map_keep_matchmaking_playlist(bool inGame);
 // Forces xblive_wagermatch for a wager gametype in a private match and restores it after.
 // Every frame.
-void party_map_update_wager_match();
+void party_map_update_wager_match(bool inGame);
 // Called once per server script load, before the gametype scripts run.
 void party_map_on_server_scripts_loaded();
 

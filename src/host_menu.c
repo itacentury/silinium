@@ -693,7 +693,6 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     if (!uiContext) {
         return;
     }
-    party_map_update_wager_match();
 
     // Also safe in a match: the game only touches the ban list from the main thread,
     // banClient included, because server commands wait for the server frame (0x3F0650)
@@ -735,6 +734,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     }
 
     bool inGame = Dvar_GetBool("cl_ingame");
+    party_map_update_wager_match(inGame);
     // Keyboards stay pending until the game's previous one is unloaded.
     if (hostMenu.changeNamePending && game_keyboard_closed()) {
         hostMenu.changeNamePending = false;

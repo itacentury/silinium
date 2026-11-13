@@ -457,8 +457,8 @@ void party_map_on_server_scripts_loaded() {
 // checked one, not every frame. Not only once when entering the game: a member may
 // receive g_gametype after cl_ingame is set (unverified). It may then still hold the
 // previous match's gametype, a force made from it is undone once the real one arrives.
-void party_map_update_wager_match() {
-    if (!Dvar_GetBool("cl_ingame")) {
+void party_map_update_wager_match(bool inGame) {
+    if (!inGame) {
         wagerMatchCheckedGametype[0] = '\0';
         if (wagerMatchSeenInGame || !Dvar_GetBool("sv_running")) {
             restore_wager_match();
