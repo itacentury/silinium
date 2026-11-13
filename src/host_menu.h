@@ -28,6 +28,8 @@
     (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationFirstOffset))
 #define PLAYLIST_ROTATION_COUNT(i) \
     (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistRotationCountOffset))
+#define PLAYLIST_WAGER_COST1(i) (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistWagerCostOffset1))
+#define PLAYLIST_WAGER_COST2(i) (*(int*)(PLAYLIST_ENTRY(i) + T5_PlaylistWagerCostOffset2))
 #define PLAYLIST_ROTATION_ENTRY(i) \
     (T5_PlaylistRotationEntries + (i) * T5_PlaylistRotationEntrySize)
 #define PLAYLIST_ROTATION_MAP(i) (*(const char**)PLAYLIST_ROTATION_ENTRY(i))
@@ -39,6 +41,17 @@
 #define SESSION_INFO (*(int*)T5_SessionInfo)
 #define SESSION_INFO_PLAYLIST \
     (SESSION_INFO ? *(int*)(SESSION_INFO + T5_SessionInfoPlaylistOffset) : -1)
+#define UI_GAMETYPE_COUNT (*(int*)T5_UiGametypeCount)
+#define UI_GAMETYPE(i) (T5_UiGametypes + (i) * T5_UiGametypeSize)
+#define UI_GAMETYPE_NAME(i) ((char*)UI_GAMETYPE(i))
+#define UI_GAMETYPE_LOCALIZED(i) ((char*)(UI_GAMETYPE(i) + T5_UiGametypeLocalizedOffset))
+#define UI_GAMETYPE_SPLITSCREEN(i) \
+    (*(int*)(UI_GAMETYPE(i) + T5_UiGametypeSplitscreenOffset))
+#define STRING_TABLE_COLUMN_COUNT(table) (*(int*)((char*)(table) + 4))
+#define STRING_TABLE_ROW_COUNT(table) (*(int*)((char*)(table) + 8))
+#define STRING_TABLE_CELL(table, row, column)          \
+    (*(const char**)(*(char**)((char*)(table) + 0xC) + \
+                     ((row) * STRING_TABLE_COLUMN_COUNT(table) + (column)) * 8))
 #define PARTY_MAP_RING_INDEX(party) (*(int*)((party) + T5_PartyMapRingIndexOffset))
 #define PARTY_MAP_RING_ENTRY(party, i) \
     (*(uint8_t*)((party) + T5_PartyMapRingOffset + (i)))
@@ -113,6 +126,9 @@ t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
 t5nd(void, Dvar_SetInt, (dvar_s * dvar, int value));
 t5nd(void, Session_SetPlaylist, (int localClientNum, int playlist));
+t5nd(void, StringTable_Find, (const char* name, void** table));
+t5nd(const char*, StringTable_Lookup,
+     (void* table, int compareColumn, const char* value, int valueColumn));
 t5nd(int, CL_ControllerIndexFromClientNum, (int localClientNum));
 t5nd(void, GamerProfile_UpdateDvarsFromProfile, (int controller));
 t5nd(void, GamerProfile_UpdateProfileFromDvars, (int controller, int a2));

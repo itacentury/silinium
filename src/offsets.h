@@ -121,6 +121,23 @@
 // (localClientNum, playlist) sets the session info's playlist (+0x148) and slot (+0x144, +0x110) and marks it for the
 // next session update (+0x160). Does nothing while the dvar at 0x1FE074C is off. Inferred from code, unverified.
 #define T5_Session_SetPlaylist 0x68B5B8
+// (name, StringTable** out) DB_FindXAssetHeader for a stringtable (type 0x27). StringTable: +4 column count, +8 row
+// count, +0xC cells of 8 bytes (+0 string), row by row.
+#define T5_StringTable_Find 0x4BEE30
+// (table, compareColumn, value, valueColumn) the cell of the first row whose compareColumn is value, "" if there is none.
+#define T5_StringTable_Lookup 0x4BED78
+// The UI's gametype list (select_game_mode feeders 0x40FED0 / 0x410A98 / 0x410DD0, validatePrivateMatchGametype).
+// UI_AssetCache (0x416398) fills it from mp/gametypesTable.csv: count = the maxnum_gametype row, entry i = the row whose
+// column 4 is i (column 0 name, column 1 localized name, column 5 "YES" = splitscreen). maxnum_gametype is 8, the
+// wager gametypes follow in the table with the indices 8 - 11 (hlnd, oic, gun, shrp; seen on the console). The basic training list follows at 0x18782A8, so 32 entries fit. Traced statically, unverified.
+#define T5_UiGametypeCount 0x1877824
+#define T5_UiGametypes 0x1877828
+#define T5_UiGametypeSize 0x50
+#define T5_UiGametypeMax 32
+#define T5_UiGametypeNameSize 12
+#define T5_UiGametypeLocalizedOffset 0xC
+#define T5_UiGametypeLocalizedSize 32
+#define T5_UiGametypeSplitscreenOffset 0x4C
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0
@@ -268,6 +285,14 @@
 #define T5_PlaylistRotationFirstOffset 0x44
 // int, rotation entry count. A slot with a count is a playlist; the playlist dvar picks the n-th of them (0x43F020).
 #define T5_PlaylistRotationCountOffset 0x48
+// ints, the wager cost of a playlist (playlist 22, Gun Game: 10 + 0, seen on the console). Members check it when the
+// partystate brings a playlist (0x200A20 -> 0x1EA320 -> 0x43F8D0) and at NetMsg_go: a cost above 0 is compared with the
+// COD points of their entry (+0x64) in their own T5_GameParty (0x43CA30 -> 0x221900), reason 10 =
+// MPUI_WAGERMATCH_NOT_ENOUGH_CP drops them (Com_Error). That party is not active for a member that joined through a
+// normal playlist, so any cost drops them; a cost of 0 skips the check (0x43FAD8). Probably wagerentry / wagerbet
+// (0x4433A0), names unverified.
+#define T5_PlaylistWagerCostOffset1 0x68
+#define T5_PlaylistWagerCostOffset2 0x6C
 #define T5_DvarPtr_BBA19C 0xBBA19C // bool dvar, default true (probably jump_slowdownEnable)
 #define T5_DvarPtr_BBA1A4 0xBBA1A4 // float dvar, default 300 (probably bg_fallDamageMaxHeight)
 

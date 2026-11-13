@@ -878,9 +878,17 @@ static int playlist_slot_gametype_matches(int slot, const char* gametype) {
     return matches;
 }
 
+// The COD Points a member must have for the playlist. Members that came in through a
+// normal playlist have 0 in the party the check reads (see T5_PlaylistWagerCostOffset1),
+// so a playlist that costs anything drops them.
+static int playlist_slot_wager_cost(int slot) {
+    return PLAYLIST_WAGER_COST1(slot) + PLAYLIST_WAGER_COST2(slot);
+}
+
 // The playlist other than current whose rotation has the map with the gametype and the
 // largest share of that gametype, so a playlist of only that mode wins over mixed ones
-// like Mosh Pit. Its rotation index goes into index. -1 if there is none.
+// like Mosh Pit. Wager playlists that cost COD Points are left out. Its rotation index
+// goes into index. -1 if there is none.
 static int find_playlist_with_rotation(int current, const char* map, const char* gametype,
                                        int* index) {
     int best = -1;
@@ -897,9 +905,10 @@ static int find_playlist_with_rotation(int current, const char* map, const char*
                         : playlist_slot_rotation_index(slot, map, gametype, true);
         if (found >= 0) {
             int matches = playlist_slot_gametype_matches(slot, gametype);
-            printf(T5INFO "Playlist %i has %s / %s, %i of %i entries are %s.", playlist,
-                   map, gametype, matches, count, gametype);
-            if (best < 0 || matches * bestCount > bestMatches * count) {
+            int cost = playlist_slot_wager_cost(slot);
+            printf(T5INFO "Playlist %i has %s / %s, %i of %i entries are %s, cost %i.",
+                   playlist, map, gametype, matches, count, gametype, cost);
+            if (cost <= 0 && (best < 0 || matches * bestCount > bestMatches * count)) {
                 best = playlist;
                 bestMatches = matches;
                 bestCount = count;
@@ -911,6 +920,35 @@ static int find_playlist_with_rotation(int current, const char* map, const char*
     return best;
 }
 
+#define GAMETYPES_TABLE "mp/gametypesTable.csv"
+
+// A table cell as a number, -1 if it isn't one.
+static int table_number(const char* cell) {
+    if (!cell || !*cell) {
+        return -1;
+    }
+    int value = 0;
+    for (; *cell; cell++) {
+        if (*cell < '0' || *cell > '9') {
+            return -1;
+        }
+        value = value * 10 + (*cell - '0');
+    }
+    return value;
+}
+
+// The game's own list stops at maxnum_gametype, the wager gametypes come after it.
+static bool gametype_is_wager(const char* gametype) {
+    void* table = NULL;
+    StringTable_Find(GAMETYPES_TABLE, &table);
+    if (!table) {
+        return false;
+    }
+    int index = table_number(StringTable_Lookup(table, 0, gametype, 4));
+    int standardCount = table_number(StringTable_Lookup(table, 0, "maxnum_gametype", 1));
+    return index >= 0 && standardCount >= 0 && index >= standardCount;
+}
+
 // The playlist the matchmaking session was offered in before the host menu switched the
 // playlist, -1 while none is kept. Players searching that playlist must keep finding the
 // lobby.
@@ -920,7 +958,39 @@ typedef enum {
     ROTATION_PUSHED,
     ROTATION_PLAYLIST_SWITCHED,
     ROTATION_MISSING,
+    ROTATION_HOST_GAMETYPE,
 } RotationResult;
+
+static void push_party_rotation_index(int party, int index) {
+    int ringSlot =
+        (int)(((unsigned int)PARTY_MAP_RING_INDEX(party) + 1) % T5_PartyMapRingSize);
+    PARTY_MAP_RING_ENTRY(party, ringSlot) = (uint8_t)index;
+    PARTY_MAP_RING_INDEX(party) = ringSlot;
+    // Rewrites ui_mapname / ui_gametype.
+    Playlist_SetRotationEntry(0, index);
+}
+
+// A wager gametype only in playlists that cost COD Points: the host plays it without a
+// playlist switch, the members keep their mode. A new map still goes out through the
+// current playlist's rotation, with whatever gametype it has there.
+static RotationResult push_party_map_keep_gametype(int party, int slot, const char* map,
+                                                   const char* gametype,
+                                                   bool mapChanged) {
+    char hostGametype[64];
+    snprintf(hostGametype, sizeof(hostGametype), "%s", gametype);
+    printf(T5INFO
+           "%s / %s is only in wager playlists that cost COD Points, members keep "
+           "their mode.",
+           map, gametype);
+    int index =
+        mapChanged ? playlist_slot_rotation_index(slot, map, gametype, false) : -1;
+    if (index >= 0) {
+        push_party_rotation_index(party, index);
+        Dvar_SetStringByName("ui_gametype", hostGametype);
+    }
+    store_synced_party_map();
+    return ROTATION_HOST_GAMETYPE;
+}
 
 // Pushes the rotation index like the game's own rotation (0x1F0268) and applies the entry
 // to the host as well, so the host's ui_gametype matches what members get. If only
@@ -936,13 +1006,17 @@ static RotationResult push_party_rotation_map(int party, const char* map,
     int slot = playlist_slot(playlist);
     int index = slot < 0 ? -1 : playlist_slot_rotation_index(slot, map, gametype, true);
     // A new map may keep the playlist with another gametype. A new gametype alone must
-    // not fall back to an entry with another one, that would undo the host's choice.
-    if (index < 0 && mapChanged && slot >= 0) {
+    // not fall back to an entry with another one, that would undo the host's choice; a
+    // wager gametype neither, push_party_map_keep_gametype handles the map for it.
+    if (index < 0 && mapChanged && slot >= 0 && !gametype_is_wager(gametype)) {
         index = playlist_slot_rotation_index(slot, map, gametype, false);
     }
     RotationResult result = ROTATION_PUSHED;
     if (index < 0) {
         int other = find_playlist_with_rotation(playlist, map, gametype, &index);
+        if (other < 0 && slot >= 0 && gametype_is_wager(gametype)) {
+            return push_party_map_keep_gametype(party, slot, map, gametype, mapChanged);
+        }
         if (other < 0) {
             printf(T5WARNING
                    "%s / %s is in no playlist rotation, members keep the old one.",
@@ -960,13 +1034,9 @@ static RotationResult push_party_rotation_map(int party, const char* map,
         printf(T5INFO "Session still offered in playlist %i.", SESSION_INFO_PLAYLIST);
         result = ROTATION_PLAYLIST_SWITCHED;
     }
-    int ringSlot =
-        (int)(((unsigned int)PARTY_MAP_RING_INDEX(party) + 1) % T5_PartyMapRingSize);
-    PARTY_MAP_RING_ENTRY(party, ringSlot) = (uint8_t)index;
-    PARTY_MAP_RING_INDEX(party) = ringSlot;
     // Rewrites ui_mapname / ui_gametype; map and gametype may point into the old values,
     // so they are not used afterwards.
-    Playlist_SetRotationEntry(0, index);
+    push_party_rotation_index(party, index);
     store_synced_party_map();
     return result;
 }
@@ -988,6 +1058,8 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
             push_party_rotation_map(T5_LobbyParty, map, gametype, mapChanged);
         if (result == ROTATION_PLAYLIST_SWITCHED) {
             host_menu_ui_show_status("Switched to a playlist with this map and mode");
+        } else if (result == ROTATION_HOST_GAMETYPE) {
+            host_menu_ui_show_status("Wager mode: players see the old mode in the lobby");
         } else if (result == ROTATION_MISSING) {
             host_menu_ui_show_status(
                 mapChanged ? "Not in any playlist, players keep the old map"
@@ -1002,6 +1074,57 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     }
     if (gameHosted) {
         Party_UpdateState(T5_GameParty);
+    }
+}
+
+// A wager gametype outside a wager lobby (the extended gametype list) runs with
+// xblive_wagermatch 0: the HUD shows its wager kill feed next to the normal one, which it
+// only hides with the dvar, and the server scripts show score popups. Private matches
+// only: whether the dvar triggers wager bets or payouts in a public match is unknown,
+// private matches save no stats. Consoles without Silinium still get the scripts' part
+// from the host.
+static bool wagerMatchForced;
+static bool wagerMatchOriginal;
+static bool wagerMatchSeenInGame;
+
+static bool wager_match_wanted() {
+    const char* gametype = Dvar_GetString("g_gametype");
+    return !Com_IsPublicOnlineGame() && gametype && *gametype &&
+           gametype_is_wager(gametype);
+}
+
+static void force_wager_match() {
+    if (wagerMatchForced) {
+        return;
+    }
+    wagerMatchOriginal = Dvar_GetBool("xblive_wagermatch");
+    wagerMatchForced = true;
+    wagerMatchSeenInGame = false;
+    Dvar_SetStringByName("xblive_wagermatch", "1");
+    printf(T5INFO "Wager gametype %s: xblive_wagermatch 1.",
+           Dvar_GetString("g_gametype"));
+}
+
+static void restore_wager_match() {
+    if (!wagerMatchForced) {
+        return;
+    }
+    wagerMatchForced = false;
+    Dvar_SetStringByName("xblive_wagermatch", wagerMatchOriginal ? "1" : "0");
+    printf(T5INFO "Wager gametype over: xblive_wagermatch back to %i.",
+           wagerMatchOriginal);
+}
+
+// The host forces it on the server script load already
+// (host_menu_on_server_scripts_loaded), members once they are in the game. Restored after
+// the match, not before it: the host loads the scripts before it is in the game.
+static void update_wager_match() {
+    bool inGame = Dvar_GetBool("cl_ingame");
+    if (inGame && wager_match_wanted()) {
+        force_wager_match();
+        wagerMatchSeenInGame = true;
+    } else if (!inGame && wagerMatchSeenInGame) {
+        restore_wager_match();
     }
 }
 
@@ -1033,6 +1156,59 @@ static void keep_matchmaking_playlist() {
            matchmakingPlaylist);
 }
 
+// Shows what the table holds (description and icon columns included), for checking the
+// rows extend_gametype_list adds.
+static void log_gametype_table(void* table) {
+    static bool logged;
+    if (logged) {
+        return;
+    }
+    logged = true;
+    int columns = STRING_TABLE_COLUMN_COUNT(table);
+    for (int row = 0; row < STRING_TABLE_ROW_COUNT(table); row++) {
+        char line[256];
+        int length = snprintf(line, sizeof(line), "%i:", row);
+        for (int column = 0; column < columns && length < (int)sizeof(line); column++) {
+            const char* cell = STRING_TABLE_CELL(table, row, column);
+            length +=
+                snprintf(line + length, sizeof(line) - length, " %s |", cell ? cell : "");
+        }
+        printf(T5INFO "gametypesTable row %s", line);
+    }
+}
+
+// The game's list stops at maxnum_gametype, which leaves out the wager gametypes the
+// table has right after it. Adds the following indices like UI_AssetCache does, in the
+// table's order: the menu looks description and icon up by list index. UI_AssetCache may
+// load the list again, so this runs before every open.
+static void extend_gametype_list() {
+    void* table = NULL;
+    StringTable_Find(GAMETYPES_TABLE, &table);
+    if (!table) {
+        return;
+    }
+    log_gametype_table(table);
+    for (int count = UI_GAMETYPE_COUNT; count >= 0 && count < T5_UiGametypeMax; count++) {
+        char index[12];
+        snprintf(index, sizeof(index), "%i", count);
+        const char* name = StringTable_Lookup(table, 4, index, 0);
+        if (!name || !*name) {
+            return;
+        }
+        const char* localized = StringTable_Lookup(table, 4, index, 1);
+        const char* splitscreen = StringTable_Lookup(table, 4, index, 5);
+        strncpy(UI_GAMETYPE_NAME(count), name, T5_UiGametypeNameSize - 1);
+        UI_GAMETYPE_NAME(count)[T5_UiGametypeNameSize - 1] = 0;
+        strncpy(UI_GAMETYPE_LOCALIZED(count), localized ? localized : "",
+                T5_UiGametypeLocalizedSize - 1);
+        UI_GAMETYPE_LOCALIZED(count)[T5_UiGametypeLocalizedSize - 1] = 0;
+        UI_GAMETYPE_SPLITSCREEN(count) = splitscreen && !I_stricmp(splitscreen, "YES");
+        UI_GAMETYPE_COUNT = count + 1;
+        printf(T5INFO "Added %s (%s) to the gametype list.", name,
+               UI_GAMETYPE_LOCALIZED(count));
+    }
+}
+
 static void sync_party_map(void* uiContext) {
     if (!mapSyncMenuCount) {
         return;
@@ -1057,6 +1233,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
     if (!uiContext) {
         return;
     }
+    update_wager_match();
 
     // Also safe in a match: the game only touches the ban list from the main thread,
     // banClient included, because server commands wait for the server frame (0x3F0650)
@@ -1135,6 +1312,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
         if (hostMenu.selectGametypePending) {
             hostMenu.selectGametypePending = false;
             int openMenuCount = UI_OPEN_MENU_COUNT(uiContext);
+            extend_gametype_list();
             Menus_OpenByName(0, uiContext, "select_game_mode");
             arm_party_map_sync(uiContext, openMenuCount);
         }
@@ -1175,6 +1353,12 @@ void host_menu_on_server_scripts_loaded() {
     }
     hostSpawned = false;
     anti_god_class_reset();
+    // Before the gametype scripts run, they read xblive_wagermatch at their start.
+    if (wager_match_wanted()) {
+        force_wager_match();
+    } else {
+        restore_wager_match();
+    }
     spawnedPlayerString = SL_GetString("spawned_player", 1, SCRIPTINSTANCE_SERVER);
     keyboardInputString = SL_GetString("keyboard_input", 1, SCRIPTINSTANCE_SERVER);
 }
@@ -1355,6 +1539,8 @@ static void init_host_menu_offsets() {
     t5nmi(Dvar_SetStringByName);
     t5nmi(Dvar_SetInt);
     t5nmi(Session_SetPlaylist);
+    t5nmi(StringTable_Find);
+    t5nmi(StringTable_Lookup);
     t5nmi(CL_ControllerIndexFromClientNum);
     t5nmi(GamerProfile_UpdateDvarsFromProfile);
     t5nmi(GamerProfile_UpdateProfileFromDvars);
