@@ -408,7 +408,8 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
 static bool wagerMatchForced;
 static bool wagerMatchOriginal;
 static bool wagerMatchSeenInGame;
-static bool wagerMatchWasInGame;
+// The g_gametype last checked in this game, empty outside of it.
+static char wagerMatchCheckedGametype[64];
 
 static bool wager_match_wanted() {
     const char* gametype = Dvar_GetString("g_gametype");
@@ -452,17 +453,30 @@ void party_map_on_server_scripts_loaded() {
 // the match, not before it: the host loads the scripts before it is in the game, with
 // sv_running already set. Without sv_running a load that never reached the game was
 // aborted, the forced value must not stay for the next (possibly public wager) match.
-// The gametype can't change while cl_ingame stays set, so the check (a stringtable
-// lookup) runs once when entering the game instead of every frame.
+// The check (a stringtable lookup) runs only when g_gametype differs from the last
+// checked one, not every frame. Not only once when entering the game: a member may
+// receive g_gametype after cl_ingame is set (unverified).
 void party_map_update_wager_match() {
-    bool inGame = Dvar_GetBool("cl_ingame");
-    bool enteredGame = inGame && !wagerMatchWasInGame;
-    wagerMatchWasInGame = inGame;
-    if (enteredGame && wager_match_wanted()) {
+    if (!Dvar_GetBool("cl_ingame")) {
+        wagerMatchCheckedGametype[0] = '\0';
+        if (wagerMatchSeenInGame || !Dvar_GetBool("sv_running")) {
+            restore_wager_match();
+        }
+        return;
+    }
+    if (wagerMatchForced) {
+        wagerMatchSeenInGame = true;
+        return;
+    }
+    const char* gametype = Dvar_GetString("g_gametype");
+    if (!gametype || !strcmp(gametype, wagerMatchCheckedGametype)) {
+        return;
+    }
+    snprintf(wagerMatchCheckedGametype, sizeof(wagerMatchCheckedGametype), "%s",
+             gametype);
+    if (wager_match_wanted()) {
         force_wager_match();
         wagerMatchSeenInGame = true;
-    } else if (!inGame && (wagerMatchSeenInGame || !Dvar_GetBool("sv_running"))) {
-        restore_wager_match();
     }
 }
 
