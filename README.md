@@ -80,6 +80,8 @@ Save, Load and Delete Stats show their result as a PS3 notification when [webMAN
 
 To look at a saved file on a PC, open [tools/stats-viewer.html](tools/stats-viewer.html) in a browser and drop the `.bin` file on it (the file is only read locally, nothing is uploaded). It shows the gamertag of whoever saved the file (the file name for files saved before it was stored), level, prestige, the clan tag, career and game mode stats, weapons, killstreaks, contracts, the classes with their names, recent matches and the raw DDL values, and whether the file's CRC matches.
 
+In multiplayer, Silinium also writes the contract definitions the game downloads with its online data to `/dev_hdd0/tmp/Silinium/contracts.info` (the stats only store contract indices; the names come from this file).
+
 ## Anti-Freeze
 In multiplayer the loader blocks what the "Freeze PS3" options of RTM tools send to other consoles ([src/anti_freeze.c](src/anti_freeze.c)). It is always on and not available in zombies.
 

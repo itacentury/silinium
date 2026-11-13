@@ -49,6 +49,9 @@ All sources are in `src/`.
   and the menu options.
 - `stats_file.c`: Save/Load Stats files (`/dev_hdd0/tmp/Silinium/stats/<name>.bin`).
   `notify.c`: PS3 notifications through webMAN, over the game's `sys_net` import stubs.
+- `contracts_dump.c`: MP-only hook on the contracts.info parser; writes the text the
+  game fetched in the online WAD to `/dev_hdd0/tmp/Silinium/contracts.info` (source of
+  the contract names).
 - `offsets.h`: all game addresses (`T5_<Name>` / `T5_<Name>_ZM`).
 - `defines.h`: the `t5nd` / `t5nhd` / `t5ni` / `t5nmi` declaration macros and game
   structs.
