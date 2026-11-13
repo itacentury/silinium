@@ -963,6 +963,7 @@ typedef enum {
     ROTATION_PLAYLIST_SWITCHED,
     ROTATION_MISSING,
     ROTATION_HOST_GAMETYPE,
+    ROTATION_HOST_GAMETYPE_MAP_MISSING,
 } RotationResult;
 
 static void push_party_rotation_index(int party, int index) {
@@ -993,6 +994,14 @@ static RotationResult push_party_map_keep_gametype(int party, int slot, const ch
         Dvar_SetStringByName("ui_gametype", hostGametype);
     }
     store_synced_party_map();
+    if (mapChanged && index < 0) {
+        printf(T5WARNING
+               "%s is not in the current playlist rotation, members keep the old "
+               "map.",
+               map);
+        log_map_rotations(map);
+        return ROTATION_HOST_GAMETYPE_MAP_MISSING;
+    }
     return ROTATION_HOST_GAMETYPE;
 }
 
@@ -1073,6 +1082,8 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
             host_menu_ui_show_status("Switched to a playlist with this map and mode");
         } else if (result == ROTATION_HOST_GAMETYPE) {
             host_menu_ui_show_status("Wager mode: players see the old mode in the lobby");
+        } else if (result == ROTATION_HOST_GAMETYPE_MAP_MISSING) {
+            host_menu_ui_show_status("Wager mode: players keep the old map and mode");
         } else if (result == ROTATION_MISSING) {
             host_menu_ui_show_status(
                 mapChanged ? "Not in any playlist, players keep the old map"
