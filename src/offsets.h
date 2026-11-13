@@ -129,7 +129,8 @@
 // The UI's gametype list (select_game_mode feeders 0x40FED0 / 0x410A98 / 0x410DD0, validatePrivateMatchGametype).
 // UI_AssetCache (0x416398) fills it from mp/gametypesTable.csv: count = the maxnum_gametype row, entry i = the row whose
 // column 4 is i (column 0 name, column 1 localized name, column 5 "YES" = splitscreen). maxnum_gametype is 8, the
-// wager gametypes follow in the table with the indices 8 - 11 (hlnd, oic, gun, shrp; seen on the console). The basic training list follows at 0x18782A8, so 32 entries fit. Traced statically, unverified.
+// wager gametypes follow in the table with the indices 8 - 11 (hlnd, oic, gun, shrp; seen on the console). The basic
+// training list follows at 0x18782A8, so 32 entries fit. Traced statically, unverified.
 #define T5_UiGametypeCount 0x1877824
 #define T5_UiGametypes 0x1877828
 #define T5_UiGametypeSize 0x50
