@@ -1601,13 +1601,15 @@ static int cursor_row(int m, bool inGame) {
 
 // The visible options of menu m as rows of a list spanning left..left + width, the first
 // row's top at top. The selection bar sits at barRow (fractional while it slides), rows
-// reaching below bottom are left out (the panel is still growing).
-static void draw_options(int m, bool inGame, float left, float width, float top,
-                         float barRow, float bottom) {
+// reaching below bottom are left out (the panel is still growing). The row content is
+// moved sideways by shift, the selection bar is not, so it never leaves the list.
+static void draw_options(int m, bool inGame, float left, float width, float shift,
+                         float top, float barRow, float bottom) {
     float barTop = top + barRow * ROW_HEIGHT;
     if (visible_option_count(m, inGame) && barTop + ROW_HEIGHT <= bottom + 0.5f) {
         draw_shader(left, barTop, width, ROW_HEIGHT, selection, whiteMaterial);
     }
+    left += shift;
     float right = left + width - PANEL_PADDING;
     int row = 0;
     for (int i = 0; i < hostMenu.optionCount[m]; i++) {
@@ -1685,7 +1687,7 @@ static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
               MODAL_TITLE_SCALE, white);
     // Inside the border, so the selection bar doesn't cover it.
     draw_options(modalMenu, inGame, left + TOGGLE_BORDER, MODAL_WIDTH - TOGGLE_BORDER * 2,
-                 y + TOGGLE_BORDER + MODAL_TITLE_HEIGHT, barRow, y + height);
+                 0, y + TOGGLE_BORDER + MODAL_TITLE_HEIGHT, barRow, y + height);
     drawAlpha = panelAlpha;
 }
 
@@ -1809,10 +1811,11 @@ static int build_player_rows(int party, bool inGame) {
 }
 
 // The player rows, "Not in a lobby" outside a lobby or "No players" for an empty list.
-// The selection bar and the row limit work like in draw_options, rows start at left.
-static void draw_player_list(const PanelLayout* layout, float left, int party,
+// The selection bar, the row limit and shift work like in draw_options.
+static void draw_player_list(const PanelLayout* layout, float shift, int party,
                              bool inGame, bool notHost, float barRow) {
     float bottom = layout->footerTop - LIST_PADDING;
+    float left = layout->left + shift;
     const char* empty = notHost ? "Not in a lobby"
                         : !visible_option_count(HOST_MENU_PLAYERS, inGame) ? "No players"
                                                                            : 0;
@@ -1824,7 +1827,8 @@ static void draw_player_list(const PanelLayout* layout, float left, int party,
     }
     float barTop = layout->listTop + barRow * ROW_HEIGHT;
     if (barTop + ROW_HEIGHT <= bottom + 0.5f) {
-        draw_shader(left, barTop, layout->width, ROW_HEIGHT, selection, whiteMaterial);
+        draw_shader(layout->left, barTop, layout->width, ROW_HEIGHT, selection,
+                    whiteMaterial);
     }
     // Tag and name are drawn apart, so the ^7 that ends a colored tag doesn't turn the
     // selected name white. The colored tag crossfades to its plain copy as the bar covers
@@ -2000,16 +2004,17 @@ static void draw_panel(float alpha, float slide) {
     draw_header(&layout, tag, info, tab_index(m));
     draw_footer(&layout, controls, position);
 
-    // A new page's rows fade in while sliding into place.
+    // A new page's rows fade in while their content slides into place. The selection bar
+    // only fades, so it stays inside the panel.
     float page = ease_out(anim_progress(pageTime, ANIM_PAGE_US));
-    float left = layout.left + pageDirection * (1 - page) * ANIM_PAGE_SLIDE;
+    float shift = pageDirection * (1 - page) * ANIM_PAGE_SLIDE;
     drawAlpha = alpha * page;
     draw_page_label(&layout, boxMenu);
     if (players) {
-        draw_player_list(&layout, left, party, inGame, notHost, barRow);
+        draw_player_list(&layout, shift, party, inGame, notHost, barRow);
     } else {
-        draw_options(boxMenu, inGame, left, layout.width, layout.listTop, barRow,
-                     layout.footerTop - LIST_PADDING);
+        draw_options(boxMenu, inGame, layout.left, layout.width, shift, layout.listTop,
+                     barRow, layout.footerTop - LIST_PADDING);
     }
     drawAlpha = alpha;
     draw_modal_animated(&layout, m, party, inGame);
