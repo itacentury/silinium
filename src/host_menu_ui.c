@@ -508,8 +508,7 @@ static void change_name() {
     if (!hostMenu.originalName[0]) {
         strcpy(hostMenu.originalName, (char*)T5_PlayerName2);
     }
-    sys_timer_usleep(200000);  // let X go before the game sees buttons again
-    hostMenu.open = false;
+    close_menu();
     hostMenu.changeNamePending = true;
 }
 
