@@ -441,6 +441,8 @@ static void close_menu() {
     hostMenu.closing = true;
     sys_timer_usleep(200000);
     hostMenu.open = false;
+    // open has to be visible before closing clears, the draw reads closing first.
+    __lwsync();
     hostMenu.closing = false;
 }
 
@@ -2032,7 +2034,11 @@ void host_menu_ui_draw() {
     }
 
     frameTime = sys_time_get_system_time();
-    bool open = hostMenu.open && !hostMenu.closing;
+    // closing first: close_menu() clears it only after open, so a finished close can't
+    // read as open for a frame.
+    bool closing = hostMenu.closing;
+    __lwsync();
+    bool open = hostMenu.open && !closing;
     if (open != shownOpen) {
         shownOpen = open;
         // Reopening mid-fade continues from the alpha on screen, which is measured with
