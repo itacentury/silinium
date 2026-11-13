@@ -1597,8 +1597,19 @@ function section(title, body, note = "") {
 
 const tableShell = (id, extra = "") => `<div class="panel scroll ${extra}"><table id="${id}"><thead></thead><tbody></tbody></table></div>`;
 
-// columns: [{key, label, fmt?, sortBy?, bar?}]; a bar column draws key relative to its maximum.
+// columns: [{key, label, fmt?, sortBy?, bar?, noBar?}]; a bar column draws the sorted column
+// relative to its maximum, or its own key when that column is not numeric or marked noBar.
 const tables = new Map();
+
+function barKeyFor(columns, rows, sortKey) {
+  const barColumn = columns.find((c) => c.bar);
+  if (!barColumn) {
+    return null;
+  }
+  const sorted = columns.find((c) => !c.bar && (c.sortBy || c.key) === sortKey);
+  const numeric = rows.some((r) => typeof r[sortKey] === "number");
+  return sorted && !sorted.noBar && numeric ? sortKey : barColumn.key;
+}
 function setupTable(id, columns, rows, sortKey) {
   const el = document.getElementById(id);
   el.tHead.innerHTML = "<tr>" + columns.map((c) => c.key === "label" || c.bar
@@ -1619,12 +1630,12 @@ function renderTable(id) {
   const el = document.getElementById(id);
   const sorted = [...rows].sort((a, b) => typeof a[sortKey] === "string"
     ? a[sortKey].localeCompare(b[sortKey]) : (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
-  const barColumn = columns.find((c) => c.bar);
-  const max = barColumn ? Math.max(1, ...rows.map((r) => r[barColumn.key])) : 1;
+  const barKey = barKeyFor(columns, rows, sortKey);
+  const max = barKey ? Math.max(1, ...rows.map((r) => r[barKey] ?? 0)) : 1;
   el.querySelectorAll("th.sortable").forEach((th) => th.classList.toggle("sorted", th.dataset.key === sortKey));
   el.tBodies[0].innerHTML = sorted.map((r) => "<tr>" + columns.map((c) => {
     if (c.bar) {
-      return `<td class="barcell"><div style="width:${(100 * r[c.key] / max).toFixed(1)}%"></div></td>`;
+      return `<td class="barcell"><div style="width:${(100 * (r[barKey] ?? 0) / max).toFixed(1)}%"></div></td>`;
     }
     const value = c.fmt ? c.fmt(r) : r[c.key];
     return `<td class="${c.key === "label" ? "" : "mono"}">${esc(typeof value === "number" ? fmt(value) : value)}</td>`;
@@ -1778,7 +1789,7 @@ function contractRows(s) {
 const CONTRACT_COLUMNS = [
   { key: "label", label: "Contract" },
   { key: "purchased", label: "Times purchased" },
-  { key: "deactivatedText", label: "Last deactivated", sortBy: "deactivated", fmt: (r) => unixDate(r.deactivated) },
+  { key: "deactivatedText", label: "Last deactivated", sortBy: "deactivated", noBar: true, fmt: (r) => unixDate(r.deactivated) },
   { key: "purchased", label: "", bar: true },
 ];
 
