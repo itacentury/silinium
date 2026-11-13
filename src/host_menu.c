@@ -1117,13 +1117,15 @@ static void restore_wager_match() {
 
 // The host forces it on the server script load already
 // (host_menu_on_server_scripts_loaded), members once they are in the game. Restored after
-// the match, not before it: the host loads the scripts before it is in the game.
+// the match, not before it: the host loads the scripts before it is in the game, with
+// sv_running already set. Without sv_running a load that never reached the game was
+// aborted, the forced value must not stay for the next (possibly public wager) match.
 static void update_wager_match() {
     bool inGame = Dvar_GetBool("cl_ingame");
     if (inGame && wager_match_wanted()) {
         force_wager_match();
         wagerMatchSeenInGame = true;
-    } else if (!inGame && wagerMatchSeenInGame) {
+    } else if (!inGame && (wagerMatchSeenInGame || !Dvar_GetBool("sv_running"))) {
         restore_wager_match();
     }
 }
