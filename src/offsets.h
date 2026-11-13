@@ -302,7 +302,8 @@
 #define T5_Stats_Prestige 0x20946DD
 #define T5_Stats_Rank 0x20946E1 // little endian, rank id (level - 1), what the menus show
 #define T5_StatsSize 0x9968
-// The DDL data starts at T5_Stats_Base + 0x28, the layout is in data/mp/stats_ddl.txt in bo1-re. itemstats: 256 items of 671 bits from bit 4, the first 3 bits of an item
+// The DDL data starts at T5_Stats_Base + 0x28, the layout is in data/mp/stats_ddl.txt
+// in bo1-re. itemstats: 256 items of 671 bits from bit 4, the first 3 bits of an item
 // are isproversionunlocked (then new, purchased), bits packed from the lowest one.
 #define T5_Stats_ItemStats 0x208D898
 #define T5_Stats_ItemStatsBit 4

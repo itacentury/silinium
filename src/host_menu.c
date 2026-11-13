@@ -797,36 +797,6 @@ static const char* rotation_entry_gametype(int entry) {
     return playlistName;
 }
 
-// Lists the gametypes the map has in each playlist rotation, to see on the console why a
-// selection was not found.
-static void log_map_rotations(const char* map) {
-    int playlist = 0;
-    for (int slot = 0; slot < T5_PlaylistMax; slot++) {
-        int count = PLAYLIST_ROTATION_COUNT(slot);
-        if (!count) {
-            continue;
-        }
-        int first = PLAYLIST_ROTATION_FIRST(slot);
-        char line[256];
-        int length = 0;
-        line[0] = 0;
-        for (int i = 0; i < count && i < T5_PlaylistRotationNone; i++) {
-            const char* entryMap = PLAYLIST_ROTATION_MAP(first + i);
-            if (!entryMap || I_stricmp(entryMap, map) || length >= (int)sizeof(line)) {
-                continue;
-            }
-            const char* raw = PLAYLIST_ROTATION_GAMETYPE(first + i);
-            const char* resolved = rotation_entry_gametype(first + i);
-            length += snprintf(line + length, sizeof(line) - length, " %s (%s)",
-                               resolved ? resolved : "-", raw ? raw : "-");
-        }
-        if (line[0]) {
-            printf(T5INFO "Playlist %i has %s with:%s", playlist, map, line);
-        }
-        playlist++;
-    }
-}
-
 // Index of the map in the rotation of the playlist slot, preferring the entry with the
 // gametype as well. -1 if the map is not in the rotation, or only with another gametype
 // while requireGametype is set.
@@ -908,10 +878,8 @@ static int find_playlist_with_rotation(int current, const char* map, const char*
                         : playlist_slot_rotation_index(slot, map, gametype, true);
         if (found >= 0) {
             int matches = playlist_slot_gametype_matches(slot, gametype);
-            int cost = playlist_slot_wager_cost(slot);
-            printf(T5INFO "Playlist %i has %s / %s, %i of %i entries are %s, cost %i.",
-                   playlist, map, gametype, matches, count, gametype, cost);
-            if (cost <= 0 && (best < 0 || matches * bestCount > bestMatches * count)) {
+            if (playlist_slot_wager_cost(slot) <= 0 &&
+                (best < 0 || matches * bestCount > bestMatches * count)) {
                 best = playlist;
                 bestMatches = matches;
                 bestCount = count;
@@ -999,7 +967,6 @@ static RotationResult push_party_map_keep_gametype(int party, int slot, const ch
                "%s is not in the current playlist rotation, members keep the old "
                "map.",
                map);
-        log_map_rotations(map);
         return ROTATION_HOST_GAMETYPE_MAP_MISSING;
     }
     return ROTATION_HOST_GAMETYPE;
@@ -1034,7 +1001,6 @@ static RotationResult push_party_rotation_map(int party, const char* map,
             printf(T5WARNING
                    "%s / %s is in no playlist rotation, members keep the old one.",
                    map, gametype);
-            log_map_rotations(map);
             return ROTATION_MISSING;
         }
         printf(T5INFO "%s / %s is not in playlist %i, switching to playlist %i.", map,
@@ -1198,27 +1164,6 @@ static void keep_matchmaking_playlist(bool inGame) {
            matchmakingPlaylist);
 }
 
-// Shows what the table holds (description and icon columns included), for checking the
-// rows extend_gametype_list adds.
-static void log_gametype_table(void* table) {
-    static bool logged;
-    if (logged) {
-        return;
-    }
-    logged = true;
-    int columns = STRING_TABLE_COLUMN_COUNT(table);
-    for (int row = 0; row < STRING_TABLE_ROW_COUNT(table); row++) {
-        char line[256];
-        int length = snprintf(line, sizeof(line), "%i:", row);
-        for (int column = 0; column < columns && length < (int)sizeof(line); column++) {
-            const char* cell = STRING_TABLE_CELL(table, row, column);
-            length +=
-                snprintf(line + length, sizeof(line) - length, " %s |", cell ? cell : "");
-        }
-        printf(T5INFO "gametypesTable row %s", line);
-    }
-}
-
 // The game's list stops at maxnum_gametype, which leaves out the wager gametypes the
 // table has right after it. Adds the following indices like UI_AssetCache does, in the
 // table's order: the menu looks description and icon up by list index. UI_AssetCache may
@@ -1229,7 +1174,6 @@ static void extend_gametype_list() {
     if (!table) {
         return;
     }
-    log_gametype_table(table);
     for (int count = UI_GAMETYPE_COUNT; count >= 0 && count < T5_UiGametypeMax; count++) {
         char index[12];
         snprintf(index, sizeof(index), "%i", count);

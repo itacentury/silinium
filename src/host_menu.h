@@ -47,11 +47,6 @@
 #define UI_GAMETYPE_LOCALIZED(i) ((char*)(UI_GAMETYPE(i) + T5_UiGametypeLocalizedOffset))
 #define UI_GAMETYPE_SPLITSCREEN(i) \
     (*(int*)(UI_GAMETYPE(i) + T5_UiGametypeSplitscreenOffset))
-#define STRING_TABLE_COLUMN_COUNT(table) (*(int*)((char*)(table) + 4))
-#define STRING_TABLE_ROW_COUNT(table) (*(int*)((char*)(table) + 8))
-#define STRING_TABLE_CELL(table, row, column)          \
-    (*(const char**)(*(char**)((char*)(table) + 0xC) + \
-                     ((row) * STRING_TABLE_COLUMN_COUNT(table) + (column)) * 8))
 #define PARTY_MAP_RING_INDEX(party) (*(int*)((party) + T5_PartyMapRingIndexOffset))
 #define PARTY_MAP_RING_ENTRY(party, i) \
     (*(uint8_t*)((party) + T5_PartyMapRingOffset + (i)))
