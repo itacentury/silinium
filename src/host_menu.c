@@ -778,69 +778,197 @@ static bool party_map_uses_rotation_ring() {
     return Com_IsPublicOnlineGame() && !Dvar_GetBool("xblive_wagermatch");
 }
 
-// Index of the map in the rotation of the current playlist, preferring the entry with the
-// gametype as well. The playlist slot is found like 0x43F020 does. -1 if the map is not
-// in the rotation, or only with another gametype while requireGametype is set.
-static int playlist_rotation_index(const char* map, const char* gametype,
-                                   bool requireGametype) {
-    dvar_s* playlistDvar = Dvar_FindVar("playlist");
-    if (!playlistDvar) {
-        return -1;
+// The ui_gametype value of a rotation entry, resolved like 0x440910 does. The raw
+// playlist name if the table does not have it (the game would stop with an error there).
+static const char* rotation_entry_gametype(int entry) {
+    const char* playlistName = PLAYLIST_ROTATION_GAMETYPE(entry);
+    if (!playlistName) {
+        return 0;
     }
-    int playlist = playlistDvar->current.integer;
-    int rank = 0;
+    for (int i = 0; i < T5_PlaylistGametypeMax; i++) {
+        const char* name = PLAYLIST_GAMETYPE_PLAYLIST_NAME(i);
+        if (name && !I_stricmp(name, playlistName)) {
+            return PLAYLIST_GAMETYPE_NAME(i);
+        }
+    }
+    return playlistName;
+}
+
+// Lists the gametypes the map has in each playlist rotation, to see on the console why a
+// selection was not found.
+static void log_map_rotations(const char* map) {
+    int playlist = 0;
     for (int slot = 0; slot < T5_PlaylistMax; slot++) {
         int count = PLAYLIST_ROTATION_COUNT(slot);
         if (!count) {
             continue;
         }
-        if (rank++ != playlist) {
-            continue;
-        }
         int first = PLAYLIST_ROTATION_FIRST(slot);
-        int mapOnly = -1;
-        // The ring holds bytes and T5_PlaylistRotationNone means no map.
+        char line[256];
+        int length = 0;
+        line[0] = 0;
         for (int i = 0; i < count && i < T5_PlaylistRotationNone; i++) {
             const char* entryMap = PLAYLIST_ROTATION_MAP(first + i);
-            if (!entryMap || I_stricmp(entryMap, map)) {
+            if (!entryMap || I_stricmp(entryMap, map) || length >= (int)sizeof(line)) {
                 continue;
             }
-            const char* entryGametype = PLAYLIST_ROTATION_GAMETYPE(first + i);
-            if (entryGametype && !I_stricmp(entryGametype, gametype)) {
-                return i;
-            }
-            if (mapOnly < 0) {
-                mapOnly = i;
-            }
+            const char* raw = PLAYLIST_ROTATION_GAMETYPE(first + i);
+            const char* resolved = rotation_entry_gametype(first + i);
+            length += snprintf(line + length, sizeof(line) - length, " %s (%s)",
+                               resolved ? resolved : "-", raw ? raw : "-");
         }
-        return requireGametype ? -1 : mapOnly;
+        if (line[0]) {
+            printf(T5INFO "Playlist %i has %s with:%s", playlist, map, line);
+        }
+        playlist++;
+    }
+}
+
+// Index of the map in the rotation of the playlist slot, preferring the entry with the
+// gametype as well. -1 if the map is not in the rotation, or only with another gametype
+// while requireGametype is set.
+static int playlist_slot_rotation_index(int slot, const char* map, const char* gametype,
+                                        bool requireGametype) {
+    int count = PLAYLIST_ROTATION_COUNT(slot);
+    int first = PLAYLIST_ROTATION_FIRST(slot);
+    int mapOnly = -1;
+    // The ring holds bytes and T5_PlaylistRotationNone means no map.
+    for (int i = 0; i < count && i < T5_PlaylistRotationNone; i++) {
+        const char* entryMap = PLAYLIST_ROTATION_MAP(first + i);
+        if (!entryMap || I_stricmp(entryMap, map)) {
+            continue;
+        }
+        const char* entryGametype = rotation_entry_gametype(first + i);
+        if (entryGametype && !I_stricmp(entryGametype, gametype)) {
+            return i;
+        }
+        if (mapOnly < 0) {
+            mapOnly = i;
+        }
+    }
+    return requireGametype ? -1 : mapOnly;
+}
+
+// Slot of the playlist (the playlist dvar's value), counted over the slots with a
+// rotation like 0x43F020 does. -1 if there is none.
+static int playlist_slot(int playlist) {
+    int rank = 0;
+    for (int slot = 0; slot < T5_PlaylistMax; slot++) {
+        if (!PLAYLIST_ROTATION_COUNT(slot)) {
+            continue;
+        }
+        if (rank++ == playlist) {
+            return slot;
+        }
     }
     return -1;
 }
 
-// Pushes the rotation index like the game's own rotation (0x1F0268) and applies the entry
-// to the host as well, so the host's ui_gametype matches what members get. Returns false
-// if the selection is not in the playlist rotation.
-static bool push_party_rotation_map(int party, const char* map, const char* gametype,
-                                    bool mapChanged) {
-    // A new gametype alone must not fall back to an entry with another one, that would
-    // undo the host's choice.
-    int index = playlist_rotation_index(map, gametype, !mapChanged);
-    if (index < 0) {
-        printf(T5WARNING
-               "%s / %s is not in the playlist rotation, members keep the old map.",
-               map, gametype);
-        return false;
+// How many rotation entries of the playlist slot have the gametype.
+static int playlist_slot_gametype_matches(int slot, const char* gametype) {
+    int count = PLAYLIST_ROTATION_COUNT(slot);
+    int first = PLAYLIST_ROTATION_FIRST(slot);
+    int matches = 0;
+    for (int i = 0; i < count && i < T5_PlaylistRotationNone; i++) {
+        const char* entryGametype = rotation_entry_gametype(first + i);
+        if (entryGametype && !I_stricmp(entryGametype, gametype)) {
+            matches++;
+        }
     }
-    int slot =
+    return matches;
+}
+
+// The playlist other than current whose rotation has the map with the gametype and the
+// largest share of that gametype, so a playlist of only that mode wins over mixed ones
+// like Mosh Pit. Its rotation index goes into index. -1 if there is none.
+static int find_playlist_with_rotation(int current, const char* map, const char* gametype,
+                                       int* index) {
+    int best = -1;
+    int bestMatches = 0;
+    int bestCount = 1;
+    int playlist = 0;
+    for (int slot = 0; slot < T5_PlaylistMax; slot++) {
+        int count = PLAYLIST_ROTATION_COUNT(slot);
+        if (!count) {
+            continue;
+        }
+        int found = playlist == current
+                        ? -1
+                        : playlist_slot_rotation_index(slot, map, gametype, true);
+        if (found >= 0) {
+            int matches = playlist_slot_gametype_matches(slot, gametype);
+            printf(T5INFO "Playlist %i has %s / %s, %i of %i entries are %s.", playlist,
+                   map, gametype, matches, count, gametype);
+            if (best < 0 || matches * bestCount > bestMatches * count) {
+                best = playlist;
+                bestMatches = matches;
+                bestCount = count;
+                *index = found;
+            }
+        }
+        playlist++;
+    }
+    return best;
+}
+
+// The playlist the matchmaking session was offered in before the host menu switched the
+// playlist, -1 while none is kept. Players searching that playlist must keep finding the
+// lobby.
+static int matchmakingPlaylist = -1;
+
+typedef enum {
+    ROTATION_PUSHED,
+    ROTATION_PLAYLIST_SWITCHED,
+    ROTATION_MISSING,
+} RotationResult;
+
+// Pushes the rotation index like the game's own rotation (0x1F0268) and applies the entry
+// to the host as well, so the host's ui_gametype matches what members get. If only
+// another playlist has the selection in its rotation, the host switches to it: partystate
+// carries the playlist with the ring, so members resolve the index in the same playlist.
+static RotationResult push_party_rotation_map(int party, const char* map,
+                                              const char* gametype, bool mapChanged) {
+    dvar_s* playlistDvar = Dvar_FindVar("playlist");
+    if (!playlistDvar) {
+        return ROTATION_MISSING;
+    }
+    int playlist = playlistDvar->current.integer;
+    int slot = playlist_slot(playlist);
+    int index = slot < 0 ? -1 : playlist_slot_rotation_index(slot, map, gametype, true);
+    // A new map may keep the playlist with another gametype. A new gametype alone must
+    // not fall back to an entry with another one, that would undo the host's choice.
+    if (index < 0 && mapChanged && slot >= 0) {
+        index = playlist_slot_rotation_index(slot, map, gametype, false);
+    }
+    RotationResult result = ROTATION_PUSHED;
+    if (index < 0) {
+        int other = find_playlist_with_rotation(playlist, map, gametype, &index);
+        if (other < 0) {
+            printf(T5WARNING
+                   "%s / %s is in no playlist rotation, members keep the old one.",
+                   map, gametype);
+            log_map_rotations(map);
+            return ROTATION_MISSING;
+        }
+        printf(T5INFO "%s / %s is not in playlist %i, switching to playlist %i.", map,
+               gametype, playlist, other);
+        if (matchmakingPlaylist < 0) {
+            int offered = SESSION_INFO_PLAYLIST;
+            matchmakingPlaylist = offered >= 0 ? offered : playlist;
+        }
+        Dvar_SetInt(playlistDvar, other);
+        printf(T5INFO "Session still offered in playlist %i.", SESSION_INFO_PLAYLIST);
+        result = ROTATION_PLAYLIST_SWITCHED;
+    }
+    int ringSlot =
         (int)(((unsigned int)PARTY_MAP_RING_INDEX(party) + 1) % T5_PartyMapRingSize);
-    PARTY_MAP_RING_ENTRY(party, slot) = (uint8_t)index;
-    PARTY_MAP_RING_INDEX(party) = slot;
+    PARTY_MAP_RING_ENTRY(party, ringSlot) = (uint8_t)index;
+    PARTY_MAP_RING_INDEX(party) = ringSlot;
     // Rewrites ui_mapname / ui_gametype; map and gametype may point into the old values,
     // so they are not used afterwards.
     Playlist_SetRotationEntry(0, index);
     store_synced_party_map();
-    return true;
+    return result;
 }
 
 static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
@@ -855,9 +983,16 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     }
     store_synced_party_map();
     // The game's rotation only uses the LobbyParty ring (0x1F0268).
-    if (lobbyHosted && party_map_uses_rotation_ring() &&
-        !push_party_rotation_map(T5_LobbyParty, map, gametype, mapChanged)) {
-        host_menu_ui_show_status("Not in this playlist, players keep the old map");
+    if (lobbyHosted && party_map_uses_rotation_ring()) {
+        RotationResult result =
+            push_party_rotation_map(T5_LobbyParty, map, gametype, mapChanged);
+        if (result == ROTATION_PLAYLIST_SWITCHED) {
+            host_menu_ui_show_status("Switched to a playlist with this map and mode");
+        } else if (result == ROTATION_MISSING) {
+            host_menu_ui_show_status(
+                mapChanged ? "Not in any playlist, players keep the old map"
+                           : "Not in any playlist, players keep the old mode");
+        }
     }
     // Unlike send_party_rename not limited to private matches: the host picked this map /
     // mode on purpose through the host menu. Outside a private match the members only see
@@ -868,6 +1003,34 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     if (gameHosted) {
         Party_UpdateState(T5_GameParty);
     }
+}
+
+// The game writes the session's playlist again when it recreates the session (e.g. after
+// a match), the switched one would then hide the lobby from the original playlist.
+static void keep_matchmaking_playlist() {
+    if (matchmakingPlaylist < 0) {
+        return;
+    }
+    dvar_s* playlistDvar = Dvar_FindVar("playlist");
+    if (!playlistDvar || !party_is_local_host(T5_LobbyParty) ||
+        !party_map_uses_rotation_ring() ||
+        playlistDvar->current.integer == matchmakingPlaylist) {
+        matchmakingPlaylist = -1;
+        return;
+    }
+    int offered = SESSION_INFO_PLAYLIST;
+    if (offered < 0 || offered == matchmakingPlaylist) {
+        return;
+    }
+    Session_SetPlaylist(0, matchmakingPlaylist);
+    if (SESSION_INFO_PLAYLIST != matchmakingPlaylist) {
+        printf(T5WARNING "Session is offered in playlist %i, could not restore %i.",
+               offered, matchmakingPlaylist);
+        matchmakingPlaylist = -1;
+        return;
+    }
+    printf(T5INFO "Session was offered in playlist %i, restored %i.", offered,
+           matchmakingPlaylist);
 }
 
 static void sync_party_map(void* uiContext) {
@@ -976,6 +1139,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
             arm_party_map_sync(uiContext, openMenuCount);
         }
         sync_party_map(uiContext);
+        keep_matchmaking_playlist();
         if (hostMenu.saveStatsKeyboardPending && game_keyboard_closed()) {
             hostMenu.saveStatsKeyboardPending = false;
             host_menu_ui_open_stats_keyboard();
@@ -1189,6 +1353,8 @@ static void init_host_menu_offsets() {
     t5nmi(RankIcon_Lookup);
     t5nmi(Dvar_GetString);
     t5nmi(Dvar_SetStringByName);
+    t5nmi(Dvar_SetInt);
+    t5nmi(Session_SetPlaylist);
     t5nmi(CL_ControllerIndexFromClientNum);
     t5nmi(GamerProfile_UpdateDvarsFromProfile);
     t5nmi(GamerProfile_UpdateProfileFromDvars);

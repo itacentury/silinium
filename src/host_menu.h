@@ -32,6 +32,13 @@
     (T5_PlaylistRotationEntries + (i) * T5_PlaylistRotationEntrySize)
 #define PLAYLIST_ROTATION_MAP(i) (*(const char**)PLAYLIST_ROTATION_ENTRY(i))
 #define PLAYLIST_ROTATION_GAMETYPE(i) (*(const char**)(PLAYLIST_ROTATION_ENTRY(i) + 4))
+#define PLAYLIST_GAMETYPE_ENTRY(i) (T5_PlaylistGametypes + (i) * T5_PlaylistGametypeSize)
+#define PLAYLIST_GAMETYPE_NAME(i) (*(const char**)PLAYLIST_GAMETYPE_ENTRY(i))
+#define PLAYLIST_GAMETYPE_PLAYLIST_NAME(i) \
+    (*(const char**)(PLAYLIST_GAMETYPE_ENTRY(i) + 4))
+#define SESSION_INFO (*(int*)T5_SessionInfo)
+#define SESSION_INFO_PLAYLIST \
+    (SESSION_INFO ? *(int*)(SESSION_INFO + T5_SessionInfoPlaylistOffset) : -1)
 #define PARTY_MAP_RING_INDEX(party) (*(int*)((party) + T5_PartyMapRingIndexOffset))
 #define PARTY_MAP_RING_ENTRY(party, i) \
     (*(uint8_t*)((party) + T5_PartyMapRingOffset + (i)))
@@ -104,6 +111,8 @@ t5nd(void, ClanTag_Format,
 t5nd(void, RankIcon_Lookup, (int rank, int prestige, void** material));
 t5nd(const char*, Dvar_GetString, (const char* name));
 t5nd(void, Dvar_SetStringByName, (const char* name, const char* value));
+t5nd(void, Dvar_SetInt, (dvar_s * dvar, int value));
+t5nd(void, Session_SetPlaylist, (int localClientNum, int playlist));
 t5nd(int, CL_ControllerIndexFromClientNum, (int localClientNum));
 t5nd(void, GamerProfile_UpdateDvarsFromProfile, (int controller));
 t5nd(void, GamerProfile_UpdateProfileFromDvars, (int controller, int a2));

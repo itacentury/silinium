@@ -90,6 +90,11 @@
 // In a public online game they ignore them: the host sends the 8 playlist rotation indices of the LobbyParty map ring
 // (Party_SendPartyState at 0x2098FC), a member pushes them into its own ring and sets ui_mapname / ui_gametype from the
 // current one (0x200880 - 0x200A14). The game's own host side is 0x1F0268. Traced statically, names inferred.
+// The playlist number goes along: the host writes the playlist dvar as a byte before the ring (0x2098EC), the member
+// sets its own playlist from it (0x200828 - 0x200838) before it resolves the ring, so a rotation index of another
+// playlist works once the host switched to it. NetMsg_go (0x1F4E68) applies playlist and rotation index again at the
+// match start (0x1F5338 / 0x1F5348) and copies ui_mapname / ui_gametype into party_* afterwards, which undoes a
+// gametype that is not in the rotation. Traced statically, unverified on the console.
 // () onlinegame && !xblive_privatematch && !xblive_basictraining && !xblive_theater, dvar reads only. Wager matches
 // pass.
 #define T5_Com_IsPublicOnlineGame 0x39EC58
@@ -102,6 +107,20 @@
 #define T5_PlaylistRotationNone 0xFF // ring entry without a map, Playlist_SetRotationEntry skips it (0x440950)
 #define T5_PlaylistRotationEntries 0x1898250 // + i * 16: +0 map name, +4 gametype name (read at 0x440EDC)
 #define T5_PlaylistRotationEntrySize 16
+// The gametype of a rotation entry (+4) is a playlist gametype name, not the ui_gametype value: 0x440910 looks it up in
+// this table (+4, I_stricmp at 0x440D20 ff., 64 entries) and sets ui_gametype to +0 of the hit (0x44104C - 0x4410A8),
+// an unknown name is a Com_Error (0x440EB0). Field meanings inferred from that code, unverified.
+#define T5_PlaylistGametypes 0x1897D2C
+#define T5_PlaylistGametypeSize 0x14
+#define T5_PlaylistGametypeMax 64
+// Matchmaking session info (pointer). Searches send the searcher's playlist dvar (0x69A79C), the host offers +0x148.
+// Only written by 0x68B5B8: host start (0x20D420), session creation / host migration (0x69C09C), search (0x69A788)
+// and members on partystate (0x200844), so changing the playlist dvar alone leaves it. Traced statically, unverified.
+#define T5_SessionInfo 0x20009EC
+#define T5_SessionInfoPlaylistOffset 0x148
+// (localClientNum, playlist) sets the session info's playlist (+0x148) and slot (+0x144, +0x110) and marks it for the
+// next session update (+0x160). Does nothing while the dvar at 0x1FE074C is off. Inferred from code, unverified.
+#define T5_Session_SetPlaylist 0x68B5B8
 #define T5_Party_BanName 0x1E7338 // (name), adds to the ban list at LobbyParty + 0x53CC (16 x 0x24) that party joins check
                                   // (0x1E7830 at 0x2134CC), skipped for party id 1 (GameParty). One
                                   // list for both parties, cleared by the party reset 0x1F98B0
@@ -166,6 +185,7 @@
 #define T5_GamerProfile_UpdateProfileFromDvars 0x562090
 #define T5_Dvar_GetString 0x4C7370
 #define T5_Dvar_SetStringByName 0x4CF170
+#define T5_Dvar_SetInt 0x4CB970 // (dvar, value), formats "%i" and sets it; NetMsg_go sets playlist with it (0x1F5338)
 #define T5_KeyboardInvalidChars_Patch 0x3FF264 // character check passed, original: bne cr1 (0x40860048)
 #define T5_KeyboardInvalidChars_Target 0x3FF2AC
 
