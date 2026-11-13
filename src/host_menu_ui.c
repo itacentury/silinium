@@ -1660,17 +1660,17 @@ static void draw_options(int m, bool inGame, float left, float width, float shif
     }
 }
 
-// The options of modalMenu below the selected row of listMenu, or above it when they
-// would reach past the bottom of the panel and fit above it within the list, so they
-// never cover the header on short lists. alpha and slide (pushed down by it) animate it
-// in and out, barRow is its selection bar.
-static void draw_modal(const PanelLayout* layout, int listMenu, int modalMenu,
+// The options of modalMenu below list row listRow, or above it when they would reach
+// past the bottom of the panel and fit above it within the list, so they never cover the
+// header on short lists. alpha and slide (pushed down by it) animate it in and out,
+// barRow is its selection bar.
+static void draw_modal(const PanelLayout* layout, int listRow, int modalMenu,
                        const char* title, bool inGame, float alpha, float slide,
                        float barRow) {
     float height = TOGGLE_BORDER + MODAL_TITLE_HEIGHT +
                    visible_option_count(modalMenu, inGame) * ROW_HEIGHT + LIST_PADDING +
                    TOGGLE_BORDER;
-    float rowTop = layout->listTop + cursor_row(listMenu, inGame) * ROW_HEIGHT;
+    float rowTop = layout->listTop + listRow * ROW_HEIGHT;
     float y = rowTop + ROW_HEIGHT;
     if (y + height > layout->bottom && rowTop - height >= layout->listTop) {
         y = rowTop - height;
@@ -1697,9 +1697,11 @@ static int shownModal = -1;
 static bool modalClosing;
 static Tween modalAlpha;
 static Tween modalBar;
-// Frozen while the modal fades out: by then a delete may have rebuilt the stats list or a
-// kick emptied the slot, so the live title would switch to someone or something else.
+// Frozen while the modal fades out: by then a delete may have rebuilt the stats list (and
+// clamped its cursor) or a kick emptied the slot, so the live title would switch to
+// someone or something else and the modal could jump to another row.
 static char modalTitle[32];
+static int modalRow;
 
 static void draw_modal_animated(const PanelLayout* layout, int m, int party,
                                 bool inGame) {
@@ -1738,8 +1740,9 @@ static void draw_modal_animated(const PanelLayout* layout, int m, int party,
                               [hostMenu.cursor[HOST_MENU_STATS_LIST]]
                       .text;
         snprintf(modalTitle, sizeof(modalTitle), "%s", title);
+        modalRow = cursor_row(listMenu, inGame);
     }
-    draw_modal(layout, listMenu, shownModal, modalTitle, inGame, alpha,
+    draw_modal(layout, modalRow, shownModal, modalTitle, inGame, alpha,
                (1 - alpha) * ANIM_MODAL_SLIDE, barRow);
 }
 
