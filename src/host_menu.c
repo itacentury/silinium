@@ -693,15 +693,18 @@ static void apply_loaded_profile_names(const StatsFileProfile* profile) {
 // lobbies, the stock private-match menus) never send partystate from here. Every select
 // menu the host menu opened is bound on its own, so a second one (Select Gametype over
 // Select Map) doesn't end the sync while the first is still open. Disarmed while no
-// bound menu is left; the stack never holds more menus than its max.
+// bound menu is left; the stack never holds more menus than its max. A change that comes
+// with a moved LobbyParty ring is the game's own rotation and only becomes the baseline.
 static void* mapSyncMenus[T5_UiMenuStackMax];
 static int mapSyncMenuCount;
 static char syncedMap[64];
 static char syncedGametype[64];
+static int syncedRingIndex;
 
 static void store_synced_party_map() {
     read_dvar_string("ui_mapname", syncedMap, sizeof(syncedMap));
     read_dvar_string("ui_gametype", syncedGametype, sizeof(syncedGametype));
+    syncedRingIndex = PARTY_MAP_RING_INDEX(T5_LobbyParty);
 }
 
 static bool ui_menu_is_open(void* uiContext, const void* menu) {
@@ -1052,7 +1055,16 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
     if (!mapChanged && !strcmp(gametype, syncedGametype)) {
         return;
     }
+    // The game's rotation (0x1F0268) moved the ring and already sent partystate; our own
+    // pushes re-baseline the ring index right away. A host selection in the same frame is
+    // dropped, the rotation overwrote it anyway.
+    bool rotatedByGame =
+        lobbyHosted && PARTY_MAP_RING_INDEX(T5_LobbyParty) != syncedRingIndex;
     store_synced_party_map();
+    if (rotatedByGame) {
+        printf(T5INFO "The game's rotation set %s / %s, not syncing it.", map, gametype);
+        return;
+    }
     // The game's rotation only uses the LobbyParty ring (0x1F0268).
     if (lobbyHosted && party_map_uses_rotation_ring()) {
         RotationResult result =
