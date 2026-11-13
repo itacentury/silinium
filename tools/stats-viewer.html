@@ -1258,6 +1258,20 @@ const MODE_NAMES = {
 const modeName = (id) => id.startsWith("hc") && MODE_NAMES[id.slice(2)]
   ? "Hardcore " + MODE_NAMES[id.slice(2)] : (MODE_NAMES[id] || id);
 
+// weapongroups_e name -> display name. Chosen by hand to match the in-game class
+// names, not taken from the localized strings.
+const GROUP_NAMES = {
+  body: "Body", feature: "Feature", head: "Face Paint", killstreak: "Killstreaks",
+  miscweapon: "Misc. Weapons", null_specialty: "No Perk", specialty: "Perks",
+  weapon_assault: "Assault Rifles", weapon_cqb: "Shotguns", weapon_explosive: "Explosives",
+  weapon_flamethrower: "Flamethrower", weapon_grenade: "Grenades",
+  weapon_grenadelauncher: "Grenade Launcher", weapon_launcher: "Launchers",
+  weapon_lmg: "LMGs", weapon_masterkey: "Masterkey", weapon_pistol: "Pistols",
+  weapon_projectile: "Projectiles", weapon_smg: "SMGs", weapon_sniper: "Sniper Rifles",
+  weapon_special: "Special",
+};
+const groupName = (id) => GROUP_NAMES[id] ?? id;
+
 // mp/statsTable.csv row index -> [type, display name]. The rows and their localize
 // references come from a statsTable.csv dump; the English text is transcribed by hand
 // from the in-game names and not checked against the localized strings.
@@ -1879,7 +1893,7 @@ function render(name, bytes, ddl) {
 
   const groups = ddl.enums[6].names;
   const groupRows = weaponRows(s, "groupstats", groups.length,
-    (i) => groups[i].replace(/^weapon_/, "").replace(/_/g, " "));
+    (i) => groupName(groups[i]));
   const itemRows = weaponRows(s, "itemstats", ddl.fields.get("root.itemstats").array, itemName)
     .filter((r) => WEAPON_TYPES.has(itemType(r.index)));
   for (const r of itemRows) {
