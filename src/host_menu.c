@@ -1110,6 +1110,7 @@ static void send_party_map_if_changed(bool lobbyHosted, bool gameHosted) {
 static bool wagerMatchForced;
 static bool wagerMatchOriginal;
 static bool wagerMatchSeenInGame;
+static bool wagerMatchWasInGame;
 
 static bool wager_match_wanted() {
     const char* gametype = Dvar_GetString("g_gametype");
@@ -1144,9 +1145,13 @@ static void restore_wager_match() {
 // the match, not before it: the host loads the scripts before it is in the game, with
 // sv_running already set. Without sv_running a load that never reached the game was
 // aborted, the forced value must not stay for the next (possibly public wager) match.
+// The gametype can't change while cl_ingame stays set, so the check (a stringtable
+// lookup) runs once when entering the game instead of every frame.
 static void update_wager_match() {
     bool inGame = Dvar_GetBool("cl_ingame");
-    if (inGame && wager_match_wanted()) {
+    bool enteredGame = inGame && !wagerMatchWasInGame;
+    wagerMatchWasInGame = inGame;
+    if (enteredGame && wager_match_wanted()) {
         force_wager_match();
         wagerMatchSeenInGame = true;
     } else if (!inGame && (wagerMatchSeenInGame || !Dvar_GetBool("sv_running"))) {
