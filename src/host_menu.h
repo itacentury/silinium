@@ -153,6 +153,10 @@ bool host_menu_lobby_parties_both_active();
 int host_menu_lobby_view_party();
 // That party if the local player hosts it, else 0.
 int host_menu_lobby_party();
+// The party is active and the local player hosts it.
+bool host_menu_party_is_local_host(int party);
+// The dvar's string, empty if it doesn't exist.
+void host_menu_read_dvar_string(const char* name, char* out, int size);
 // Names in the game's ban list (menu and banClient bans).
 int host_menu_ban_count();
 // Host side: false if the client command being run is blocked (endround from a client
