@@ -8,6 +8,7 @@
 #include "anti_freeze.h"
 #include "client_command.h"
 #include "cshook.h"
+#include "friend_party.h"
 #include "host_menu.h"
 #include "notify.h"
 #include "offsets.h"
@@ -164,6 +165,10 @@ int init_game() {
             printf(T5ERROR "Host menu init failed (0x%08X).", err);
         } else {
             printf(T5INFO "Host menu ready.");
+        }
+
+        if ((err = friend_party_init()) < 0) {
+            printf(T5ERROR "Friends As Party init failed (0x%08X).", err);
         }
     }
 

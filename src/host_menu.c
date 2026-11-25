@@ -12,6 +12,7 @@
 #include "anti_god_class.h"
 #include "client_command.h"
 #include "cshook.h"
+#include "friend_party.h"
 #include "host_menu_ui.h"
 #include "party_map.h"
 #include "t5.h"
@@ -735,6 +736,7 @@ void Menu_PaintAll_Hook(void* a1, void* uiContext) {
 
     bool inGame = Dvar_GetBool("cl_ingame");
     party_map_update_wager_match(inGame);
+    friend_party_refresh(inGame);
     // Keyboards stay pending until the game's previous one is unloaded.
     if (hostMenu.changeNamePending && game_keyboard_closed()) {
         hostMenu.changeNamePending = false;

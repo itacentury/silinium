@@ -830,6 +830,7 @@ void host_menu_ui_init() {
     hostMenu.lobbyKickMember = -1;
     hostMenu.showControls = true;
     hostMenu.antiGodClasses = true;
+    hostMenu.friendsAsParty = true;
     hostMenu.playersToStart = 4;
     hostMenu.maxPlayers = 12;
 
@@ -866,6 +867,8 @@ void host_menu_ui_init() {
     add_option(HOST_MENU_PATCHES, "Anti Godmode Classes", HOST_MENU_TYPE_BOOL,
                &hostMenu.antiGodClasses, 0, 0, anti_god_classes)
         ->visible = anti_god_classes_visible;
+    add_option(HOST_MENU_PATCHES, "Friends As Party", HOST_MENU_TYPE_BOOL,
+               &hostMenu.friendsAsParty, 0, 0, nothing);
 
     hostMenu.title[HOST_MENU_ACCOUNT] = "Account Settings";
     hostMenu.parent[HOST_MENU_ACCOUNT] = HOST_MENU_MAIN;

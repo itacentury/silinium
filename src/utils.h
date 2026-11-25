@@ -6,6 +6,8 @@
 #include <sys/prx.h>
 #include <types.h>
 
+#include "defines.h"
+
 // Fixing the define only to remove the annoying intellisense issue..
 #ifdef SYS_MODULE_INFO_SECTION
 #undef SYS_MODULE_INFO_SECTION
@@ -29,6 +31,12 @@ typedef struct InstructionPatch {
 // otherwise 0: a written, already-applied and skipped patch all return 0, so a < 0 check
 // (t5.c) only catches failed writes, not skips.
 int apply_instruction_patch(const InstructionPatch* patch, bool apply);
+// The function an import stub calls, read from the import slot the stub loads like
+// cs_hook_resolve_import_opd does. The stub itself can't be called from the plugin: it
+// saves r2 into the caller's TOC save slot, so the caller would restore the game's TOC
+// instead of its own. NULL if the stub doesn't have the expected form or the import is
+// not resolved.
+popd32 resolve_import(uint32_t stub);
 size_t get_file_size(char* filePath);
 void hex_str_to_padded_hex_str(char* out, char* hexStr);
 void hex_str_to_buffer(char* out, char* hexStr, size_t hexLen);

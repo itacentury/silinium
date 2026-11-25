@@ -78,6 +78,7 @@ typedef struct HostMenu {
     bool depatchBounces;
     bool prestigeUnlocks;
     bool disableDlc;
+    bool friendsAsParty;  // PSN friends in the party color (compass, names)
     bool antiGodClasses;  // fix an invalid body in the clients' classes
     signed char playersToStart;
     signed char maxPlayers;

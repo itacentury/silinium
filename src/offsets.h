@@ -365,6 +365,16 @@
 #define T5_Net_setsockopt 0x8C6210
 #define T5_Net_socketclose 0x8C6168
 
+// Friends As Party (MP only)
+// (localClientNum, clientNum), returns the client's byte in the party flag array at 0xD25EFC (localClientNum is not
+// used). The compass (0xE9C68, compassping_squad_mp vs compassping_friendly_mp), the compass vehicles (0xE5F68) and the
+// overhead / crosshair name colors (0xF7CF8, 0xF95F8) use it to pick the party color. The array is filled by 0x163418
+// from the local xuids and the party members only, the friends list is not checked (static, unverified).
+#define T5_CG_IsPartyMember 0x111D20
+// Import stubs of the game's sceNpBasic friend functions (data/mp/imports.csv in bo1-re), resolved like the sys_net ones.
+#define T5_Np_GetFriendListEntryCount 0x8C7898
+#define T5_Np_GetFriendPresenceByIndex2 0x8C7630
+
 // Anti-Freeze (MP only)
 // (localClientNum, serverCommandNumber), tokenizes the reliable server command and returns 0 if CG_ServerCommand
 // (0x164BB8) shouldn't run it. Called by CG_ExecuteNewServerCommands (0x166DF0) for each new command.

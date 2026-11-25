@@ -33,6 +33,23 @@ int apply_instruction_patch(const InstructionPatch* patch, bool apply) {
     return sys_dbg_process_write(patch->address, &to, 4);
 }
 
+#define PPC_ORIS_R12_R12 0x658C0000
+#define PPC_LWZ_R12_R12 0x818C0000
+
+popd32 resolve_import(uint32_t stub) {
+    uint32_t high = *(uint32_t*)(stub + 4);
+    uint32_t low = *(uint32_t*)(stub + 8);
+    if ((high & 0xFFFF0000) != PPC_ORIS_R12_R12 ||
+        (low & 0xFFFF0000) != PPC_LWZ_R12_R12) {
+        return NULL;
+    }
+    popd32 opd = *(popd32*)(((high & 0xFFFF) << 16) + (short)(low & 0xFFFF));
+    if (!opd || !opd->function) {
+        return NULL;
+    }
+    return opd;
+}
+
 size_t get_file_size(char* filePath) {
     int size = 0;
     CellFsStat fstat;

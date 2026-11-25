@@ -50,6 +50,8 @@ All sources are in `src/`.
 - `party_map.c`: sends the map / gametype picked in the select menus the host menu
   opens to the party (playlist rotation and switch) and handles the wager gametypes
   (MP only, driven from `Menu_PaintAll_Hook`).
+- `friend_party.c`: Friends As Party, shows PSN friends in the party color by hooking
+  `CG_IsPartyMember` (MP only, friends list refreshed from `Menu_PaintAll_Hook`).
 - `stats_file.c`: Save/Load Stats files (`/dev_hdd0/tmp/Silinium/stats/<name>.bin`).
   `notify.c`: PS3 notifications through webMAN, over the game's `sys_net` import stubs.
 - `offsets.h`: all game addresses (`T5_<Name>` / `T5_<Name>_ZM`).

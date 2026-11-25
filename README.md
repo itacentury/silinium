@@ -72,6 +72,7 @@ The main menu holds the options below and three submenus, **Player Menu**, **Pat
 | Depatch Bounces | Restores the bounce exploit and disables fall damage. |
 | Disable DLC | Hides the DLC maps by clearing `ui_showDLCMaps` and `dlc2`–`dlc5`, and keeps them cleared if the game sets them again. Turning it off restores them. |
 | Anti Godmode Classes | On by default. When you host a match, checks the classes of every client once their stats arrive. A godmode or invisible class (an invalid body, as Sakura Class Editor's "God Mode" writes) is set back to the default body before the game reads it, and once you have spawned you see "<name> had a godmode class (fixed)" in the kill feed. Turning it on during a match checks the players already in it: a fixed player's class cache is reset and a living player who plays such a class is killed ("<name> was killed for using a godmode class" in the kill feed), so they respawn with the fixed class (in rare cases the player keeps it until the next spawn). |
+| Friends As Party | On by default, multiplayer only. Shows your PSN friends in the party color like party members: blue compass arrow, overhead name and crosshair name, as the PC version does with Steam friends. Only your own console sees it. Friends are matched by name, so a friend whose in-game name differs from their PSN online ID (e.g. after Change Name) stays green. |
 
 **Account Settings**
 
